@@ -2,9 +2,9 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa cero
+## Estado actual: capa 1 — múltiples archivos
 
-Sincronización de un documento en tiempo real entre múltiples clientes conectados. Es la base sobre la que se montará el resto.
+Sincronización de un **workspace** completo entre múltiples clientes en tiempo real. Cada cliente ve la lista de archivos, puede crearlos, abrirlos y editarlos. Las ediciones se propagan a todos los demás conectados sin pisarse entre archivos distintos.
 
 ### Cómo correrlo
 
@@ -23,11 +23,11 @@ pytest
 
 ### Estructura
 
-- `laidea/protocol/` — mensajes que viajan por WebSocket.
-- `laidea/state/` — modelo del documento compartido.
+- `laidea/protocol/` — mensajes que viajan por WebSocket (InitMessage, UpdateMessage).
+- `laidea/state/` — modelo del estado: `Document` (un archivo) y `Workspace` (muchos archivos).
 - `laidea/server/` — servidor WebSocket de sincronización.
-- `web/` — cliente HTML.
-- `tests/` — tests de protocolo e integración.
+- `web/` — cliente HTML con árbol de archivos + textarea.
+- `tests/` — tests de protocolo, estado e integración.
 
 ---
 

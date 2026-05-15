@@ -4,87 +4,247 @@
   <meta charset="UTF-8" />
   <title>laidea — prototipo</title>
   <style>
+    /*
+     * Estilos minimalistas. El UI no es lo importante todavía — lo importante es
+     * que veas tres pestañas sincronizándose sobre múltiples archivos.
+     */
+    * { box-sizing: border-box; }
     body {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      max-width: 900px;
-      margin: 2rem auto;
-      padding: 1.5rem;
+      margin: 0;
+      padding: 0;
       background: #0e0e10;
       color: #e6e6e6;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    h1 { font-weight: 500; margin: 0 0 0.25rem; }
-    .sub { color: #888; font-size: 13px; margin-bottom: 1.5rem; }
+    header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #2a2a2e;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { margin: 0; font-size: 16px; font-weight: 500; }
     #status {
-      display: inline-block;
-      padding: 0.25rem 0.6rem;
+      padding: 0.2rem 0.6rem;
       border-radius: 4px;
-      font-size: 12px;
-      margin-bottom: 0.75rem;
+      font-size: 11px;
       background: #2a2a2e;
       color: #aaa;
     }
     #status.ok { background: #14442b; color: #8de0a8; }
     #status.bad { background: #4a1a1a; color: #f08c8c; }
-    textarea {
-      width: 100%;
-      height: 500px;
-      font-family: inherit;
-      font-size: 14px;
+    .layout { flex: 1; display: flex; min-height: 0; }
+    aside {
+      width: 260px;
+      border-right: 1px solid #2a2a2e;
       padding: 1rem;
-      box-sizing: border-box;
-      background: #18181b;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    aside h2 {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+    }
+    #nuevo {
+      background: #1f1f23;
       color: #e6e6e6;
       border: 1px solid #2a2a2e;
-      border-radius: 6px;
-      resize: vertical;
-      line-height: 1.5;
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
     }
-    textarea:focus { outline: none; border-color: #4a4a52; }
+    #nuevo:hover { background: #2a2a2e; }
+    #lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    #lista li {
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #c0c0c0;
+    }
+    #lista li:hover { background: #1f1f23; }
+    #lista li.activo { background: #2a2a3e; color: #fff; }
+    #lista li.vacio { color: #555; cursor: default; }
+    #lista li.vacio:hover { background: transparent; }
+    main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #cabecera {
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid #2a2a2e;
+      font-size: 12px;
+      color: #888;
+    }
+    #cabecera #actual { color: #e6e6e6; font-weight: 500; }
+    textarea {
+      flex: 1;
+      background: #18181b;
+      color: #e6e6e6;
+      border: none;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.55;
+      padding: 1.25rem 1.5rem;
+      resize: none;
+      outline: none;
+    }
+    textarea:disabled { color: #555; background: #131316; }
   </style>
 </head>
 <body>
-  <h1>laidea — capa cero</h1>
-  <div class="sub">estado compartido en tiempo real · abre esta página en varias pestañas</div>
-  <div id="status">conectando...</div>
-  <textarea id="editor" placeholder="empieza a escribir..." spellcheck="false"></textarea>
+  <header>
+    <h1>laidea — capa 1: múltiples archivos</h1>
+    <span id="status">conectando...</span>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <h2>archivos</h2>
+      <button id="nuevo">+ nuevo archivo</button>
+      <ul id="lista"></ul>
+    </aside>
+    <main>
+      <div id="cabecera">archivo: <span id="actual">—</span></div>
+      <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
+    </main>
+  </div>
 
   <script>
+    /*
+     * Cliente del prototipo. Esta es la otra mitad del contrato del protocolo:
+     * tiene que hablar exactamente el mismo lenguaje que el servidor de Python.
+     *
+     * Estado local que mantenemos:
+     *  - files:        espejo del workspace del servidor (path -> contenido).
+     *                  El servidor es la fuente de verdad; este dict es solo
+     *                  una copia para renderizar la UI rápido.
+     *  - currentPath:  qué archivo se está mostrando ahora mismo en el textarea.
+     *  - applyingRemote: bandera para no mandar al servidor cambios que el propio
+     *                    servidor nos acaba de mandar (eso causaría loop infinito).
+     */
     const editor = document.getElementById("editor");
-    const status = document.getElementById("status");
-    const ws = new WebSocket("ws://localhost:8765");
+    const statusEl = document.getElementById("status");
+    const lista = document.getElementById("lista");
+    const actual = document.getElementById("actual");
+    const botonNuevo = document.getElementById("nuevo");
+
+    const files = {};
+    let currentPath = null;
     let applyingRemote = false;
 
-    ws.onopen = () => {
-      status.textContent = "conectado";
-      status.className = "ok";
-    };
-    ws.onclose = () => {
-      status.textContent = "desconectado";
-      status.className = "bad";
-    };
-    ws.onerror = () => {
-      status.textContent = "error de conexión";
-      status.className = "bad";
-    };
+    const ws = new WebSocket("ws://localhost:8765");
 
+    ws.onopen = () => { statusEl.textContent = "conectado"; statusEl.className = "ok"; };
+    ws.onclose = () => { statusEl.textContent = "desconectado"; statusEl.className = "bad"; editor.disabled = true; };
+    ws.onerror = () => { statusEl.textContent = "error de conexión"; statusEl.className = "bad"; };
+
+    /*
+     * Recepción de mensajes. Aquí decidimos qué hacer según el `type` que mandó
+     * el servidor. Es la cara complementaria del `decode` de Python.
+     */
     ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === "init" || data.type === "update") {
-        const start = editor.selectionStart;
-        const end = editor.selectionEnd;
-        applyingRemote = true;
-        editor.value = data.content;
-        applyingRemote = false;
-        editor.selectionStart = start;
-        editor.selectionEnd = end;
+      const msg = JSON.parse(e.data);
+
+      if (msg.type === "init") {
+        // El servidor nos manda el workspace completo al conectarnos.
+        // Copiamos los archivos y, si hay alguno, abrimos el primero por defecto.
+        Object.assign(files, msg.files);
+        renderLista();
+        const primero = Object.keys(files)[0];
+        if (primero) seleccionar(primero);
+      }
+
+      if (msg.type === "update") {
+        // Otro cliente editó un archivo. Actualizamos nuestro espejo local.
+        const eraNuevo = !(msg.path in files);
+        files[msg.path] = msg.content;
+        if (eraNuevo) renderLista();
+
+        // Si el archivo que cambió es el que tenemos abierto, refrescamos el
+        // textarea — preservando la posición del cursor, porque si la perdiéramos
+        // sería extremadamente molesto escribir mientras otro escribe.
+        if (msg.path === currentPath) {
+          const inicio = editor.selectionStart;
+          const fin = editor.selectionEnd;
+          applyingRemote = true;
+          editor.value = msg.content;
+          applyingRemote = false;
+          editor.selectionStart = inicio;
+          editor.selectionEnd = fin;
+        }
       }
     };
 
+    /*
+     * Cuando el usuario edita el textarea, mandamos un UpdateMessage al servidor.
+     * La bandera `applyingRemote` evita el caso: servidor manda update -> nosotros
+     * cambiamos `editor.value` -> dispara evento `input` -> mandaríamos de vuelta
+     * al servidor lo que él acaba de mandarnos. Loop infinito.
+     */
     editor.addEventListener("input", () => {
       if (applyingRemote) return;
+      if (!currentPath) return;
       if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: "update", content: editor.value }));
+      files[currentPath] = editor.value;
+      ws.send(JSON.stringify({ type: "update", path: currentPath, content: editor.value }));
     });
+
+    /*
+     * Crear un archivo nuevo: pedimos un nombre, lo agregamos localmente con
+     * contenido vacío, y mandamos un update vacío al servidor. El servidor lo
+     * crea automáticamente porque su workspace.update() crea-si-no-existe.
+     */
+    botonNuevo.addEventListener("click", () => {
+      const nombre = prompt("nombre del archivo (ej: main.py, notas.md):");
+      if (!nombre) return;
+      if (nombre in files) { seleccionar(nombre); return; }
+      files[nombre] = "";
+      ws.send(JSON.stringify({ type: "update", path: nombre, content: "" }));
+      renderLista();
+      seleccionar(nombre);
+    });
+
+    function seleccionar(path) {
+      currentPath = path;
+      actual.textContent = path;
+      applyingRemote = true;
+      editor.value = files[path] ?? "";
+      applyingRemote = false;
+      editor.disabled = false;
+      editor.focus();
+      renderLista();
+    }
+
+    function renderLista() {
+      lista.innerHTML = "";
+      const paths = Object.keys(files).sort();
+      if (paths.length === 0) {
+        const vacio = document.createElement("li");
+        vacio.textContent = "— sin archivos —";
+        vacio.className = "vacio";
+        lista.appendChild(vacio);
+        return;
+      }
+      for (const path of paths) {
+        const li = document.createElement("li");
+        li.textContent = path;
+        if (path === currentPath) li.className = "activo";
+        li.addEventListener("click", () => seleccionar(path));
+        lista.appendChild(li);
+      }
+    }
+
+    renderLista();
   </script>
 </body>
 </html>
