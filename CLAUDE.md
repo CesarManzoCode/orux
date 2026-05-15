@@ -18,16 +18,23 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 ## Estado actual
 
-Fase muy temprana. Solo existe la idea escrita en `README.md`. No hay código, no hay arquitectura, no hay stack decidido. El usuario explícitamente pidió no escribir código todavía.
+Fase muy temprana. La idea completa vive en `README.md`. Existe ya la **capa cero** (estado compartido en tiempo real) implementada como paquete Python instalable:
+
+- `laidea/` — paquete principal, dividido en `protocol/` (mensajes), `state/` (modelo de documento), `server/` (WebSocket sync).
+- `web/index.html` — cliente HTML mínimo con textarea.
+- `tests/` — tests con `pytest` y `pytest-asyncio`. Validan: estado inicial, propagación, late-join, no-echo al emisor.
+- `pyproject.toml` — instalable con `pip install -e ".[dev]"`. Server: `python -m laidea.server` o `laidea-server`.
+
+Capas pendientes (en orden): múltiples archivos, presencia, persistencia, CRDT real, ownership, análisis semántico, integración Git.
 
 ## Principios para colaborar en este proyecto
 
-- **No escribir código hasta que se pida explícitamente.** Estamos en fase de idea.
-- **No proponer stack ni arquitectura todavía.** El usuario lo dirá cuando sea momento.
-- **Idioma: español.** Toda comunicación y todo artefacto en español por ahora.
-- **Construcción por capas.** El orden importa: estado compartido → edición en tiempo real → ownership → análisis semántico → notificaciones → integración Git. No se añade una capa hasta que la anterior funcione.
-- **Riesgo crítico identificado: feature soup.** Resistir la tentación de proponer muchas features. Una capa increíble vale más que veinte mediocres.
+- **Idioma: español.** Toda comunicación, comentarios, mensajes de commit y artefactos en español.
+- **Construcción por capas.** Orden estricto: estado compartido → edición en tiempo real → ownership → análisis semántico → notificaciones → integración Git. No se añade una capa hasta que la anterior funcione.
+- **Cada capa: "real pero mínima".** Estructura y tests desde el primer commit. Nada de abstracciones para problemas que aún no existen. Si una capa empieza a requerir "ah pero también necesito X y Y", son dos capas, se separan.
+- **Riesgo crítico identificado: feature soup.** Resistir proponer features extra. Una capa increíble vale más que veinte mediocres.
 - **El núcleo es la coordinación semántica, no el editor.** El editor es vehículo.
+- **Stack: Python.** Es el lenguaje principal del usuario. Para el realtime hot path se migrará selectivamente solo si un perfilador lo justifica.
 
 ## Decisiones ya tomadas
 

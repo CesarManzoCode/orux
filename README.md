@@ -1,3 +1,36 @@
+# laidea
+
+Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
+
+## Estado actual: capa cero
+
+Sincronización de un documento en tiempo real entre múltiples clientes conectados. Es la base sobre la que se montará el resto.
+
+### Cómo correrlo
+
+```bash
+pip install -e ".[dev]"
+python -m laidea.server
+```
+
+Luego abre `web/index.html` en dos o tres pestañas del navegador y escribe en una. Las demás se sincronizan.
+
+### Tests
+
+```bash
+pytest
+```
+
+### Estructura
+
+- `laidea/protocol/` — mensajes que viajan por WebSocket.
+- `laidea/state/` — modelo del documento compartido.
+- `laidea/server/` — servidor WebSocket de sincronización.
+- `web/` — cliente HTML.
+- `tests/` — tests de protocolo e integración.
+
+---
+
 # La idea
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
