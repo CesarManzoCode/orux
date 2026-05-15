@@ -53,10 +53,13 @@ $V/components/prism-markdown.min.js,\
 $V/components/prism-docker.min.js,\
 $V/components/prism-makefile.min.js"
 
-# Verificá que bajó algo razonable y que entraron js/ts/docker:
+# VERIFICACIÓN OBLIGATORIA. Hay que chequear los componentes BASE
+# (clike/markup/css/javascript), NO solo el lenguaje hoja: java/cpp/csharp
+# EXTIENDEN clike; si falta clike su gramática queda rota y el editor cae a
+# texto plano (bug ya visto dos veces). TODOS deben dar >= 1:
 head -c 80 web/vendor/prism.js ; echo
-grep -c 'languages.typescript' web/vendor/prism.js   # >= 1
-grep -c 'languages.docker'     web/vendor/prism.js   # >= 1
+for L in clike markup css javascript typescript java cpp docker; do \
+  printf '%s=%s ' "$L" "$(grep -c "languages.$L" web/vendor/prism.js)"; done; echo
 
 git add -f web/vendor/prism.js
 git commit -m "vendor: prism.js 1.29.0 (stack completo: ts/js/py/java/cpp/go/kotlin/rust/docker/md/...)"
