@@ -10,10 +10,10 @@ build: ## Construye la imagen del server
 	docker compose build
 
 up: ## Levanta todo (server + Caddy) en segundo plano
-	docker compose up -d --build
+	docker compose up -d --build --remove-orphans --force-recreate
 
-down: ## Apaga todo (los datos quedan en el volumen)
-	docker compose down
+down: ## Apaga todo (contenedores y red; los DATOS quedan en el volumen)
+	docker compose down --remove-orphans
 
 restart: ## Reinicia los contenedores
 	docker compose restart
