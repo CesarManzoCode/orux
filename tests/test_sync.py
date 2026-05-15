@@ -58,6 +58,19 @@ async def handshake(ws) -> dict:
     return welcome
 
 
+async def recv_tipo(ws, tipo: str, timeout: float = 2):
+    """Lee descartando mensajes de otros tipos hasta encontrar `tipo`.
+
+    Capa 4: crear un archivo hace dueño al creador y difunde un `ownership`
+    a todos. Ese mensaje legítimo puede intercalarse con lo que un test de
+    capa 1 espera, así que filtramos por tipo en vez de asumir orden exacto.
+    """
+    while True:
+        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+        if msg["type"] == tipo:
+            return msg
+
+
 # --- Contratos de capa 1 (siguen vigentes, solo se les sumó el welcome) ---
 
 
@@ -112,11 +125,19 @@ async def test_broadcast_always_includes_path(server_port: int) -> None:
 
 
 async def test_sender_does_not_receive_echo(server_port: int) -> None:
-    # Si el servidor le devuelve a A lo que A acaba de mandar, el cursor de A
-    # saltaría y la UX sería horrible. El test verifica que NO recibimos eco.
+    # Contrato vigente: el servidor NUNCA le hace eco a A de su propio update
+    # (le saltaría el cursor). Capa 4: como A está *creando* x.py, sí recibe
+    # un `ownership` (queda dueño automáticamente) — eso es correcto y nuevo.
+    # Lo que NO debe llegarle jamás es un `update` con su propio texto.
     async with connect(f"ws://localhost:{server_port}") as a:
-        await handshake(a)
+        wa = await handshake(a)
         await a.send(json.dumps({"type": "update", "path": "x.py", "content": "yo"}))
+        own = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+        assert own == {
+            "type": "ownership",
+            "owners": {"x.py": wa["you"]["client_id"]},
+        }
+        # Después de eso, silencio: ni eco del update ni nada más.
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(a.recv(), timeout=0.3)
 
@@ -133,12 +154,13 @@ async def test_edits_to_different_files_dont_interfere(server_port: int) -> None
         await a.send(json.dumps({"type": "update", "path": "main.py", "content": "A edita main"}))
         await b.send(json.dumps({"type": "update", "path": "auth.py", "content": "B edita auth"}))
 
-        # B debe recibir el update de A para main.py
-        msg_b = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
+        # B debe recibir el update de A para main.py (filtrando los `ownership`
+        # que la creación de archivos difunde ahora a todos).
+        msg_b = await recv_tipo(b, "update")
         assert msg_b == {"type": "update", "path": "main.py", "content": "A edita main"}
 
         # A debe recibir el update de B para auth.py
-        msg_a = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+        msg_a = await recv_tipo(a, "update")
         assert msg_a == {"type": "update", "path": "auth.py", "content": "B edita auth"}
 
         # Verificamos que un tercer cliente que entre vea ambos archivos sanos.
@@ -360,6 +382,32 @@ async def test_edit_de_no_dueno_es_tentativo(server_port: int) -> None:
         # El workspace autoritativo no cambió: un cliente nuevo no ve main.py.
         async with connect(f"ws://localhost:{server_port}") as c:
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
+
+
+async def test_crear_archivo_hace_dueno_al_creador(server_port: int) -> None:
+    # El fix del bug: crear un archivo (primer update sobre un path nuevo) hace
+    # dueño al creador automáticamente, sin botón. Antes nacía sin dueño.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        wa = await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "update", "path": "nuevo.py", "content": "hola"}))
+
+        # B ve el archivo y, enseguida, el mapa de ownership con el creador.
+        assert await recv_tipo(b, "update") == {
+            "type": "update", "path": "nuevo.py", "content": "hola",
+        }
+        esperado = {"type": "ownership", "owners": {"nuevo.py": wa["you"]["client_id"]}}
+        assert await recv_tipo(b, "ownership") == esperado
+        # El propio creador recibe el ownership (su UI pinta "tuyo" sin pedir).
+        assert await recv_tipo(a, "ownership") == esperado
+
+        # Y como ya es suyo: si B lo edita, es tentativo (propuesta), no se aplica.
+        await b.send(json.dumps({"type": "update", "path": "nuevo.py", "content": "B mete mano"}))
+        prop = await recv_tipo(a, "proposal")
+        assert prop["proposal"]["path"] == "nuevo.py"
+        assert prop["proposal"]["content"] == "B mete mano"
 
 
 async def test_aprobar_propuesta_aplica_y_converge(server_port: int) -> None:

@@ -198,6 +198,12 @@ class SyncServer:
                         )
                     else:
                         # Sin dueño, o eres tú el dueño: se aplica directo.
+                        # ¿Es la PRIMERA vez que se ve este path? Entonces este
+                        # update lo está *creando*. "El que la tocó primero
+                        # escribe" + ownership invisible: quien crea un archivo
+                        # es su dueño, sin botón. Antes un archivo nuevo nacía
+                        # sin dueño y había que reclamarlo a mano (el bug).
+                        es_nuevo = not self.workspace.exists(message.path)
                         # Estado autoritativo PRIMERO, después se retransmite,
                         # para que un cliente que llegue en medio no vea un
                         # estado inconsistente.
@@ -211,6 +217,21 @@ class SyncServer:
                                 )
                             ),
                         )
+                        if es_nuevo and dueño is None:
+                            # Solo cuando el archivo nace SIN dueño (no cuando
+                            # ya lo tenías reclamado y lo materializas con un
+                            # update): si no, re-difundiríamos un mapa idéntico
+                            # y meteríamos ruido en el stream.
+                            self.ownership.claim(message.path, yo.client_id)
+                            # Difundimos a todos (incluido el creador: su UI
+                            # pinta "tuyo" sin que pida nada).
+                            await self._broadcast_todos(
+                                encode(
+                                    OwnershipMessage(
+                                        owners=self.ownership.snapshot()
+                                    )
+                                )
+                            )
                 elif isinstance(message, ClaimMessage):
                     # Reclamar ser dueño de un path. Difundimos el mapa entero
                     # a todos (incluido quien reclamó: así su UI confirma si

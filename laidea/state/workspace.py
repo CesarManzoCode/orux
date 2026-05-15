@@ -45,6 +45,17 @@ class Workspace:
         """
         return {path: doc.content for path, doc in self._documents.items()}
 
+    def exists(self, path: str) -> bool:
+        """¿El workspace ya conoce este path? Sirve para distinguir crear de editar.
+
+        El protocolo no tiene un mensaje "crear archivo" (un update sobre un
+        path nuevo lo crea). Pero el servidor sí necesita saber si un update es
+        la *primera vez* que se ve un path, para, por ejemplo, hacer dueño a
+        quien lo crea (capa 4). Por eso esta consulta es pública y explícita en
+        vez de espiar el dict interno desde afuera.
+        """
+        return path in self._documents
+
     def get_or_create(self, path: str) -> Document:
         """Devuelve el Document de un path, creándolo vacío si no existe.
 
