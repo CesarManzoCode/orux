@@ -220,11 +220,17 @@
       color: #0d0e11; font-weight: 800; white-space: nowrap;
       font-family: var(--font-ui);
     }
+    /* El texto del textarea va TRANSPARENTE: se ve el <pre> coloreado de
+       atrás (#resaltado). El caret y la selección sí se ven. Misma técnica
+       que el overlay de presencia; el textarea sigue siendo el editor real
+       (no se reemplaza), así presencia/locks/tentativo siguen igual. */
     textarea {
       flex: 1;
       position: relative; z-index: 1;
-      background: transparent;            /* el fondo lo pone .editor-wrap */
-      color: var(--text);
+      background: transparent;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      caret-color: var(--text);
       border: none;
       font-family: var(--font-mono);      /* código: SIEMPRE monoespaciado */
       font-size: 14px;
@@ -236,8 +242,31 @@
       overflow: auto;
       tab-size: 4;
     }
-    textarea::placeholder { color: var(--faint); }
-    textarea:disabled { color: var(--faint); }
+    textarea::selection { background: rgba(76,195,138,0.28); }
+    textarea::placeholder {
+      color: var(--faint); -webkit-text-fill-color: var(--faint);
+    }
+    /* Capa de resaltado: idéntica métrica al textarea (clave para que cada
+       glifo caiga en su pixel, igual contrato que LINE_H/PAD_TOP). Detrás
+       del textarea (z 0) y del overlay de presencia (z 2). */
+    #resaltado {
+      position: absolute; inset: 0; margin: 0; z-index: 0;
+      overflow: hidden; pointer-events: none;
+      font-family: var(--font-mono); font-size: 14px; line-height: 22px;
+      padding: 20px 24px; white-space: pre; tab-size: 4;
+      color: var(--text); background: transparent;
+    }
+    #resaltado code {
+      display: block; font: inherit;
+      will-change: transform;
+    }
+    .tk-kw { color: #c98bdb; }       /* keywords */
+    .tk-def { color: #4cc38a; font-weight: 600; }  /* nombre de def/class */
+    .tk-str { color: #e3b341; }      /* strings */
+    .tk-com { color: var(--faint); font-style: italic; }  /* comentarios */
+    .tk-num { color: #e0905f; }      /* números */
+    .tk-bi  { color: #6cb6ff; }      /* builtins */
+    .tk-dec { color: #56d98a; }      /* decoradores */
 
     /* --- Capa 4: ownership --- */
     #owner { font-size: 11px; }
@@ -484,6 +513,7 @@
       <div id="impactos"></div>
       <div id="aviso"></div>
       <div class="editor-wrap off" id="wrap">
+        <pre id="resaltado" aria-hidden="true"><code></code></pre>
         <div id="capa-presencia"><div id="capa-scroll"></div></div>
         <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
       </div>
@@ -512,6 +542,7 @@
     const aquiEl = document.getElementById("aqui");
     const wrap = document.getElementById("wrap");
     const capaScroll = document.getElementById("capa-scroll");
+    const resaltadoCode = document.querySelector("#resaltado code");
     const ownerEl = document.getElementById("owner");
     const reclamarBtn = document.getElementById("reclamar");
     const propuestasEl = document.getElementById("propuestas");
@@ -700,6 +731,7 @@
           applyingRemote = true;
           editor.value = "";
           applyingRemote = false;
+          pintarResaltado();
           editor.disabled = true;
           wrap.classList.add("off");
           renderLista();
@@ -728,6 +760,7 @@
           applyingRemote = true;
           editor.value = msg.content;
           applyingRemote = false;
+          pintarResaltado();
           editor.selectionStart = inicio;
           editor.selectionEnd = fin;
         }
@@ -749,6 +782,7 @@
             applyingRemote = true;
             editor.value = "";
             applyingRemote = false;
+            pintarResaltado();
             editor.disabled = true;
             wrap.classList.add("off");
           }
@@ -922,6 +956,64 @@
     });
 
     /*
+     * Resaltado de sintaxis, vanilla y mínimo (Python). Pinta una capa <pre>
+     * detrás del textarea transparente — no es un compilador, es heurística
+     * "se ve como código". Mismo espíritu que el análisis semántico mínimo:
+     * honesto, suficiente, sin dependencias.
+     */
+    function escHtml(s) {
+      return s.replace(/[&<>]/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
+    const _RE_PY = new RegExp(
+      "('''[\\s\\S]*?'''|\"\"\"[\\s\\S]*?\"\"\"" +              // triple str
+      "|[rbfRBF]{0,2}\"(?:\\\\.|[^\"\\\\\\n])*\"" +              // str "
+      "|[rbfRBF]{0,2}'(?:\\\\.|[^'\\\\\\n])*')" +                // str '
+      "|(#[^\\n]*)" +                                            // comentario
+      "|\\b(def|class)(\\s+)([A-Za-z_]\\w*)" +                    // def/class nombre
+      "|(@[A-Za-z_][\\w.]*)" +                                    // decorador
+      "|\\b(False|None|True|and|as|assert|async|await|break|case|class|" +
+      "continue|def|del|elif|else|except|finally|for|from|global|if|" +
+      "import|in|is|lambda|match|nonlocal|not|or|pass|raise|return|try|" +
+      "while|with|yield)\\b" +                                    // keyword
+      "|\\b(print|len|range|int|str|float|bool|list|dict|set|tuple|" +
+      "isinstance|enumerate|zip|open|super|self|cls)\\b" +         // builtin
+      "|\\b(0[xXbBoO][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b",
+      "g"
+    );
+    function resaltarPy(src) {
+      let out = "", last = 0, m;
+      _RE_PY.lastIndex = 0;
+      while ((m = _RE_PY.exec(src)) !== null) {
+        out += escHtml(src.slice(last, m.index));
+        if (m[1]) out += '<span class="tk-str">' + escHtml(m[1]) + "</span>";
+        else if (m[2]) out += '<span class="tk-com">' + escHtml(m[2]) + "</span>";
+        else if (m[3]) out += '<span class="tk-kw">' + m[3] + "</span>" +
+          m[4] + '<span class="tk-def">' + escHtml(m[5]) + "</span>";
+        else if (m[6]) out += '<span class="tk-dec">' + escHtml(m[6]) + "</span>";
+        else if (m[7]) out += '<span class="tk-kw">' + m[7] + "</span>";
+        else if (m[8]) out += '<span class="tk-bi">' + m[8] + "</span>";
+        else if (m[9]) out += '<span class="tk-num">' + m[9] + "</span>";
+        last = _RE_PY.lastIndex;
+        if (m.index === _RE_PY.lastIndex) _RE_PY.lastIndex++;  // anti-bucle
+      }
+      out += escHtml(src.slice(last));
+      return out;
+    }
+    function pintarResaltado() {
+      const txt = editor.value;
+      resaltadoCode.innerHTML =
+        currentPath && currentPath.endsWith(".py")
+          ? resaltarPy(txt)
+          : escHtml(txt);
+    }
+    editor.addEventListener("input", pintarResaltado);
+    editor.addEventListener("scroll", () => {
+      resaltadoCode.style.transform =
+        "translate(" + (-editor.scrollLeft) + "px," + (-editor.scrollTop) + "px)";
+    });
+
+    /*
      * Cuando el usuario edita el textarea, mandamos un UpdateMessage al servidor.
      * La bandera `applyingRemote` evita el caso: servidor manda update -> nosotros
      * cambiamos `editor.value` -> dispara evento `input` -> mandaríamos de vuelta
@@ -956,6 +1048,7 @@
       applyingRemote = true;
       editor.value = files[path] ?? "";
       applyingRemote = false;
+      pintarResaltado();
       editor.disabled = false;
       wrap.classList.remove("off");
       editor.focus();
