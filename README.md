@@ -2,9 +2,13 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 6 — análisis semántico de impacto
+## Estado actual: capa 7 — identidad real
 
-El feature estrella del onboarding, en su forma mínima: cambias una clase o función de nivel módulo en un `.py` y el sistema, **sin que clickees nada**, detecta qué otros archivos la usan y le avisa al **dueño de cada uno**: "anónimo-2 cambió `Usuario` en `models.py` — afecta tu `auth.py`". Análisis con `ast` de la stdlib (Python primero, decisión tomada). Solo símbolos de nivel módulo y referencias por nombre (hint "míralo", no verdad de compilador); si el código está a medio escribir no avisa nada (cero falsos positivos). El panel solo entera —no pide aprobar/rechazar, eso es ownership—; "visto" lo descarta, "ver" salta al archivo.
+La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.laidea/` (`users.json`, `ownership.json`, `secret`, `workspace/`).
+
+### Capa 6 — análisis semántico de impacto
+
+Cambias una clase o función de nivel módulo en un `.py` y el sistema, **sin que clickees nada**, detecta qué otros archivos la usan y le avisa al **dueño de cada uno**: "ana cambió `Usuario` en `models.py` — afecta tu `auth.py`". Análisis con `ast` de la stdlib. Solo símbolos de nivel módulo y referencias por nombre (hint "míralo", no verdad de compilador); si el código está a medio escribir no avisa nada. El panel solo entera —no pide aprobar/rechazar—; "visto" lo descarta, "ver" salta al archivo.
 
 ### Capa 5 — prevención de colisiones
 
@@ -14,7 +18,7 @@ Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, e
 
 Un archivo puede tener **dueño** (quien lo crea lo es, sin botón). Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, converge todo el mundo; si rechaza, al autor se le revierte.
 
-Andamiaje del prototipo: identidad anónima pero **estable por token** (el cliente guarda un token en `localStorage`; recargar la página conserva tu identidad y tu ownership). No es auth real todavía. Como la identidad sobrevive al reload, el ownership ya no se libera al desconectar.
+El dueño es el **usuario autenticado** (capa 7): el ownership se persiste por usuario y no se libera al desconectar — lo recuperas al volver a entrar.
 
 ### Capa 3 — persistencia
 

@@ -229,13 +229,64 @@
       background: #1f2a36; color: #9fc4e4;
     }
     .imp button:hover { background: #2a3a4a; }
+
+    /* Capa 7: pantalla de login. Cubre todo hasta autenticarse: la app está
+       cerrada, no se ve nada del workspace sin entrar. */
+    #login {
+      position: fixed; inset: 0; z-index: 50;
+      background: #0e0e10; display: none;
+      align-items: center; justify-content: center;
+    }
+    #login.on { display: flex; }
+    #login .card {
+      width: 320px; background: #18181b; border: 1px solid #2a2a2e;
+      border-radius: 8px; padding: 1.5rem; display: flex;
+      flex-direction: column; gap: 0.75rem;
+    }
+    #login h2 { margin: 0 0 0.25rem; font-size: 15px; font-weight: 600; }
+    #login p { margin: 0; font-size: 12px; color: #888; }
+    #login input {
+      background: #0e0e10; color: #e6e6e6; border: 1px solid #2a2a2e;
+      border-radius: 4px; padding: 0.55rem 0.7rem; font-family: inherit;
+      font-size: 13px; outline: none;
+    }
+    #login input:focus { border-color: #5fa8e0; }
+    #login .fila { display: flex; gap: 0.5rem; }
+    #login button {
+      flex: 1; border: none; border-radius: 4px; padding: 0.55rem;
+      font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    #login #entrar { background: #14442b; color: #8de0a8; }
+    #login #entrar:hover { background: #1c5c3a; }
+    #login #crear { background: #1f1f23; color: #cdd9e5; }
+    #login #crear:hover { background: #2a2a2e; }
+    #login .err { font-size: 12px; color: #f08c8c; min-height: 1em; }
+    #salir {
+      font-size: 11px; color: #888; cursor: pointer; text-decoration: underline;
+    }
+    #salir:hover { color: #e6e6e6; }
   </style>
 </head>
 <body>
+  <div id="login">
+    <div class="card">
+      <h2>laidea</h2>
+      <p>Entra con tu usuario, o crea uno nuevo. La app está cerrada: sin cuenta no se ve el workspace.</p>
+      <input id="u" placeholder="usuario" autocomplete="username" autofocus />
+      <input id="p" type="password" placeholder="contraseña" autocomplete="current-password" />
+      <div class="fila">
+        <button id="entrar">entrar</button>
+        <button id="crear">crear cuenta</button>
+      </div>
+      <div class="err" id="loginErr"></div>
+    </div>
+  </div>
+
   <header>
-    <h1>laidea — capa 6: análisis de impacto</h1>
+    <h1>laidea — capa 7: identidad</h1>
     <span id="status">conectando...</span>
     <span id="yo" style="font-size:11px;color:#888;"></span>
+    <span id="salir" style="display:none;">salir</span>
   </header>
 
   <div class="layout">
@@ -288,6 +339,50 @@
     const propuestasEl = document.getElementById("propuestas");
     const impactosEl = document.getElementById("impactos");
     const avisoEl = document.getElementById("aviso");
+    const loginEl = document.getElementById("login");
+    const uEl = document.getElementById("u");
+    const pEl = document.getElementById("p");
+    const loginErr = document.getElementById("loginErr");
+    const entrarBtn = document.getElementById("entrar");
+    const crearBtn = document.getElementById("crear");
+    const salirEl = document.getElementById("salir");
+
+    function mostrarLogin(err) {
+      loginEl.classList.add("on");
+      loginErr.textContent = err || "";
+      salirEl.style.display = "none";
+      uEl.focus();
+    }
+    function ocultarLogin() {
+      loginEl.classList.remove("on");
+      salirEl.style.display = "";
+    }
+    function enviarAuth(tipo) {
+      const username = uEl.value.trim();
+      const password = pEl.value;
+      if (!username || !password) {
+        loginErr.textContent = "usuario y contraseña requeridos";
+        return;
+      }
+      if (ws.readyState !== WebSocket.OPEN) {
+        loginErr.textContent = "sin conexión al servidor";
+        return;
+      }
+      loginErr.textContent = "entrando…";
+      ws.send(JSON.stringify({ type: tipo, username, password }));
+    }
+    entrarBtn.addEventListener("click", () => enviarAuth("login"));
+    crearBtn.addEventListener("click", () => enviarAuth("register"));
+    pEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") enviarAuth("login");
+    });
+    // "salir": olvida la sesión y recarga -> vuelve la pantalla de login.
+    // Útil para probar con otro usuario (mismo navegador comparte sesión).
+    salirEl.addEventListener("click", () => {
+      localStorage.removeItem("laidea_session");
+      localStorage.removeItem("laidea_user");
+      location.reload();
+    });
 
     // Estas dos constantes DEBEN coincidir con el CSS del textarea
     // (line-height y padding-top). Si cambias el CSS, cámbialas aquí: son el
@@ -335,26 +430,27 @@
     function nombreDe(cid) {
       if (yo && cid === yo.client_id) return yo.name;
       if (peers[cid]) return peers[cid].name;
-      return "anónimo-" + cid;
+      return cid;  // capa 7: el client_id ES el usuario
     }
 
     /*
-     * Identidad estable mínima (sin auth todavía). Guardamos un token
-     * aleatorio en localStorage la primera vez y lo reusamos siempre. Lo
-     * mandamos en la URL del WebSocket: así, cuando la página se recarga
-     * (Live Server, un F5, un crash), el servidor nos reconoce por el token
-     * y nos devuelve la MISMA identidad — y con ella nuestro ownership. Sin
-     * esto, cada recarga era un cliente nuevo y se perdían los dueños.
+     * Capa 7: identidad real. La app está CERRADA — el server no manda nada
+     * hasta autenticarse. Al abrir el socket: si tenemos un token de sesión
+     * firmado guardado (de un login previo), lo presentamos para auto-login;
+     * si no, mostramos el formulario. El token lo emite el server (va firmado
+     * con HMAC); reemplaza al token anónimo sin firmar de antes.
      */
-    let token = localStorage.getItem("laidea_token");
-    if (!token) {
-      token = (crypto.randomUUID && crypto.randomUUID()) ||
-        String(Date.now()) + Math.random().toString(16).slice(2);
-      localStorage.setItem("laidea_token", token);
-    }
-    const ws = new WebSocket("ws://localhost:8765/?token=" + encodeURIComponent(token));
+    const ws = new WebSocket("ws://localhost:8765");
 
-    ws.onopen = () => { statusEl.textContent = "conectado"; statusEl.className = "ok"; };
+    ws.onopen = () => {
+      statusEl.textContent = "conectado"; statusEl.className = "ok";
+      const sess = localStorage.getItem("laidea_session");
+      if (sess) {
+        ws.send(JSON.stringify({ type: "session", token: sess }));
+      } else {
+        mostrarLogin();
+      }
+    };
     ws.onclose = () => { statusEl.textContent = "desconectado"; statusEl.className = "bad"; editor.disabled = true; };
     ws.onerror = () => { statusEl.textContent = "error de conexión"; statusEl.className = "bad"; };
 
@@ -364,6 +460,24 @@
      */
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
+
+      if (msg.type === "auth_ok") {
+        // Autenticado. Guardamos el token de sesión fresco (para auto-login al
+        // recargar) y el usuario, y dejamos pasar a la app. Lo que sigue
+        // (init/welcome/ownership) lo procesan los handlers de abajo.
+        localStorage.setItem("laidea_session", msg.token);
+        localStorage.setItem("laidea_user", msg.username);
+        ocultarLogin();
+        return;
+      }
+
+      if (msg.type === "auth_error") {
+        // Falló el login/registro, o el token de sesión guardado ya no vale.
+        // Si fue el token, lo tiramos para no reintentar en bucle al recargar.
+        localStorage.removeItem("laidea_session");
+        mostrarLogin(msg.reason);
+        return;
+      }
 
       if (msg.type === "init") {
         // El servidor nos manda el workspace completo al conectarnos.
