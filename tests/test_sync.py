@@ -69,6 +69,21 @@ async def test_late_joiner_gets_current_state(server_port: int) -> None:
             assert msg == {"type": "init", "files": {"a.py": "uno", "b.py": "dos"}}
 
 
+async def test_broadcast_always_includes_path(server_port: int) -> None:
+    # Contrato del protocolo capa 1: todo UpdateMessage que el servidor manda
+    # debe incluir `path`. Si esto se rompiera, los clientes nuevos crearían
+    # archivos fantasma llamados "undefined" (bug histórico ya visto).
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await a.recv()
+        await b.recv()
+        await a.send(json.dumps({"type": "update", "path": "x.py", "content": "hola"}))
+        msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
+        assert "path" in msg, f"broadcast no incluye path: {msg}"
+        assert msg["path"] == "x.py"
+
+
 async def test_sender_does_not_receive_echo(server_port: int) -> None:
     # Si el servidor le devuelve a A lo que A acaba de mandar, el cursor de A
     # saltaría y la UX sería horrible. El test verifica que NO recibimos eco.

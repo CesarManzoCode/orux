@@ -165,6 +165,13 @@
       }
 
       if (msg.type === "update") {
+        // Guard defensivo: si por alguna razón el mensaje no trae `path`
+        // (servidor en otra versión del protocolo, mensaje corrupto, etc.)
+        // lo ignoramos en vez de crear silenciosamente un archivo llamado
+        // "undefined". Esto te salva de horas de debugging la próxima vez
+        // que tengas un servidor stale corriendo.
+        if (typeof msg.path !== "string" || !msg.path) return;
+
         // Otro cliente editó un archivo. Actualizamos nuestro espejo local.
         const eraNuevo = !(msg.path in files);
         files[msg.path] = msg.content;
