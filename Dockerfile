@@ -32,9 +32,12 @@ ENV LAIDEA_DATA=/data \
 USER laidea
 EXPOSE 8765
 
-# El server no expone HTTP; un connect TCP al puerto basta para saber que
-# está vivo y aceptando conexiones.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import socket;socket.create_connection(('127.0.0.1',8765),2).close()"
+# Healthcheck: abre un WebSocket REAL y lo cierra. Un connect TCP crudo
+# bastaba para saber que el puerto está vivo, pero el server websockets
+# intentaba parsear una request HTTP inexistente y escupía un traceback
+# ruidoso cada 30s. Un handshake WS válido verifica lo mismo y no ensucia
+# los logs (el server lo absorbe en silencio: conexión sin auth -> se cierra).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD ["python", "-c", "import asyncio, websockets\nasync def m():\n    async with websockets.connect('ws://127.0.0.1:8765'):\n        pass\nasyncio.run(m())"]
 
 CMD ["python", "-m", "laidea.server"]
