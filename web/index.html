@@ -404,6 +404,32 @@
     #git .gitres { font-size: 11px; margin-top: 0.45rem; }
     #git .gitres.ok { color: var(--ok); }
     #git .gitres.bad { color: var(--bad); }
+    #git .remoto {
+      margin-top: 0.7rem; padding-top: 0.6rem;
+      border-top: 1px solid var(--border-soft);
+      display: flex; flex-direction: column; gap: 0.35rem;
+    }
+    #git .remtit {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      font-weight: 700; color: var(--faint);
+    }
+    #git .remoto input {
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.38rem 0.5rem; font-family: inherit; font-size: 11.5px;
+      outline: none; transition: border-color var(--t);
+    }
+    #git .remoto input:focus { border-color: var(--accent); }
+    #git .remacc { display: flex; gap: 0.35rem; margin-top: 0.1rem; }
+    #git .remacc button {
+      flex: 1; border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.38rem; font-family: inherit; font-size: 11px;
+      font-weight: 700; cursor: pointer;
+      background: var(--surface-2); color: var(--text);
+    }
+    #git .remacc button:hover { background: var(--elevated); }
+    #git .remacc .no { color: var(--bad); }
+    #git .remacc .no:hover { background: var(--bad-bg); }
   </style>
 </head>
 <body>
@@ -572,6 +598,9 @@
     let gitEstado = null;
     let gitResultado = null;
     let gitMsgBorrador = "";
+    // Remoto: url/usuario en memoria de SESIÓN (no localStorage) para no
+    // retipear. El token NUNCA se guarda — ni acá ni en ningún lado.
+    const gitRemoto = { url: "", user: "" };
 
     // Nombre legible de un client_id. Si está presente lo sacamos del roster;
     // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
@@ -644,12 +673,26 @@
       }
 
       if (msg.type === "init") {
-        // El servidor nos manda el workspace completo al conectarnos.
-        // Copiamos los archivos y, si hay alguno, abrimos el primero por defecto.
+        // El servidor manda el workspace completo: al conectar Y de nuevo
+        // tras un clone (capa 10), que REEMPLAZA todo. Por eso limpiamos
+        // antes de copiar: si fuera merge, tras clonar quedarían colgando
+        // los archivos del proyecto anterior.
+        for (const k of Object.keys(files)) delete files[k];
         Object.assign(files, msg.files);
-        renderLista();
-        const primero = Object.keys(files)[0];
-        if (primero) seleccionar(primero);
+        const primero = Object.keys(files).sort()[0];
+        if (primero) {
+          seleccionar(primero);
+        } else {
+          // Repo vacío: sin archivo abierto.
+          currentPath = null;
+          actual.textContent = "—";
+          applyingRemote = true;
+          editor.value = "";
+          applyingRemote = false;
+          editor.disabled = true;
+          wrap.classList.add("off");
+          renderLista();
+        }
       }
 
       if (msg.type === "update") {
@@ -1209,6 +1252,60 @@
         r.textContent = gitResultado.detail;
         gitEl.appendChild(r);
       }
+
+      // Capa 10: remoto. clonar (REEMPLAZA el workspace, destructivo) y push.
+      // Credenciales EFÍMERAS: el token no se guarda ni en localStorage ni
+      // entre re-renders; url/usuario sí quedan en memoria de sesión para no
+      // retipearlos. Solo seguro sobre wss (en prod lo es).
+      const rem = document.createElement("div");
+      rem.className = "remoto";
+      const tit = document.createElement("div");
+      tit.className = "remtit";
+      tit.textContent = "remoto";
+      rem.appendChild(tit);
+
+      const url = document.createElement("input");
+      url.placeholder = "URL del repo (https://…)";
+      url.value = gitRemoto.url;
+      url.addEventListener("input", () => { gitRemoto.url = url.value; });
+      const usr = document.createElement("input");
+      usr.placeholder = "usuario";
+      usr.value = gitRemoto.user;
+      usr.addEventListener("input", () => { gitRemoto.user = usr.value; });
+      const tok = document.createElement("input");
+      tok.type = "password";
+      tok.placeholder = "token (no se guarda)";
+      rem.appendChild(url); rem.appendChild(usr); rem.appendChild(tok);
+
+      const acc = document.createElement("div");
+      acc.className = "remacc";
+      const bClon = document.createElement("button");
+      bClon.className = "no";
+      bClon.textContent = "clonar (reemplaza)";
+      bClon.addEventListener("click", () => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        if (!url.value.trim()) { gitResultado = { ok: false, detail: "falta la URL" }; renderGit(); return; }
+        if (!confirm("Clonar REEMPLAZA todo el workspace actual por ese repo. " +
+                     "Lo no pusheado se pierde. ¿Seguro?")) return;
+        ws.send(JSON.stringify({
+          type: "clone", url: url.value.trim(),
+          username: usr.value.trim(), token: tok.value,
+        }));
+        tok.value = "";  // el token no sobrevive a la acción
+      });
+      const bPush = document.createElement("button");
+      bPush.textContent = "push";
+      bPush.addEventListener("click", () => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({
+          type: "push", username: usr.value.trim(),
+          token: tok.value, url: url.value.trim(),
+        }));
+        tok.value = "";
+      });
+      acc.appendChild(bClon); acc.appendChild(bPush);
+      rem.appendChild(acc);
+      gitEl.appendChild(rem);
     }
 
     renderLista();
