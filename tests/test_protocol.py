@@ -9,10 +9,15 @@ que estos pasan.
 import pytest
 
 from laidea.protocol import (
+    ClaimMessage,
     InitMessage,
     LeaveMessage,
+    OwnershipMessage,
     PresenceMessage,
     PresenceState,
+    Proposal,
+    ProposalMessage,
+    ResolveMessage,
     UpdateMessage,
     WelcomeMessage,
     decode,
@@ -81,3 +86,45 @@ def test_decode_presence_from_client_without_identity() -> None:
 def test_encode_decode_leave_roundtrip() -> None:
     msg = LeaveMessage(client_id="5")
     assert decode(encode(msg)) == msg
+
+
+# --- Capa 4: ownership + edición tentativa ---
+
+
+def test_encode_decode_claim_roundtrip() -> None:
+    msg = ClaimMessage(path="src/auth.py")
+    assert decode(encode(msg)) == msg
+
+
+def test_encode_decode_ownership_roundtrip() -> None:
+    msg = OwnershipMessage(owners={"main.py": "1", "auth.py": "3"})
+    assert decode(encode(msg)) == msg
+
+
+def test_ownership_vacio_es_valido() -> None:
+    assert decode(encode(OwnershipMessage())) == OwnershipMessage(owners={})
+
+
+def test_encode_decode_proposal_roundtrip() -> None:
+    # Proposal va anidado dentro de ProposalMessage (como PresenceState en
+    # WelcomeMessage): el roundtrip valida que asdict baja recursivo y decode
+    # reconstruye el anidado.
+    msg = ProposalMessage(
+        proposal=Proposal(
+            id="main.py::2",
+            path="main.py",
+            author_id="2",
+            author_name="anónimo-2",
+            content="print('hola')",
+        )
+    )
+    assert decode(encode(msg)) == msg
+
+
+def test_encode_decode_resolve_roundtrip() -> None:
+    assert decode(encode(ResolveMessage("main.py::2", True))) == ResolveMessage(
+        "main.py::2", True
+    )
+    assert decode(encode(ResolveMessage("main.py::2", False))) == ResolveMessage(
+        "main.py::2", False
+    )

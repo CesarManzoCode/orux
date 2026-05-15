@@ -155,11 +155,61 @@
       overflow: auto;
     }
     textarea:disabled { color: #555; }
+
+    /* --- Capa 4: ownership --- */
+    #owner { font-size: 11px; }
+    #owner .tag {
+      padding: 0.1rem 0.5rem; border-radius: 3px; font-weight: 600;
+    }
+    #owner .tuyo { background: #14442b; color: #8de0a8; }
+    #owner .ajeno { background: #3a2a14; color: #e0c46a; }
+    #reclamar {
+      background: #1f1f23; color: #e6e6e6; border: 1px solid #2a2a2e;
+      border-radius: 4px; padding: 0.2rem 0.6rem; font-family: inherit;
+      font-size: 11px; cursor: pointer;
+    }
+    #reclamar:hover { background: #2a2a2e; }
+    /* Aviso al autor de un cambio tentativo: estás tocando código ajeno y lo
+       que escribas se PROPONE, no se aplica. Honesto y visible, no bloqueante. */
+    #aviso {
+      display: none; padding: 0.5rem 1.5rem; font-size: 12px;
+      background: #3a2a14; color: #e0c46a; border-bottom: 1px solid #2a2a2e;
+    }
+    #aviso.on { display: block; }
+    /* Bandeja del dueño: propuestas que esperan su verde/rojo. */
+    #propuestas { display: none; border-bottom: 1px solid #2a2a2e; background: #161616; }
+    #propuestas.on { display: block; }
+    #propuestas h3 {
+      margin: 0; padding: 0.5rem 1.5rem; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #888; background: #1b1b1b;
+    }
+    .prop { padding: 0.75rem 1.5rem; border-top: 1px solid #2a2a2e; }
+    .prop .cab { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+    .prop .cab .quien { font-size: 12px; color: #e6e6e6; }
+    .prop .cab .quien b { color: #e0c46a; }
+    .prop .acc { margin-left: auto; display: flex; gap: 0.4rem; }
+    .prop button {
+      border: none; border-radius: 4px; padding: 0.25rem 0.75rem;
+      font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .prop .ok { background: #14442b; color: #8de0a8; }
+    .prop .ok:hover { background: #1c5c3a; }
+    .prop .no { background: #4a1a1a; color: #f08c8c; }
+    .prop .no:hover { background: #5c2222; }
+    .diff {
+      margin: 0; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+      max-height: 220px; overflow: auto; border: 1px solid #2a2a2e;
+      border-radius: 4px; background: #0e0e10;
+    }
+    .diff div { padding: 0 0.6rem; }
+    .diff .add { background: #11331f; color: #8de0a8; }
+    .diff .del { background: #3a1414; color: #f08c8c; }
+    .diff .eq { color: #777; }
   </style>
 </head>
 <body>
   <header>
-    <h1>laidea — capa 2: presencia</h1>
+    <h1>laidea — capa 4: ownership</h1>
     <span id="status">conectando...</span>
     <span id="yo" style="font-size:11px;color:#888;"></span>
   </header>
@@ -174,7 +224,11 @@
       <div id="cabecera">
         <span>archivo: <span id="actual">—</span></span>
         <span id="aqui"></span>
+        <span id="owner"></span>
+        <button id="reclamar" style="display:none;">reclamar este archivo</button>
       </div>
+      <div id="propuestas"></div>
+      <div id="aviso"></div>
       <div class="editor-wrap off" id="wrap">
         <div id="capa-presencia"><div id="capa-scroll"></div></div>
         <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
@@ -204,6 +258,10 @@
     const aquiEl = document.getElementById("aqui");
     const wrap = document.getElementById("wrap");
     const capaScroll = document.getElementById("capa-scroll");
+    const ownerEl = document.getElementById("owner");
+    const reclamarBtn = document.getElementById("reclamar");
+    const propuestasEl = document.getElementById("propuestas");
+    const avisoEl = document.getElementById("aviso");
 
     // Estas dos constantes DEBEN coincidir con el CSS del textarea
     // (line-height y padding-top). Si cambias el CSS, cámbialas aquí: son el
@@ -226,6 +284,24 @@
     let yo = null;
     const peers = {};
     let ultimaPresencia = { path: null, line: 0 };
+
+    /*
+     * Estado de ownership (capa 4).
+     *  - owners:     path -> client_id del dueño. Espejo del mapa del server.
+     *  - propuestas: id -> {path, author_id, author_name, content}. Cambios
+     *                tentativos que ESTE cliente (como dueño) tiene que resolver.
+     */
+    const owners = {};
+    const propuestas = {};
+
+    // Nombre legible de un client_id. Si está presente lo sacamos del roster;
+    // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
+    // (client_id "3" -> "anónimo-3"). Cuando llegue auth esto usará el real.
+    function nombreDe(cid) {
+      if (yo && cid === yo.client_id) return yo.name;
+      if (peers[cid]) return peers[cid].name;
+      return "anónimo-" + cid;
+    }
 
     const ws = new WebSocket("ws://localhost:8765");
 
@@ -303,6 +379,24 @@
         renderLista();
         renderPresencia();
       }
+
+      if (msg.type === "ownership") {
+        // Mapa completo, idempotente: reemplazamos el espejo entero en vez de
+        // aplicar deltas. Sencillo y sin estado que se desincronice.
+        for (const k of Object.keys(owners)) delete owners[k];
+        Object.assign(owners, msg.owners);
+        renderOwnership();
+        renderPropuestas();
+      }
+
+      if (msg.type === "proposal") {
+        // Soy dueño de ese archivo y alguien propone un cambio. Lo guardo por
+        // id (determinista: si el autor sigue tecleando, su nueva propuesta
+        // reemplaza a la vieja en vez de acumular).
+        const p = msg.proposal;
+        propuestas[p.id] = p;
+        renderPropuestas();
+      }
     };
 
     /*
@@ -379,8 +473,140 @@
       editor.focus();
       renderLista();
       renderPresencia();
+      renderOwnership();
       // Abrir un archivo ya es "estar presente ahí": anúncialo.
       enviarPresencia();
+    }
+
+    /*
+     * Cabecera de ownership del archivo abierto: sin dueño (botón "reclamar"),
+     * tuyo (chip verde), o ajeno (chip ámbar + aviso de que tus cambios se
+     * proponen). Es la cara visible de la tesis: "tocas algo ajeno -> se negocia".
+     */
+    function renderOwnership() {
+      ownerEl.innerHTML = "";
+      reclamarBtn.style.display = "none";
+      avisoEl.className = "";
+      if (!currentPath) return;
+
+      const dueño = owners[currentPath];
+      if (!dueño) {
+        // Sin dueño: cualquiera escribe y se aplica directo. Ofrecemos reclamar.
+        reclamarBtn.style.display = "";
+      } else if (yo && dueño === yo.client_id) {
+        const t = document.createElement("span");
+        t.className = "tag tuyo";
+        t.textContent = "tuyo";
+        ownerEl.appendChild(t);
+      } else {
+        const t = document.createElement("span");
+        t.className = "tag ajeno";
+        t.textContent = "de " + nombreDe(dueño);
+        ownerEl.appendChild(t);
+        // Aviso honesto al autor: lo que escribas no se aplica solo, se propone.
+        avisoEl.textContent =
+          "📝 este archivo es de " + nombreDe(dueño) +
+          ". Lo que escribas se le propone para aprobación — no se aplica hasta que diga que sí.";
+        avisoEl.className = "on";
+      }
+    }
+
+    reclamarBtn.addEventListener("click", () => {
+      if (!currentPath || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "claim", path: currentPath }));
+    });
+
+    /*
+     * Diff por líneas, mínimo pero real: LCS clásico (programación dinámica)
+     * para no marcar todo como borrado+agregado cuando solo cambió una línea.
+     * Devuelve filas {tipo: 'eq'|'add'|'del', texto}. El README pide ver
+     * "líneas agregadas, eliminadas y modificadas" — esto es justo eso.
+     */
+    function diffLineas(viejo, nuevo) {
+      const a = viejo.split("\n"), b = nuevo.split("\n");
+      const n = a.length, m = b.length;
+      const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      for (let i = n - 1; i >= 0; i--)
+        for (let j = m - 1; j >= 0; j--)
+          lcs[i][j] = a[i] === b[j]
+            ? lcs[i + 1][j + 1] + 1
+            : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      const filas = [];
+      let i = 0, j = 0;
+      while (i < n && j < m) {
+        if (a[i] === b[j]) { filas.push({ t: "eq", x: a[i] }); i++; j++; }
+        else if (lcs[i + 1][j] >= lcs[i][j + 1]) { filas.push({ t: "del", x: a[i] }); i++; }
+        else { filas.push({ t: "add", x: b[j] }); j++; }
+      }
+      while (i < n) filas.push({ t: "del", x: a[i++] });
+      while (j < m) filas.push({ t: "add", x: b[j++] });
+      return filas;
+    }
+
+    /*
+     * Bandeja del dueño: las propuestas sobre archivos que YO poseo, cada una
+     * con su diff y los botones verde/rojo. "Botón verde o rojo. Sin
+     * formularios, sin workflows pesados."
+     */
+    function renderPropuestas() {
+      // Limpieza: una propuesta deja de ser mía si ya no soy dueño de su path
+      // (solté ownership, me desconecté y volví con otro id, etc.).
+      for (const id of Object.keys(propuestas)) {
+        const p = propuestas[id];
+        if (!yo || owners[p.path] !== yo.client_id) delete propuestas[id];
+      }
+      const lista = Object.values(propuestas);
+      propuestasEl.innerHTML = "";
+      if (lista.length === 0) { propuestasEl.className = ""; return; }
+      propuestasEl.className = "on";
+
+      const h = document.createElement("h3");
+      h.textContent = "propuestas para tus archivos (" + lista.length + ")";
+      propuestasEl.appendChild(h);
+
+      for (const p of lista) {
+        const box = document.createElement("div");
+        box.className = "prop";
+
+        const cab = document.createElement("div");
+        cab.className = "cab";
+        const quien = document.createElement("span");
+        quien.className = "quien";
+        quien.innerHTML = "<b>" + p.author_name + "</b> propone cambios a <b>" + p.path + "</b>";
+        cab.appendChild(quien);
+
+        const acc = document.createElement("div");
+        acc.className = "acc";
+        const ok = document.createElement("button");
+        ok.className = "ok"; ok.textContent = "✓ aprobar";
+        ok.addEventListener("click", () => resolver(p.id, true));
+        const no = document.createElement("button");
+        no.className = "no"; no.textContent = "✗ rechazar";
+        no.addEventListener("click", () => resolver(p.id, false));
+        acc.appendChild(ok); acc.appendChild(no);
+        cab.appendChild(acc);
+        box.appendChild(cab);
+
+        const diff = document.createElement("div");
+        diff.className = "diff";
+        for (const f of diffLineas(files[p.path] ?? "", p.content)) {
+          const ln = document.createElement("div");
+          ln.className = f.t;
+          ln.textContent = (f.t === "add" ? "+ " : f.t === "del" ? "- " : "  ") + f.x;
+          diff.appendChild(ln);
+        }
+        box.appendChild(diff);
+        propuestasEl.appendChild(box);
+      }
+    }
+
+    function resolver(id, aceptar) {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      // Optimista: la sacamos de la bandeja ya. El server confirma aplicando
+      // (a todos) o, si rechazo, revirtiéndole al autor.
+      delete propuestas[id];
+      renderPropuestas();
+      ws.send(JSON.stringify({ type: "resolve", proposal_id: id, accept: aceptar }));
     }
 
     // Iniciales para los puntos del sidebar: el número de "anónimo-3" -> "3".

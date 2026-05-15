@@ -1,9 +1,14 @@
 from .messages import (
+    ClaimMessage,
     InitMessage,
     LeaveMessage,
     Message,
+    OwnershipMessage,
     PresenceMessage,
     PresenceState,
+    Proposal,
+    ProposalMessage,
+    ResolveMessage,
     UpdateMessage,
     WelcomeMessage,
     decode,
@@ -11,11 +16,16 @@ from .messages import (
 )
 
 __all__ = [
+    "ClaimMessage",
     "InitMessage",
     "LeaveMessage",
     "Message",
+    "OwnershipMessage",
     "PresenceMessage",
     "PresenceState",
+    "Proposal",
+    "ProposalMessage",
+    "ResolveMessage",
     "UpdateMessage",
     "WelcomeMessage",
     "decode",

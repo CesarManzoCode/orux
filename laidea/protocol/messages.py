@@ -142,10 +142,103 @@ class LeaveMessage:
     type: Literal["leave"] = "leave"
 
 
+# --- Capa 4: ownership + edición tentativa ---
+#
+# La tesis del producto es prevenir la colisión con coordinación, no fusionar
+# después. Ownership es esa coordinación: un path puede tener dueño. Si lo edita
+# alguien que no es el dueño, el cambio NO se aplica: queda como una propuesta
+# que el dueño aprueba o rechaza con un clic. "Editar primero, negociar después,
+# aplicar al final."
+
+
+@dataclass(frozen=True)
+class ClaimMessage:
+    """El cliente reclama ser dueño de un path.
+
+    Andamiaje del prototipo: en el producto el ownership se asigna o se infiere
+    (por configuración del equipo, por análisis semántico), no se reclama con un
+    botón. Pero sin auth ni análisis todavía, un claim manual es la forma mínima
+    de *tener* un dueño con quien demostrar el flujo tentativo. Solo lo manda el
+    cliente; el servidor responde con un `OwnershipMessage`.
+    """
+
+    path: str
+    type: Literal["claim"] = "claim"
+
+
+@dataclass(frozen=True)
+class OwnershipMessage:
+    """Mapa completo `path -> client_id del dueño`. Simétrico como snapshot.
+
+    Siempre lleva el mapa entero, no un cambio incremental: es idempotente y el
+    cliente no tiene que reconstruir estado a partir de deltas. El servidor lo
+    manda al conectar (tercer mensaje del handshake, después de `welcome`) y cada
+    vez que el ownership cambia. Un path sin dueño simplemente no está en el mapa.
+    """
+
+    owners: dict[str, str] = field(default_factory=dict)
+    type: Literal["ownership"] = "ownership"
+
+
+@dataclass(frozen=True)
+class Proposal:
+    """Un cambio tentativo: contenido que alguien propone para un archivo ajeno.
+
+    No es un mensaje: viaja embebido en `ProposalMessage`, igual que
+    `PresenceState` viaja en `WelcomeMessage`. `id` es determinista
+    (`path::author_id`): si el autor sigue tecleando, la nueva propuesta
+    reemplaza a la anterior en vez de acumular basura. `content` es el archivo
+    completo propuesto (esta capa no hace per-línea; eso es capa 5).
+    """
+
+    id: str
+    path: str
+    author_id: str
+    author_name: str
+    content: str
+
+
+@dataclass(frozen=True)
+class ProposalMessage:
+    """El servidor avisa al dueño: "alguien propone cambios a tu archivo".
+
+    Solo va servidor -> dueño. El autor no manda esto: manda un `UpdateMessage`
+    normal y es el servidor quien decide que, por haber dueño distinto, ese
+    update es tentativo y se convierte en propuesta.
+    """
+
+    proposal: Proposal
+    type: Literal["proposal"] = "proposal"
+
+
+@dataclass(frozen=True)
+class ResolveMessage:
+    """El dueño resuelve una propuesta: aprobar (`accept=True`) o rechazar.
+
+    Cliente -> servidor. Aprobar aplica el contenido al workspace y lo difunde a
+    todos (incluido el autor y el propio dueño, que deben converger). Rechazar
+    la descarta y al autor se le reenvía el contenido autoritativo para que su
+    edición tentativa local se revierta.
+    """
+
+    proposal_id: str
+    accept: bool
+    type: Literal["resolve"] = "resolve"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
-# Si en el futuro agregamos DeleteMessage, OwnershipChangeMessage, etc., se
-# suman aquí. `PresenceState` no entra: no es un mensaje, es estado embebido.
-Message = Union[InitMessage, UpdateMessage, WelcomeMessage, PresenceMessage, LeaveMessage]
+# `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
+Message = Union[
+    InitMessage,
+    UpdateMessage,
+    WelcomeMessage,
+    PresenceMessage,
+    LeaveMessage,
+    ClaimMessage,
+    OwnershipMessage,
+    ProposalMessage,
+    ResolveMessage,
+]
 
 
 def encode(message: Message) -> str:
@@ -193,4 +286,15 @@ def decode(raw: str) -> Message:
         )
     if kind == "leave":
         return LeaveMessage(client_id=data["client_id"])
+    if kind == "claim":
+        return ClaimMessage(path=data["path"])
+    if kind == "ownership":
+        return OwnershipMessage(owners=data.get("owners", {}))
+    if kind == "proposal":
+        p = data["proposal"]
+        return ProposalMessage(proposal=Proposal(**p))
+    if kind == "resolve":
+        return ResolveMessage(
+            proposal_id=data["proposal_id"], accept=data["accept"]
+        )
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

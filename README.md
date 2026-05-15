@@ -2,9 +2,15 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 3 — persistencia
+## Estado actual: capa 4 — ownership
 
-El workspace ya **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`workspace_data/` por defecto, o `LAIDEA_DATA`); cada edición se escribe ahí. Antes, reiniciar el proceso borraba todo. Sin historial ni versiones todavía (eso es capa futura). Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
+Un archivo puede tener **dueño**. Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, se aplica y converge todo el mundo; si rechaza, al autor se le revierte. Es la tesis del producto en código: *prevenir la colisión con coordinación, no fusionar después*. "Editar primero, negociar después, aplicar al final."
+
+Andamiaje del prototipo: el dueño se reclama con un botón (en el producto se asigna/infiere), la identidad es anónima por sesión, y el ownership se libera al desconectar. La prevención de colisiones concurrentes y el apply por-línea son la capa 5, aparte.
+
+### Capa 3 — persistencia
+
+El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`workspace_data/` por defecto, o `LAIDEA_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
 
 ### Capa 2 — presencia
 
@@ -33,8 +39,8 @@ pytest
 
 ### Estructura
 
-- `laidea/protocol/` — mensajes que viajan por WebSocket (InitMessage, UpdateMessage, WelcomeMessage, PresenceMessage, LeaveMessage).
-- `laidea/state/` — modelo del estado: `Document` (un archivo), `Workspace` (muchos archivos), `Roster` (quién está y dónde) y `DiskStorage` (persistencia en disco).
+- `laidea/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
+- `laidea/state/` — modelo del estado: `Document` (un archivo), `Workspace` (muchos archivos), `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path) y `Proposals` (cambios tentativos).
 - `laidea/server/` — servidor WebSocket de sincronización.
 - `web/` — cliente HTML con árbol de archivos + textarea.
 - `tests/` — tests de protocolo, estado e integración.

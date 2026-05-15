@@ -42,16 +42,19 @@ async def server_port():
 
 
 async def handshake(ws) -> dict:
-    """Consume init + welcome (el handshake completo) y devuelve el welcome.
+    """Consume init + welcome + ownership (handshake completo). Devuelve el welcome.
 
     Casi todos los tests no estudian el handshake, solo necesitan pasarlo para
     llegar al comportamiento que sí prueban. Centralizarlo aquí evita que cada
-    test conozca el detalle de cuántos mensajes manda el servidor al conectar.
+    test conozca el detalle de cuántos mensajes manda el servidor al conectar
+    (init capa 1, welcome capa 2, ownership capa 4).
     """
     init = json.loads(await ws.recv())
     assert init["type"] == "init"
     welcome = json.loads(await ws.recv())
     assert welcome["type"] == "welcome"
+    ownership = json.loads(await ws.recv())
+    assert ownership["type"] == "ownership"
     return welcome
 
 
@@ -295,3 +298,157 @@ async def test_no_leave_if_never_present(server_port: int) -> None:
             # a no manda presencia y se desconecta al cerrar el with.
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(b.recv(), timeout=0.3)
+
+
+# --- Capa 4: ownership + edición tentativa ---
+
+
+async def _drenar_ownership(ws) -> dict:
+    """Lee el siguiente mensaje esperando que sea un ownership; lo devuelve."""
+    msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+    assert msg["type"] == "ownership", f"esperaba ownership, llegó {msg}"
+    return msg
+
+
+async def test_ownership_vacio_en_el_handshake(server_port: int) -> None:
+    # Tercer mensaje del handshake (capa 4): el mapa de ownership, vacío al
+    # arrancar. init (capa 1) -> welcome (capa 2) -> ownership (capa 4).
+    async with connect(f"ws://localhost:{server_port}") as a:
+        assert json.loads(await a.recv())["type"] == "init"
+        assert json.loads(await a.recv())["type"] == "welcome"
+        assert json.loads(await a.recv()) == {"type": "ownership", "owners": {}}
+
+
+async def test_claim_difunde_el_mapa_a_todos(server_port: int) -> None:
+    # Reclamar dueño difunde el mapa entero a todos, incluido quien reclamó
+    # (su UI confirma que quedó como dueño).
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        wa = await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        esperado = {"type": "ownership", "owners": {"main.py": wa["you"]["client_id"]}}
+        assert await _drenar_ownership(a) == esperado
+        assert await _drenar_ownership(b) == esperado
+
+
+async def test_edit_de_no_dueno_es_tentativo(server_port: int) -> None:
+    # El corazón de la capa: si B edita un archivo cuyo dueño es A, el cambio
+    # NO se aplica ni se difunde — le llega a A como propuesta.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        wb = await handshake(b)
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        await _drenar_ownership(a)
+        await _drenar_ownership(b)
+
+        await b.send(json.dumps({"type": "update", "path": "main.py", "content": "hola de B"}))
+
+        prop = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+        assert prop["type"] == "proposal"
+        assert prop["proposal"]["author_id"] == wb["you"]["client_id"]
+        assert prop["proposal"]["path"] == "main.py"
+        assert prop["proposal"]["content"] == "hola de B"
+
+        # B no recibe nada (su cambio no se difundió).
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+
+        # El workspace autoritativo no cambió: un cliente nuevo no ve main.py.
+        async with connect(f"ws://localhost:{server_port}") as c:
+            assert json.loads(await c.recv()) == {"type": "init", "files": {}}
+
+
+async def test_aprobar_propuesta_aplica_y_converge(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        wb = await handshake(b)
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        await _drenar_ownership(a)
+        await _drenar_ownership(b)
+        await b.send(json.dumps({"type": "update", "path": "main.py", "content": "v de B"}))
+        prop = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+        pid = prop["proposal"]["id"]
+
+        await a.send(json.dumps({"type": "resolve", "proposal_id": pid, "accept": True}))
+
+        # Converge TODO el mundo, incluido el dueño que aprobó.
+        esperado = {"type": "update", "path": "main.py", "content": "v de B"}
+        assert json.loads(await asyncio.wait_for(a.recv(), timeout=2)) == esperado
+        assert json.loads(await asyncio.wait_for(b.recv(), timeout=2)) == esperado
+        async with connect(f"ws://localhost:{server_port}") as c:
+            assert json.loads(await c.recv()) == {
+                "type": "init",
+                "files": {"main.py": "v de B"},
+            }
+
+
+async def test_rechazar_propuesta_revierte_al_autor(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        await _drenar_ownership(a)
+        await _drenar_ownership(b)
+
+        # El dueño escribe contenido autoritativo (se aplica directo).
+        await a.send(json.dumps({"type": "update", "path": "main.py", "content": "v1 del dueño"}))
+        assert json.loads(await asyncio.wait_for(b.recv(), timeout=2)) == {
+            "type": "update", "path": "main.py", "content": "v1 del dueño",
+        }
+
+        # B propone otra cosa -> tentativo.
+        await b.send(json.dumps({"type": "update", "path": "main.py", "content": "v2 de B"}))
+        prop = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+        pid = prop["proposal"]["id"]
+
+        # A rechaza: a B se le revierte al contenido autoritativo.
+        await a.send(json.dumps({"type": "resolve", "proposal_id": pid, "accept": False}))
+        assert json.loads(await asyncio.wait_for(b.recv(), timeout=2)) == {
+            "type": "update", "path": "main.py", "content": "v1 del dueño",
+        }
+
+
+async def test_solo_el_dueno_puede_resolver(server_port: int) -> None:
+    # Un no-dueño que arma el id determinista de la propuesta y manda resolve
+    # no debe poder aplicar nada.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        wb = await handshake(b)
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        await _drenar_ownership(a)
+        await _drenar_ownership(b)
+        await b.send(json.dumps({"type": "update", "path": "main.py", "content": "intento"}))
+        await asyncio.wait_for(a.recv(), timeout=2)  # la propuesta le llega a A
+
+        # B (autor, no dueño) intenta auto-aprobarse con el id determinista.
+        pid = f"main.py::{wb['you']['client_id']}"
+        await b.send(json.dumps({"type": "resolve", "proposal_id": pid, "accept": True}))
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+        async with connect(f"ws://localhost:{server_port}") as c:
+            assert json.loads(await c.recv()) == {"type": "init", "files": {}}
+
+
+async def test_ownership_se_libera_al_desconectar(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await handshake(b)
+        async with connect(f"ws://localhost:{server_port}") as a:
+            wa = await handshake(a)
+            await a.send(json.dumps({"type": "claim", "path": "x.py"}))
+            await _drenar_ownership(a)
+            assert await _drenar_ownership(b) == {
+                "type": "ownership", "owners": {"x.py": wa["you"]["client_id"]},
+            }
+        # A se desconectó: su ownership se libera y B recibe el mapa vacío.
+        assert await _drenar_ownership(b) == {"type": "ownership", "owners": {}}

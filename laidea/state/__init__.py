@@ -1,6 +1,15 @@
 from .document import Document
+from .ownership import Ownership
 from .presence import Roster
+from .proposals import Proposals
 from .storage import DiskStorage
 from .workspace import Workspace
 
-__all__ = ["DiskStorage", "Document", "Roster", "Workspace"]
+__all__ = [
+    "DiskStorage",
+    "Document",
+    "Ownership",
+    "Proposals",
+    "Roster",
+    "Workspace",
+]
