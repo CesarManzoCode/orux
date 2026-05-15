@@ -73,6 +73,15 @@ class Ownership:
             return True
         return False
 
+    def reset(self) -> None:
+        """Borra TODO el ownership y lo persiste vacío.
+
+        Para el clone (capa 10): el workspace pasó a ser otro repo; los dueños
+        del proyecto anterior ya no significan nada. Empieza limpio.
+        """
+        self._owners = {}
+        self._guardar()
+
     def snapshot(self) -> dict[str, str]:
         """Copia del mapa completo. Es lo que viaja en `OwnershipMessage`."""
         return dict(self._owners)

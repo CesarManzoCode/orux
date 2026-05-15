@@ -392,6 +392,35 @@ class GitResultMessage:
     type: Literal["git_result"] = "git_result"
 
 
+@dataclass(frozen=True)
+class CloneMessage:
+    """Cliente -> servidor: traé este repo y REEMPLAZÁ el workspace.
+
+    Capa 10 (escalón mínimo). Destructivo: el cliente confirma antes de
+    mandarlo. `username`/`token` son EFÍMEROS: se usan para este clone y NO
+    se guardan en ningún lado (ver GitRepo._git_cred). Solo seguro sobre wss.
+    """
+
+    url: str
+    username: str
+    token: str
+    type: Literal["clone"] = "clone"
+
+
+@dataclass(frozen=True)
+class PushMessage:
+    """Cliente -> servidor: empujá el workspace al remoto.
+
+    `url` vacío = usar el `origin` que dejó el clone. Credenciales efímeras,
+    nunca guardadas. No fusiona: si el remoto avanzó, se rechaza y se dice.
+    """
+
+    username: str
+    token: str
+    url: str = ""
+    type: Literal["push"] = "push"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -415,6 +444,8 @@ Message = Union[
     GitRefreshMessage,
     CommitMessage,
     GitResultMessage,
+    CloneMessage,
+    PushMessage,
 ]
 
 
@@ -510,4 +541,8 @@ def decode(raw: str) -> Message:
         return CommitMessage(message=data["message"])
     if kind == "git_result":
         return GitResultMessage(ok=data["ok"], detail=data["detail"])
+    if kind == "clone":
+        return CloneMessage(url=data["url"], username=data["username"], token=data["token"])
+    if kind == "push":
+        return PushMessage(username=data["username"], token=data["token"], url=data.get("url", ""))
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

@@ -76,6 +76,7 @@ from ..protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    CloneMessage,
     DeleteMessage,
     CommitMessage,
     GitRefreshMessage,
@@ -88,6 +89,7 @@ from ..protocol import (
     OwnershipMessage,
     PresenceMessage,
     ProposalMessage,
+    PushMessage,
     RegisterMessage,
     ResolveMessage,
     SessionMessage,
@@ -168,6 +170,10 @@ class SyncServer:
         # (tests): no se manda ningún `git_status`, así el handshake de los
         # tests previos (init/welcome/ownership) no cambia.
         self.git = git
+        # Serializa las operaciones que mutan el repo (commit/clone/push):
+        # son subprocess + filesystem sobre el MISMO workspace compartido;
+        # dos a la vez lo corromperían. El clone además es destructivo.
+        self._git_lock = asyncio.Lock()
 
     async def _enviar_a(self, client_id: str, payload: str) -> None:
         """Manda `payload` a un único cliente por su identidad. Silencioso si no está.
@@ -258,6 +264,31 @@ class SyncServer:
                 commits=e.commits,
             )
         )
+
+    async def _reiniciar_para_todos(self) -> None:
+        """Tras un clone destructivo: el workspace es OTRO repo. Tira el estado
+        compartido viejo y re-inicializa a todos los clientes autenticados.
+
+        Ownership y propuestas del proyecto anterior ya no significan nada;
+        se vacían. La presencia (Roster) NO se toca: las personas siguen
+        conectadas y re-anuncian su archivo al abrir uno del repo nuevo.
+        """
+        self.workspace.recargar()
+        self.ownership.reset()
+        self.proposals = Proposals()
+        init = encode(InitMessage(files=self.workspace.snapshot()))
+        own = encode(OwnershipMessage(owners=self.ownership.snapshot()))
+        gs = await self._git_status_encoded()
+        # Solo a los autenticados (los que están en la compuerta de login no
+        # deben recibir estado de app).
+        for conn in list(self._conns.values()):
+            try:
+                await conn.send(init)
+                await conn.send(own)
+                if gs is not None:
+                    await conn.send(gs)
+            except Exception:
+                self.clients.discard(conn)
 
     async def _enviar_git_status(self, websocket: ServerConnection) -> None:
         """Le manda el estado del repo a ESE cliente (conectar / actualizar)."""
@@ -601,9 +632,10 @@ class SyncServer:
                             )
                         else:
                             nombre, email = _autor_git(yo.client_id)
-                            ok, detalle = await asyncio.to_thread(
-                                self.git.commitear, msg, nombre, email
-                            )
+                            async with self._git_lock:
+                                ok, detalle = await asyncio.to_thread(
+                                    self.git.commitear, msg, nombre, email
+                                )
                             await self._enviar_a(
                                 yo.client_id,
                                 encode(GitResultMessage(ok, detalle)),
@@ -613,6 +645,49 @@ class SyncServer:
                                 payload = await self._git_status_encoded()
                                 if payload is not None:
                                     await self._broadcast_todos(payload)
+                elif isinstance(message, CloneMessage):
+                    # Capa 10: traer un repo y REEMPLAZAR el workspace
+                    # compartido. Destructivo (el cliente confirmó). Creds
+                    # efímeras: las usa GitRepo y no se guardan en ningún lado.
+                    if self.git is None:
+                        await self._enviar_a(
+                            yo.client_id,
+                            encode(GitResultMessage(False, "git no disponible")),
+                        )
+                    else:
+                        async with self._git_lock:
+                            ok, detalle = await asyncio.to_thread(
+                                self.git.clonar,
+                                message.url, message.username, message.token,
+                            )
+                            if ok:
+                                # El workspace es otro: re-init a todos.
+                                await self._reiniciar_para_todos()
+                        await self._enviar_a(
+                            yo.client_id, encode(GitResultMessage(ok, detalle))
+                        )
+                elif isinstance(message, PushMessage):
+                    # Capa 10: empujar el workspace al remoto. Sin fusión: si
+                    # el remoto avanzó, GitRepo.push lo dice claro.
+                    if self.git is None:
+                        await self._enviar_a(
+                            yo.client_id,
+                            encode(GitResultMessage(False, "git no disponible")),
+                        )
+                    else:
+                        async with self._git_lock:
+                            ok, detalle = await asyncio.to_thread(
+                                self.git.push,
+                                message.username, message.token,
+                                message.url or None,
+                            )
+                        await self._enviar_a(
+                            yo.client_id, encode(GitResultMessage(ok, detalle))
+                        )
+                        if ok:
+                            payload = await self._git_status_encoded()
+                            if payload is not None:
+                                await self._broadcast_todos(payload)
                 # Si llega un InitMessage/WelcomeMessage/LeaveMessage del
                 # cliente lo ignoramos: esos los origina solo el servidor.
         finally:

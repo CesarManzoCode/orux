@@ -944,3 +944,108 @@ async def test_commit_sin_mensaje_falla(tmp_path) -> None:
     finally:
         s.close()
         await s.wait_closed()
+
+
+# --- Capa 10: clone / push (escalón mínimo) ---
+
+import subprocess as _sp
+
+
+def _remoto_bare(tmp_path):
+    """Repo bare local con un commit = 'el repo del equipo' (sin red)."""
+    remoto = tmp_path / "equipo.git"
+    _sp.run(["git", "init", "--bare", "-q", str(remoto)], check=True)
+    seed = tmp_path / "seed"
+    _sp.run(["git", "clone", "-q", str(remoto), str(seed)], check=True)
+    (seed / "hola.py").write_text("print('del remoto')\n", encoding="utf-8")
+    _sp.run(["git", "-C", str(seed), "add", "-A"], check=True)
+    _sp.run(["git", "-C", str(seed), "-c", "user.email=a@b", "-c",
+             "user.name=a", "commit", "-q", "-m", "inicial"], check=True)
+    _sp.run(["git", "-C", str(seed), "push", "-q", "origin", "HEAD"], check=True)
+    return remoto
+
+
+async def test_clone_reemplaza_y_reinicia_a_todos(tmp_path) -> None:
+    remoto = _remoto_bare(tmp_path)
+    ws = tmp_path / "ws"
+    srv = SyncServer(storage=DiskStorage(ws), git=GitRepo(ws))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as a, connect(
+            f"ws://localhost:{port}"
+        ) as b:
+            await handshake(a); await recv_tipo(a, "git_status")
+            await handshake(b); await recv_tipo(b, "git_status")
+            # A deja basura vieja en el workspace.
+            await a.send(json.dumps({"type": "update", "path": "viejo.py", "content": "basura"}))
+            await recv_tipo(b, "update")
+
+            await a.send(json.dumps({
+                "type": "clone", "url": str(remoto),
+                "username": "u", "token": "SECRETO"}))
+
+            # El re-init llega ANTES que el git_result; hay que leerlo primero
+            # o recv_tipo("git_result") se comería el init.
+            for cl in (a, b):
+                init = await recv_tipo(cl, "init")
+                assert init["files"] == {"hola.py": "print('del remoto')\n"}
+            res = await recv_tipo(a, "git_result")
+            assert res["ok"] is True, res
+            # Un cliente nuevo también ve solo lo clonado.
+            async with connect(f"ws://localhost:{port}") as c:
+                await autenticar(c)
+                assert json.loads(await c.recv()) == {
+                    "type": "init", "files": {"hola.py": "print('del remoto')\n"}}
+    finally:
+        s.close(); await s.wait_closed()
+
+
+async def test_clone_que_falla_no_destruye(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    srv = SyncServer(storage=DiskStorage(ws), git=GitRepo(ws))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as a:
+            await handshake(a); await recv_tipo(a, "git_status")
+            await a.send(json.dumps({"type": "update", "path": "importante.py", "content": "no borrar"}))
+            await asyncio.sleep(0.05)
+            await a.send(json.dumps({
+                "type": "clone", "url": str(tmp_path / "no-existe.git"),
+                "username": "u", "token": "t"}))
+            res = await recv_tipo(a, "git_result")
+            assert res["ok"] is False
+            async with connect(f"ws://localhost:{port}") as c:
+                await autenticar(c)
+                assert json.loads(await c.recv()) == {
+                    "type": "init", "files": {"importante.py": "no borrar"}}
+    finally:
+        s.close(); await s.wait_closed()
+
+
+async def test_push_desde_la_web(tmp_path) -> None:
+    remoto = _remoto_bare(tmp_path)
+    ws = tmp_path / "ws"
+    srv = SyncServer(storage=DiskStorage(ws), git=GitRepo(ws))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as a:
+            await handshake(a, user="ana@team.com"); await recv_tipo(a, "git_status")
+            await a.send(json.dumps({
+                "type": "clone", "url": str(remoto),
+                "username": "u", "token": "t"}))
+            await recv_tipo(a, "init")  # re-init del clone, antes del result
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+            await a.send(json.dumps({"type": "update", "path": "nuevo.py", "content": "x = 1"}))
+            await asyncio.sleep(0.05)
+            await a.send(json.dumps({"type": "commit", "message": "agrega nuevo"}))
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+            await a.send(json.dumps({"type": "push", "username": "u", "token": "t", "url": ""}))
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+        verif = tmp_path / "verif"
+        _sp.run(["git", "clone", "-q", str(remoto), str(verif)], check=True)
+        assert (verif / "nuevo.py").exists()
+    finally:
+        s.close(); await s.wait_closed()

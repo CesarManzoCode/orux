@@ -107,6 +107,16 @@ class Workspace:
                 logger.exception("no se pudo borrar en disco %r", path)
         return True
 
+    def recargar(self) -> None:
+        """Tira el estado en memoria y lo reconstruye desde disco.
+
+        Para el clone destructivo (capa 10): el disco ya tiene el repo nuevo;
+        esto vacía lo viejo en memoria y carga lo nuevo. `cargar_de_disco`
+        solo agrega, por eso primero limpiamos.
+        """
+        self._documents.clear()
+        self.cargar_de_disco()
+
     def cargar_de_disco(self) -> None:
         """Reconstruye el workspace desde el storage. Se llama una vez, al arrancar.
 
