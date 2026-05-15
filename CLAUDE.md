@@ -18,18 +18,18 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 ## Estado actual
 
-Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 1, 2, 3 y 4** implementadas como paquete Python instalable:
+Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 1, 2, 3, 4 y 5** implementadas como paquete Python instalable:
 
 - `laidea/protocol/` — capa 1: `Init`, `Update`. Capa 2: `Welcome`, `Presence`, `Leave` + estado `PresenceState`. Capa 4: `ClaimMessage(path)`, `OwnershipMessage(owners)`, `ProposalMessage(proposal)` + estado `Proposal`, `ResolveMessage(proposal_id, accept)`. Encode/decode con `asdict`.
-- `laidea/state/` — `Document`, `Workspace` (acepta storage opcional), `Roster` (presencia), `DiskStorage` (capa 3: valida paths contra traversal), `Ownership` (capa 4: path→client_id dueño; efímero, se libera al desconectar), `Proposals` (capa 4: id `path::author_id` determinista, sin cola para dueños offline).
-- `laidea/server/` — `SyncServer(storage=None)`. Handshake de 3 mensajes: `init`→`welcome`→`ownership`. Update de no-dueño sobre archivo con dueño = propuesta al dueño (no se aplica/difunde). `resolve` aprobar = aplica + `_broadcast_todos` (incluye al dueño que aprobó); rechazar = revierte al autor. Solo el dueño actual resuelve. Al desconectar: libera ownership y descarta sus propuestas. `__main__` cablea `DiskStorage` real.
+- `laidea/state/` — `Document`, `Workspace` (storage opcional; `exists()` distingue crear de editar), `Roster` (presencia; `lineas_ocupadas()`), `DiskStorage` (capa 3), `Ownership` (capa 4: efímero, se libera al desconectar), `Proposals` (capa 4: id `path::author_id`), `lineas_tocadas` (capa 5: diff LCS, líneas del viejo que el nuevo borra/modifica; insertar NO toca las desplazadas).
+- `laidea/server/` — `SyncServer(storage=None)`. Handshake de 3 mensajes: `init`→`welcome`→`ownership`. Crear archivo (primer update sobre path nuevo sin dueño) hace dueño al creador. Update de no-dueño sobre archivo con dueño = propuesta. Capa 5: si el archivo NO tiene dueño y el update pisa una línea ocupada por otro presente, se rechaza (se devuelve lo autoritativo al emisor, `continue`); el dueño no tiene lock. `resolve` aprobar = `_broadcast_todos`; rechazar = revierte al autor. Al desconectar: libera ownership, descarta sus propuestas. `__main__` cablea `DiskStorage`.
 - `web/index.html` — sidebar con badges de presencia; marcas de línea sobre el textarea (`white-space: pre`, `line-height` 22px fijo; `LINE_H`/`PAD_TOP` en JS deben coincidir con CSS). Capa 4: chip de dueño + botón "reclamar", aviso al autor de cambio tentativo, bandeja del dueño con diff por líneas (LCS) y botones aprobar/rechazar.
-- `tests/` — 54 tests. Contratos intactos: `init` primer mensaje, broadcasts de update SIEMPRE con `path`. `handshake()` en `test_sync.py` consume `init`+`welcome`+`ownership`. Storage/tests usan `tmp_path`.
+- `tests/` — 66 tests. Contratos intactos: `init` primer mensaje, broadcasts de update SIEMPRE con `path`, nunca eco de update al emisor. `handshake()` consume `init`+`welcome`+`ownership`; `recv_tipo()` filtra el `ownership` que difunde crear archivos. `test_locks.py` prueba el diff puro. Storage/tests usan `tmp_path`.
 - `pyproject.toml` — `pip install -e ".[dev]"`. Server: `python -m laidea.server` o `laidea-server`.
 
-Presencia es por archivo + número de línea (no posición de caracter). Estar conectado ≠ estar presente. Persistencia: memoria primero/disco después; persistir nunca propaga excepción. Ownership (capa 4): andamiaje de prototipo — claim manual, identidad anónima por sesión, se libera al desconectar (para evitar deadlock sin auth); en el producto se asigna/infiere y persiste. Propuestas = archivo completo (per-línea es capa 5).
+Presencia por archivo + línea (no caracter). Estar conectado ≠ estar presente. Persistir nunca propaga excepción. Ownership: andamiaje de prototipo (anónimo por sesión, se libera al desconectar; en el producto se asigna/infiere y persiste). Capa 5: el lock es por presencia — si no anunciaste presencia en una línea, no la reservas; el rechazo es del update entero (sin CRDT no hay merge robusto; en práctica el update es por pulsación). Cliente NO cambió en capa 5 (server-driven; el rebote se ve como un revert silencioso — pulir el aviso es follow-up).
 
-Capas pendientes (en orden): **capa 5 = prevención de colisiones + apply por-línea** (separada de capa 4 a propósito), después análisis semántico, notificaciones a owners, integración Git. CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
+Capas pendientes (en orden): **análisis semántico de impacto** (probable: TypeScript primero), después notificaciones a owners, integración Git. CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
 
 ## Trampas operativas ya vistas
 

@@ -30,8 +30,14 @@ Capa 4: ownership. El handshake gana un tercer mensaje (`ownership`, después
 de `welcome`). Si un cliente edita un archivo con dueño y no es el dueño, su
 update NO se aplica: se vuelve una propuesta que se le manda al dueño, que la
 aprueba (se aplica y converge todo el mundo) o la rechaza (al autor se le
-revierte). Esto es la tesis del producto en código: prevenir con
-coordinación, no fusionar después.
+revierte). Crear un archivo hace dueño al creador. Esto es la tesis del
+producto en código: prevenir con coordinación, no fusionar después.
+
+Capa 5: prevención de colisiones por línea. Si el archivo NO tiene dueño,
+antes de aplicar un update el servidor mira (vía presencia) si alguna línea
+que el emisor pisa la está ocupando otro presente; si sí, rechaza el update
+y le devuelve el contenido autoritativo. "Nunca dos en la misma línea." El
+dueño tiene preferencia (sin lock). Sin CRDT: se previene, no se fusiona.
 """
 
 from __future__ import annotations
@@ -54,7 +60,14 @@ from ..protocol import (
     decode,
     encode,
 )
-from ..state import DiskStorage, Ownership, Proposals, Roster, Workspace
+from ..state import (
+    DiskStorage,
+    Ownership,
+    Proposals,
+    Roster,
+    Workspace,
+    lineas_tocadas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +211,36 @@ class SyncServer:
                         )
                     else:
                         # Sin dueño, o eres tú el dueño: se aplica directo.
+                        #
+                        # Capa 5 — prevención de colisiones. Si el archivo NO
+                        # tiene dueño, aplica el lock por línea: no puedes pisar
+                        # una línea que otro presente está tocando. Si eres el
+                        # dueño, tienes preferencia y el lock no te aplica
+                        # ("el owner tiene preferencia", README).
+                        if dueño is None:
+                            viejo = self.workspace.snapshot().get(
+                                message.path, ""
+                            )
+                            tocadas = lineas_tocadas(viejo, message.content)
+                            ocupadas = self.roster.lineas_ocupadas(
+                                message.path, excepto=yo.client_id
+                            )
+                            if tocadas & ocupadas:
+                                # Otro presente ya está en una de esas líneas:
+                                # "el que la tocó primero escribe". Rechazamos
+                                # el update ENTERO (sin CRDT no hay merge por
+                                # línea robusto; en la práctica los updates son
+                                # por pulsación, así que el alcance es mínimo) y
+                                # le devolvemos al emisor el contenido
+                                # autoritativo para que su edición se revierta.
+                                await websocket.send(
+                                    encode(
+                                        UpdateMessage(
+                                            path=message.path, content=viejo
+                                        )
+                                    )
+                                )
+                                continue
                         # ¿Es la PRIMERA vez que se ve este path? Entonces este
                         # update lo está *creando*. "El que la tocó primero
                         # escribe" + ownership invisible: quien crea un archivo

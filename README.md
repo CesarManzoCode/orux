@@ -2,11 +2,15 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 4 — ownership
+## Estado actual: capa 5 — prevención de colisiones
 
-Un archivo puede tener **dueño**. Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, se aplica y converge todo el mundo; si rechaza, al autor se le revierte. Es la tesis del producto en código: *prevenir la colisión con coordinación, no fusionar después*. "Editar primero, negociar después, aplicar al final."
+Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, el servidor mira (vía presencia) si alguna línea que tocas la está ocupando otro presente. Si sí, **rechaza tu cambio y te devuelve el contenido real** — "nunca dos personas a la vez en la misma línea, el que la tocó primero escribe". El **dueño tiene preferencia**: a él el lock no le aplica. Cero CRDT: se previene, no se fusiona. (Para no bloquear de más, el servidor distingue una línea *modificada* de una que solo *se desplazó* por una inserción.)
 
-Andamiaje del prototipo: el dueño se reclama con un botón (en el producto se asigna/infiere), la identidad es anónima por sesión, y el ownership se libera al desconectar. La prevención de colisiones concurrentes y el apply por-línea son la capa 5, aparte.
+### Capa 4 — ownership
+
+Un archivo puede tener **dueño** (quien lo crea lo es, sin botón). Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, converge todo el mundo; si rechaza, al autor se le revierte.
+
+Andamiaje del prototipo: identidad anónima por sesión, el ownership se libera al desconectar.
 
 ### Capa 3 — persistencia
 
@@ -40,7 +44,7 @@ pytest
 ### Estructura
 
 - `laidea/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
-- `laidea/state/` — modelo del estado: `Document` (un archivo), `Workspace` (muchos archivos), `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path) y `Proposals` (cambios tentativos).
+- `laidea/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
 - `laidea/server/` — servidor WebSocket de sincronización.
 - `web/` — cliente HTML con árbol de archivos + textarea.
 - `tests/` — tests de protocolo, estado e integración.

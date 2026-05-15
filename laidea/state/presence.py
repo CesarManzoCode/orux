@@ -74,6 +74,21 @@ class Roster:
             if e.path is not None and cid != excepto
         ]
 
+    def lineas_ocupadas(self, path: str, excepto: str) -> set[int]:
+        """Qué líneas de `path` tiene ocupadas algún OTRO presente.
+
+        Es la base del lock de la capa 5: "esta línea ya la está tocando
+        alguien". Excluimos a `excepto` (el propio editor) — nadie se bloquea
+        a sí mismo. Una línea cuenta como ocupada por el simple hecho de que
+        otro presente tiene ahí su cursor: presencia = dónde trabaja la gente,
+        y trabajar en una línea es reservarla mientras estés ahí.
+        """
+        return {
+            e.line
+            for cid, e in self._estados.items()
+            if e.path == path and cid != excepto
+        }
+
     def mover(self, client_id: str, path: str, line: int) -> PresenceState | None:
         """Actualiza dónde está un cliente. Devuelve el estado nuevo ya completo.
 

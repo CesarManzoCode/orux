@@ -500,3 +500,103 @@ async def test_ownership_se_libera_al_desconectar(server_port: int) -> None:
             }
         # A se desconectó: su ownership se libera y B recibe el mapa vacío.
         assert await _drenar_ownership(b) == {"type": "ownership", "owners": {}}
+
+
+# --- Capa 5: prevención de colisiones por línea ---
+
+
+async def _archivo_sin_dueno(port: str):
+    """Crea 'shared.py' con contenido y lo deja SIN dueño.
+
+    Truco: el creador se vuelve dueño (capa 4), pero al desconectarse se libera
+    el ownership y el contenido queda en el workspace. Así obtenemos un archivo
+    con contenido y sin dueño, que es el escenario donde aplica el lock.
+    """
+    async with connect(f"ws://localhost:{port}") as creador:
+        await handshake(creador)
+        await creador.send(
+            json.dumps({"type": "update", "path": "shared.py", "content": "l1\nl2\nl3"})
+        )
+        await asyncio.sleep(0.05)  # que aplique y auto-reclame
+    await asyncio.sleep(0.05)  # que el desconectar libere el ownership
+
+
+async def test_no_puedes_pisar_la_linea_de_otro(server_port: int) -> None:
+    await _archivo_sin_dueno(server_port)
+    async with connect(f"ws://localhost:{server_port}") as b, connect(
+        f"ws://localhost:{server_port}"
+    ) as c:
+        wb = await handshake(b)
+        await handshake(c)
+        assert wb["you"]  # b conectado
+
+        # B se para en la línea 2 de shared.py.
+        await b.send(json.dumps({"type": "presence", "path": "shared.py", "line": 2}))
+        await asyncio.sleep(0.05)
+
+        # C intenta modificar la línea 2 -> rechazado, le vuelve lo autoritativo.
+        await c.send(
+            json.dumps({"type": "update", "path": "shared.py", "content": "l1\nC PISA\nl3"})
+        )
+        rebote = await recv_tipo(c, "update")
+        assert rebote == {"type": "update", "path": "shared.py", "content": "l1\nl2\nl3"}
+
+        # B (el que ocupaba la línea) no recibe el cambio de C: no se aplicó.
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+
+        # El workspace no cambió: un cliente nuevo ve el contenido original.
+        async with connect(f"ws://localhost:{server_port}") as d:
+            assert json.loads(await d.recv()) == {
+                "type": "init", "files": {"shared.py": "l1\nl2\nl3"},
+            }
+
+
+async def test_editar_otra_linea_si_se_aplica(server_port: int) -> None:
+    await _archivo_sin_dueno(server_port)
+    async with connect(f"ws://localhost:{server_port}") as b, connect(
+        f"ws://localhost:{server_port}"
+    ) as c:
+        await handshake(b)
+        await handshake(c)
+        await b.send(json.dumps({"type": "presence", "path": "shared.py", "line": 2}))
+        await asyncio.sleep(0.05)
+
+        # C edita la línea 1 (B está en la 2): no hay colisión, se aplica.
+        await c.send(
+            json.dumps({"type": "update", "path": "shared.py", "content": "C1\nl2\nl3"})
+        )
+        assert await recv_tipo(b, "update") == {
+            "type": "update", "path": "shared.py", "content": "C1\nl2\nl3",
+        }
+
+
+async def test_el_dueno_pisa_sin_lock(server_port: int) -> None:
+    # "El owner tiene preferencia": el dueño puede escribir una línea que otro
+    # presente está ocupando; el lock no le aplica.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        await handshake(b)
+        # A crea (y por lo tanto es dueño de) owned.py.
+        await a.send(
+            json.dumps({"type": "update", "path": "owned.py", "content": "l1\nl2"})
+        )
+        assert await recv_tipo(b, "update") == {
+            "type": "update", "path": "owned.py", "content": "l1\nl2",
+        }
+        await recv_tipo(b, "ownership")  # A quedó dueño
+        await recv_tipo(a, "ownership")
+
+        # B se para en la línea 1.
+        await b.send(json.dumps({"type": "presence", "path": "owned.py", "line": 1}))
+        await asyncio.sleep(0.05)
+
+        # A (dueño) pisa esa misma línea 1: se aplica igual (preferencia).
+        await a.send(
+            json.dumps({"type": "update", "path": "owned.py", "content": "DUENO\nl2"})
+        )
+        assert await recv_tipo(b, "update") == {
+            "type": "update", "path": "owned.py", "content": "DUENO\nl2",
+        }

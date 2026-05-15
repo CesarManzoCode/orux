@@ -1,4 +1,5 @@
 from .document import Document
+from .locks import lineas_tocadas
 from .ownership import Ownership
 from .presence import Roster
 from .proposals import Proposals
@@ -12,4 +13,5 @@ __all__ = [
     "Proposals",
     "Roster",
     "Workspace",
+    "lineas_tocadas",
 ]
