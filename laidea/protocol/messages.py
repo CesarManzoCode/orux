@@ -5,8 +5,25 @@ como el cliente tienen que estar de acuerdo en qué mensajes se mandan y qué fo
 tienen. Por eso vive en su propio módulo: si un día cambiamos cómo se envía un
 update, este es el único archivo que el servidor y el cliente tienen que coordinar.
 
-Capa 1 (esta): el documento dejó de ser un solo string y pasó a ser un mapa de
+Capa 1: el documento dejó de ser un solo string y pasó a ser un mapa de
 `path -> contenido`. Cada mensaje de update ahora dice a qué archivo se refiere.
+
+Capa 2 (esta): presencia. Tres mensajes nuevos para que cada quien vea dónde
+están trabajando los demás:
+
+- `WelcomeMessage`: el servidor te lo manda al conectar. Te dice quién eres
+  (identidad anónima que el servidor te asignó: id, nombre, color) y quiénes
+  más están presentes ahora mismo y en qué archivo/línea (el `peers`).
+- `PresenceMessage`: "estoy en este archivo, en esta línea". Es simétrico como
+  `UpdateMessage`: el cliente lo manda al moverse, el servidor lo retransmite a
+  los demás. El cliente solo manda `path` y `line`; el servidor rellena la
+  identidad desde su registro (el cliente no puede mentir sobre quién es).
+- `LeaveMessage`: el servidor lo manda a los demás cuando alguien se desconecta,
+  para que su marcador desaparezca de la UI.
+
+Decisión deliberada: la presencia es por archivo + número de línea, no posición
+exacta de cursor. La línea es lo que de verdad responde "¿alguien ya está
+tocando esto?" sin la fragilidad de superponer carets sobre un <textarea>.
 """
 
 from __future__ import annotations
@@ -52,10 +69,83 @@ class UpdateMessage:
     type: Literal["update"] = "update"
 
 
-# Union de todos los tipos posibles. Si en el futuro agregamos PresenceMessage,
-# DeleteMessage, OwnershipChangeMessage, etc., se suman aquí y `decode` aprende a
-# distinguirlos por el campo `type`.
-Message = Union[InitMessage, UpdateMessage]
+@dataclass(frozen=True)
+class PresenceState:
+    """Dónde está trabajando un cliente. Es el "estado de presencia" de una persona.
+
+    No es un mensaje que viaja solo: viaja embebido dentro de `WelcomeMessage`
+    (la lista `peers`) y sus campos son los mismos que carga `PresenceMessage`.
+    Lo separamos en su propio tipo porque el roster del servidor lo va a usar
+    como estructura de estado, igual que `Document` es el estado de un archivo.
+
+    `path` es `None` cuando el cliente está conectado pero todavía no abrió
+    ningún archivo: no está "presente" en ningún lado, así que no se muestra.
+    `line` es 1-indexada (la primera línea es 1) porque así la piensa el humano
+    y así la muestra la UI; 0 no tiene sentido como número de línea.
+    """
+
+    client_id: str
+    name: str
+    color: str
+    path: str | None = None
+    line: int = 1
+
+
+@dataclass(frozen=True)
+class WelcomeMessage:
+    """Primer mensaje de presencia: el servidor te dice quién eres y quién más hay.
+
+    Llega justo después del `InitMessage` (que trae el workspace). Mientras
+    `InitMessage` responde "¿qué hay editado?", este responde "¿quién está aquí
+    y dónde?". Va aparte y no se mete dentro de `InitMessage` a propósito: el
+    snapshot del workspace es un contrato estable (la persistencia depende de
+    que su forma no cambie), y la presencia tiene un ciclo de vida distinto.
+
+    `you` es tu propia identidad asignada por el servidor. `peers` es la lista
+    de los demás que ya están presentes en algún archivo, para que los pintes
+    de inmediato sin esperar a que se muevan.
+    """
+
+    you: PresenceState
+    peers: list[PresenceState] = field(default_factory=list)
+    type: Literal["welcome"] = "welcome"
+
+
+@dataclass(frozen=True)
+class PresenceMessage:
+    """"Estoy en `path`, línea `line`." Simétrico, como `UpdateMessage`.
+
+    Del cliente al servidor: solo importan `path` y `line`; los campos de
+    identidad van vacíos porque el servidor los rellena desde su registro (si el
+    cliente pudiera mandar su propio `client_id` podría hacerse pasar por otro).
+    Del servidor a los demás clientes: ya viene completo con identidad.
+    """
+
+    client_id: str
+    name: str
+    color: str
+    path: str
+    line: int
+    type: Literal["presence"] = "presence"
+
+
+@dataclass(frozen=True)
+class LeaveMessage:
+    """Alguien se desconectó: borren su marcador.
+
+    Solo carga el `client_id` porque para quitar a alguien de la UI no hace
+    falta nada más. Lo manda siempre el servidor (es el único que sabe cuándo
+    una conexión muere); nunca lo manda un cliente.
+    """
+
+    client_id: str
+    type: Literal["leave"] = "leave"
+
+
+# Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
+# Si en el futuro agregamos DeleteMessage, OwnershipChangeMessage, etc., se
+# suman aquí. `PresenceState` no entra: no es un mensaje, es estado embebido.
+Message = Union[InitMessage, UpdateMessage, WelcomeMessage, PresenceMessage, LeaveMessage]
 
 
 def encode(message: Message) -> str:
@@ -83,4 +173,24 @@ def decode(raw: str) -> Message:
         return InitMessage(files=data.get("files", {}))
     if kind == "update":
         return UpdateMessage(path=data["path"], content=data["content"])
+    if kind == "welcome":
+        you = data["you"]
+        return WelcomeMessage(
+            you=PresenceState(**you),
+            peers=[PresenceState(**p) for p in data.get("peers", [])],
+        )
+    if kind == "presence":
+        # Del cliente solo exigimos `path` y `line`. Los campos de identidad
+        # pueden no venir (el servidor los rellena); por eso usamos .get con
+        # default en vez de indexar, así decode no explota con el mensaje que
+        # manda el cliente. En sentido servidor->cliente sí vienen completos.
+        return PresenceMessage(
+            client_id=data.get("client_id", ""),
+            name=data.get("name", ""),
+            color=data.get("color", ""),
+            path=data["path"],
+            line=data["line"],
+        )
+    if kind == "leave":
+        return LeaveMessage(client_id=data["client_id"])
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

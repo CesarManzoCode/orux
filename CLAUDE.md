@@ -18,16 +18,18 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 ## Estado actual
 
-Fase muy temprana. La idea completa vive en `README.md`. Existe ya la **capa 1** (workspace con múltiples archivos sincronizados en tiempo real) implementada como paquete Python instalable:
+Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 1 y 2** implementadas como paquete Python instalable:
 
-- `laidea/protocol/` — `InitMessage(files: dict)`, `UpdateMessage(path, content)`. Encode/decode con `asdict`.
-- `laidea/state/` — `Document` (un archivo, todavía un string), `Workspace` (mapa de path → Document).
-- `laidea/server/` — `SyncServer` aplica updates al workspace y retransmite a otros clientes (no eco al emisor).
-- `web/index.html` — cliente con sidebar de archivos + botón "+ nuevo" + textarea.
-- `tests/` — 14 tests con `pytest` y `pytest-asyncio`. Validan protocolo, workspace e integración multi-archivo. Incluye contrato de que el servidor SIEMPRE incluye `path` en broadcasts.
+- `laidea/protocol/` — capa 1: `InitMessage(files)`, `UpdateMessage(path, content)`. Capa 2: `WelcomeMessage(you, peers)`, `PresenceMessage(client_id, name, color, path, line)`, `LeaveMessage(client_id)`, más el tipo de estado `PresenceState`. Encode/decode con `asdict`.
+- `laidea/state/` — `Document` (un archivo, todavía un string), `Workspace` (mapa path → Document), `Roster` (presencia: client_id → PresenceState; el server asigna identidad anónima, el cliente no la elige).
+- `laidea/server/` — `SyncServer` aplica updates al workspace y retransmite (no eco al emisor). Al conectar manda `init` y luego `welcome`. Retransmite presencia fusionando la identidad confiable; avisa con `leave` al desconectar (solo si el cliente llegó a estar presente en algún archivo).
+- `web/index.html` — cliente con sidebar (badges de color por archivo), cabecera "quién está aquí", y marcas de línea de cada peer sobre el textarea. El textarea usa `white-space: pre` y `line-height` en px fijos (22) para alinear línea↔pixel; `LINE_H`/`PAD_TOP` en el JS deben coincidir con el CSS.
+- `tests/` — 26 tests con `pytest` y `pytest-asyncio`. Contratos clave intactos: `init` sigue siendo el primer mensaje, broadcasts de update SIEMPRE incluyen `path`. El helper `handshake()` en `test_sync.py` consume `init`+`welcome`.
 - `pyproject.toml` — `pip install -e ".[dev]"`. Server: `python -m laidea.server` o `laidea-server`.
 
-Capas pendientes (en orden): **presencia (cursores de otros) es la siguiente**, después persistencia, CRDT real, ownership, análisis semántico, integración Git.
+Presencia es por archivo + número de línea (decisión deliberada, no posición de caracter). Estar conectado ≠ estar presente: un cliente sin archivo abierto no se difunde ni aparece en ningún roster.
+
+Capas pendientes (en orden): **persistencia es la siguiente**, después CRDT real, ownership, análisis semántico, notificaciones a owners, integración Git.
 
 ## Trampas operativas ya vistas
 

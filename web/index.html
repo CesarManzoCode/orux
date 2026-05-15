@@ -78,33 +78,81 @@
     #lista li.activo { background: #2a2a3e; color: #fff; }
     #lista li.vacio { color: #555; cursor: default; }
     #lista li.vacio:hover { background: transparent; }
+    /* Fila del sidebar: nombre del archivo a la izquierda, puntos de presencia
+       a la derecha. Los puntos dicen "alguien está aquí" de un vistazo. */
+    #lista li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+    .badges { display: flex; gap: 3px; flex-shrink: 0; }
+    .badge {
+      width: 16px; height: 16px; border-radius: 50%;
+      font-size: 9px; line-height: 16px; text-align: center;
+      color: #0e0e10; font-weight: 700;
+    }
     main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     #cabecera {
       padding: 0.75rem 1.5rem;
       border-bottom: 1px solid #2a2a2e;
       font-size: 12px;
       color: #888;
+      display: flex; align-items: center; gap: 1rem;
     }
     #cabecera #actual { color: #e6e6e6; font-weight: 500; }
+    /* Quién más está en ESTE archivo, con su línea. Texto explícito además de
+       los marcadores en el editor: si tu línea está fuera de pantalla, igual
+       sabes que alguien está acá. */
+    #aqui { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    #aqui .quien {
+      font-size: 11px; padding: 0.1rem 0.5rem; border-radius: 3px;
+      color: #0e0e10; font-weight: 600;
+    }
+    /*
+     * El editor y la capa de presencia comparten exactamente la misma métrica
+     * (font, tamaño, line-height en px, padding). Solo así la línea N del
+     * textarea cae en el mismo pixel que el marcador de la línea N. Por eso
+     * line-height va en px fijos y el textarea no envuelve líneas (white-space:
+     * pre): así "línea lógica" == "fila visual" y el mapeo línea->pixel es exacto.
+     */
+    .editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; background: #18181b; }
+    .editor-wrap.off { background: #131316; }
+    #capa-presencia {
+      position: absolute; inset: 0;
+      overflow: hidden; pointer-events: none;
+    }
+    /* Se desplaza junto con el scroll del textarea vía translateY. */
+    #capa-scroll { position: absolute; left: 0; right: 0; top: 0; }
+    .marca {
+      position: absolute; left: 0; right: 0; height: 22px;
+      display: flex; align-items: center;
+    }
+    .marca .raya { position: absolute; inset: 0; opacity: 0.13; }
+    .marca .etiqueta {
+      position: relative;
+      font-size: 10px; padding: 0 5px; border-radius: 0 3px 3px 0;
+      color: #0e0e10; font-weight: 700;
+      max-width: 120px; overflow: hidden; white-space: nowrap;
+    }
     textarea {
       flex: 1;
-      background: #18181b;
+      position: relative;
+      background: transparent;            /* deja ver las marcas que van detrás */
       color: #e6e6e6;
       border: none;
       font-family: inherit;
       font-size: 14px;
-      line-height: 1.55;
-      padding: 1.25rem 1.5rem;
+      line-height: 22px;                  /* px fijos: clave para alinear marcas */
+      padding: 20px 24px;
       resize: none;
       outline: none;
+      white-space: pre;                   /* sin wrap: 1 línea lógica = 1 fila */
+      overflow: auto;
     }
-    textarea:disabled { color: #555; background: #131316; }
+    textarea:disabled { color: #555; }
   </style>
 </head>
 <body>
   <header>
-    <h1>laidea — capa 1: múltiples archivos</h1>
+    <h1>laidea — capa 2: presencia</h1>
     <span id="status">conectando...</span>
+    <span id="yo" style="font-size:11px;color:#888;"></span>
   </header>
 
   <div class="layout">
@@ -114,8 +162,14 @@
       <ul id="lista"></ul>
     </aside>
     <main>
-      <div id="cabecera">archivo: <span id="actual">—</span></div>
-      <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
+      <div id="cabecera">
+        <span>archivo: <span id="actual">—</span></span>
+        <span id="aqui"></span>
+      </div>
+      <div class="editor-wrap off" id="wrap">
+        <div id="capa-presencia"><div id="capa-scroll"></div></div>
+        <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
+      </div>
     </main>
   </div>
 
@@ -137,10 +191,32 @@
     const lista = document.getElementById("lista");
     const actual = document.getElementById("actual");
     const botonNuevo = document.getElementById("nuevo");
+    const yoEl = document.getElementById("yo");
+    const aquiEl = document.getElementById("aqui");
+    const wrap = document.getElementById("wrap");
+    const capaScroll = document.getElementById("capa-scroll");
+
+    // Estas dos constantes DEBEN coincidir con el CSS del textarea
+    // (line-height y padding-top). Si cambias el CSS, cámbialas aquí: son el
+    // contrato que hace que la línea N del texto caiga sobre la marca N.
+    const LINE_H = 22;
+    const PAD_TOP = 20;
 
     const files = {};
     let currentPath = null;
     let applyingRemote = false;
+
+    /*
+     * Estado de presencia (capa 2). El servidor es la fuente de verdad; esto
+     * es el espejo local para pintar.
+     *  - yo:    mi identidad anónima (id, nombre, color), me la asigna el server.
+     *  - peers: client_id -> {name, color, path, line} de los demás presentes.
+     *  - ultimaPresencia: lo último que le mandé al server, para no spamear un
+     *    presence idéntico en cada tecla (solo mando si cambié de archivo o línea).
+     */
+    let yo = null;
+    const peers = {};
+    let ultimaPresencia = { path: null, line: 0 };
 
     const ws = new WebSocket("ws://localhost:8765");
 
@@ -190,7 +266,69 @@
           editor.selectionEnd = fin;
         }
       }
+
+      if (msg.type === "welcome") {
+        // El servidor me dice quién soy y quiénes más están presentes ahora.
+        yo = msg.you;
+        yoEl.textContent = "tú: " + yo.name;
+        yoEl.style.color = yo.color;
+        for (const p of msg.peers) peers[p.client_id] = p;
+        renderLista();
+        renderPresencia();
+      }
+
+      if (msg.type === "presence") {
+        // Alguien se movió (cambió de archivo o de línea). Refrescamos su
+        // marcador. Es solo estado de UI: no toca el contenido de ningún archivo.
+        peers[msg.client_id] = {
+          client_id: msg.client_id, name: msg.name, color: msg.color,
+          path: msg.path, line: msg.line,
+        };
+        renderLista();
+        renderPresencia();
+      }
+
+      if (msg.type === "leave") {
+        // Se desconectó: lo despintamos de todos lados.
+        delete peers[msg.client_id];
+        renderLista();
+        renderPresencia();
+      }
     };
+
+    /*
+     * Calcula en qué línea (1-indexada) está el cursor: contar saltos de línea
+     * antes de la posición del cursor. Es el mismo criterio que el server y la
+     * UI usan, así que con esto basta para "dónde estoy escribiendo".
+     */
+    function lineaActual() {
+      return editor.value.slice(0, editor.selectionStart).split("\n").length;
+    }
+
+    /*
+     * Anuncia mi presencia al server, pero solo si de verdad cambió algo
+     * (archivo o línea). Mandar un presence idéntico en cada pulsación sería
+     * ruido de red puro. No anuncio mientras aplico un cambio remoto: el cursor
+     * no se movió por decisión mía.
+     */
+    function enviarPresencia() {
+      if (!currentPath || applyingRemote) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const line = lineaActual();
+      if (ultimaPresencia.path === currentPath && ultimaPresencia.line === line) return;
+      ultimaPresencia = { path: currentPath, line };
+      ws.send(JSON.stringify({ type: "presence", path: currentPath, line }));
+    }
+
+    // El cursor se mueve por muchas vías; cubrimos todas las baratas.
+    for (const ev of ["keyup", "click", "input", "select"]) {
+      editor.addEventListener(ev, enviarPresencia);
+    }
+    // La capa de presencia se desplaza junto con el scroll del textarea para
+    // que cada marca siga pegada a su línea aunque se haga scroll.
+    editor.addEventListener("scroll", () => {
+      capaScroll.style.transform = "translateY(" + (-editor.scrollTop) + "px)";
+    });
 
     /*
      * Cuando el usuario edita el textarea, mandamos un UpdateMessage al servidor.
@@ -228,8 +366,19 @@
       editor.value = files[path] ?? "";
       applyingRemote = false;
       editor.disabled = false;
+      wrap.classList.remove("off");
       editor.focus();
       renderLista();
+      renderPresencia();
+      // Abrir un archivo ya es "estar presente ahí": anúncialo.
+      enviarPresencia();
+    }
+
+    // Iniciales para los puntos del sidebar: el número de "anónimo-3" -> "3".
+    // Cuando llegue auth y haya nombres reales, esto mostrará la inicial.
+    function inicial(name) {
+      const m = name.match(/(\d+)$/);
+      return m ? m[1] : name.slice(0, 2);
     }
 
     function renderLista() {
@@ -244,11 +393,70 @@
       }
       for (const path of paths) {
         const li = document.createElement("li");
-        li.textContent = path;
         if (path === currentPath) li.className = "activo";
+
+        const nombre = document.createElement("span");
+        nombre.textContent = path;
+        li.appendChild(nombre);
+
+        // Puntos de los peers que tienen ESTE archivo abierto. Es la señal
+        // directa al dolor "no sabía que alguien ya estaba tocando eso".
+        const badges = document.createElement("span");
+        badges.className = "badges";
+        for (const p of Object.values(peers)) {
+          if (p.path !== path) continue;
+          const b = document.createElement("span");
+          b.className = "badge";
+          b.style.background = p.color;
+          b.textContent = inicial(p.name);
+          b.title = p.name + " · línea " + p.line;
+          badges.appendChild(b);
+        }
+        li.appendChild(badges);
+
         li.addEventListener("click", () => seleccionar(path));
         lista.appendChild(li);
       }
+    }
+
+    /*
+     * Presencia dentro del archivo abierto: la lista "quién está aquí" en la
+     * cabecera + una marca de color sobre la línea donde cada peer escribe.
+     * La marca se reconstruye entera cada vez: con pocos peers es trivial y
+     * evita llevar estado de qué nodo es de quién.
+     */
+    function renderPresencia() {
+      const aqui = Object.values(peers).filter((p) => p.path === currentPath);
+
+      aquiEl.innerHTML = "";
+      for (const p of aqui) {
+        const q = document.createElement("span");
+        q.className = "quien";
+        q.style.background = p.color;
+        q.textContent = p.name + " · L" + p.line;
+        aquiEl.appendChild(q);
+      }
+
+      capaScroll.innerHTML = "";
+      for (const p of aqui) {
+        const marca = document.createElement("div");
+        marca.className = "marca";
+        marca.style.top = (PAD_TOP + (p.line - 1) * LINE_H) + "px";
+
+        const raya = document.createElement("div");
+        raya.className = "raya";
+        raya.style.background = p.color;
+        marca.appendChild(raya);
+
+        const etiqueta = document.createElement("div");
+        etiqueta.className = "etiqueta";
+        etiqueta.style.background = p.color;
+        etiqueta.textContent = p.name;
+        marca.appendChild(etiqueta);
+
+        capaScroll.appendChild(marca);
+      }
+      capaScroll.style.transform = "translateY(" + (-editor.scrollTop) + "px)";
     }
 
     renderLista();
