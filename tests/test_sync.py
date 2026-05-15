@@ -902,3 +902,45 @@ async def test_no_dueno_no_puede_borrar_archivo_ajeno(server_port: int) -> None:
             assert json.loads(await c.recv()) == {
                 "type": "init", "files": {"x.py": "de A"},
             }
+
+
+# --- Capa 9b: commit desde la web ---
+
+
+async def test_commit_desde_la_web(tmp_path) -> None:
+    ws_dir = tmp_path / "workspace"
+    srv = SyncServer(storage=DiskStorage(ws_dir), git=GitRepo(ws_dir))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as c:
+            await handshake(c, user="ana@team.com")
+            await recv_tipo(c, "git_status")
+            await c.send(json.dumps({"type": "update", "path": "main.py", "content": "x = 1"}))
+            await asyncio.sleep(0.05)
+            await c.send(json.dumps({"type": "commit", "message": "primer commit"}))
+            res = await recv_tipo(c, "git_result")
+            assert res["ok"] is True
+            gs = await recv_tipo(c, "git_status")
+            assert gs["changes"] == 0
+            assert "primer commit" in gs["commits"][0]
+    finally:
+        s.close()
+        await s.wait_closed()
+
+
+async def test_commit_sin_mensaje_falla(tmp_path) -> None:
+    ws_dir = tmp_path / "workspace"
+    srv = SyncServer(storage=DiskStorage(ws_dir), git=GitRepo(ws_dir))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as c:
+            await handshake(c)
+            await recv_tipo(c, "git_status")
+            await c.send(json.dumps({"type": "commit", "message": "   "}))
+            res = await recv_tipo(c, "git_result")
+            assert res["ok"] is False
+    finally:
+        s.close()
+        await s.wait_closed()

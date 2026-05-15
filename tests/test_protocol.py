@@ -12,8 +12,10 @@ from laidea.protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    CommitMessage,
     DeleteMessage,
     GitRefreshMessage,
+    GitResultMessage,
     GitStatusMessage,
     ImpactMessage,
     LoginMessage,
@@ -178,3 +180,8 @@ def test_encode_decode_git_messages_roundtrip() -> None:
 
 def test_encode_decode_delete_roundtrip() -> None:
     assert decode(encode(DeleteMessage(path="src/a.py"))) == DeleteMessage(path="src/a.py")
+
+
+def test_encode_decode_commit_y_gitresult_roundtrip() -> None:
+    assert decode(encode(CommitMessage("primer commit"))) == CommitMessage("primer commit")
+    assert decode(encode(GitResultMessage(True, "commit creado"))) == GitResultMessage(True, "commit creado")

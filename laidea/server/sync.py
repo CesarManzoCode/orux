@@ -77,7 +77,9 @@ from ..protocol import (
     AuthOkMessage,
     ClaimMessage,
     DeleteMessage,
+    CommitMessage,
     GitRefreshMessage,
+    GitResultMessage,
     GitStatusMessage,
     ImpactMessage,
     InitMessage,
@@ -104,6 +106,19 @@ from ..state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _autor_git(usuario: str) -> tuple[str, str]:
+    """Identidad de commit a partir del usuario autenticado (capa 7).
+
+    Si el usuario parece un email lo usamos como email y el nombre es la
+    parte antes de la @. Si no, nombre = usuario y email sintético
+    `usuario@laidea.local` (git exige un email; no tenemos uno real y no lo
+    inventamos bonito a propósito — es honesto que sea sintético).
+    """
+    if "@" in usuario:
+        return usuario.split("@", 1)[0], usuario
+    return usuario, f"{usuario}@laidea.local"
 
 
 class SyncServer:
@@ -228,27 +243,27 @@ class SyncServer:
                 ),
             )
 
-    async def _enviar_git_status(self, websocket: ServerConnection) -> None:
-        """Consulta git y le manda el estado a ESE cliente. No-op si no hay git.
-
-        `git.estado()` es bloqueante (subprocess), así que va a un hilo para no
-        congelar el event loop mientras corre. Dirigido a una conexión, no
-        broadcast: el estado es el mismo repo para todos, pero cada quien lo
-        pide cuando le interesa (conectar / botón actualizar).
-        """
+    async def _git_status_encoded(self) -> str | None:
+        """Consulta git (en un hilo, es bloqueante) y devuelve el git_status
+        ya serializado, o None si no hay git. Reutilizable: handshake, refresh
+        y broadcast tras un commit."""
         if self.git is None:
-            return
+            return None
         e = await asyncio.to_thread(self.git.estado)
-        await websocket.send(
-            encode(
-                GitStatusMessage(
-                    available=e.disponible,
-                    branch=e.rama,
-                    changes=e.cambios,
-                    commits=e.commits,
-                )
+        return encode(
+            GitStatusMessage(
+                available=e.disponible,
+                branch=e.rama,
+                changes=e.cambios,
+                commits=e.commits,
             )
         )
+
+    async def _enviar_git_status(self, websocket: ServerConnection) -> None:
+        """Le manda el estado del repo a ESE cliente (conectar / actualizar)."""
+        payload = await self._git_status_encoded()
+        if payload is not None:
+            await websocket.send(payload)
 
     async def _broadcast(self, sender: ServerConnection, payload: str) -> None:
         """Manda `payload` a todos los clientes conectados excepto al emisor.
@@ -565,9 +580,39 @@ class SyncServer:
                             ),
                         )
                 elif isinstance(message, GitRefreshMessage):
-                    # Capa 8: el cliente pidió re-consultar git (botón
-                    # "actualizar", típicamente tras commitear en su terminal).
+                    # El cliente pidió re-consultar git ("actualizar").
                     await self._enviar_git_status(websocket)
+                elif isinstance(message, CommitMessage):
+                    # Capa 9b: commit desde la web (no hay terminal en el
+                    # deploy). Autor = usuario autenticado (lo pone el server,
+                    # no el cliente). Sin push: el remoto es otra capa.
+                    if self.git is None:
+                        await self._enviar_a(
+                            yo.client_id,
+                            encode(GitResultMessage(False, "git no disponible")),
+                        )
+                    else:
+                        msg = (message.message or "").strip()[:500]
+                        if not msg:
+                            await self._enviar_a(
+                                yo.client_id,
+                                encode(GitResultMessage(
+                                    False, "escribí un mensaje de commit")),
+                            )
+                        else:
+                            nombre, email = _autor_git(yo.client_id)
+                            ok, detalle = await asyncio.to_thread(
+                                self.git.commitear, msg, nombre, email
+                            )
+                            await self._enviar_a(
+                                yo.client_id,
+                                encode(GitResultMessage(ok, detalle)),
+                            )
+                            if ok:
+                                # El repo cambió para todos: refrescar paneles.
+                                payload = await self._git_status_encoded()
+                                if payload is not None:
+                                    await self._broadcast_todos(payload)
                 # Si llega un InitMessage/WelcomeMessage/LeaveMessage del
                 # cliente lo ignoramos: esos los origina solo el servidor.
         finally:

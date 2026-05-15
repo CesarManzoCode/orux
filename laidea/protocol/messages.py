@@ -358,11 +358,38 @@ class GitStatusMessage:
 class GitRefreshMessage:
     """Cliente -> servidor: "vuelve a consultar git y mándame el estado".
 
-    Sin payload. Es de solo lectura (no commitea nada): el commit lo hace el
-    dev en su terminal; esto solo re-pregunta.
+    Sin payload, solo lectura: re-pregunta el estado del repo.
     """
 
     type: Literal["git_refresh"] = "git_refresh"
+
+
+@dataclass(frozen=True)
+class CommitMessage:
+    """Cliente -> servidor: commitea todo con este mensaje.
+
+    Capa 9b: el commit YA NO se hace en la terminal del dev (en un deploy web
+    no tienen terminal). Se hace desde la app; el servidor corre `git commit`
+    con `autor = el usuario autenticado` (capa 7 nos da identidad real). Sigue
+    sin haber push: el remoto/credenciales es la capa siguiente, aparte.
+    """
+
+    message: str
+    type: Literal["commit"] = "commit"
+
+
+@dataclass(frozen=True)
+class GitResultMessage:
+    """Servidor -> quien commiteó: resultado legible. `ok` éxito/fracaso.
+
+    Feedback honesto: "commit creado", "no hay cambios", "git no disponible".
+    Va dirigido a quien lo pidió; el cambio de estado del repo se difunde
+    aparte con `git_status`.
+    """
+
+    ok: bool
+    detail: str
+    type: Literal["git_result"] = "git_result"
 
 
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
@@ -386,6 +413,8 @@ Message = Union[
     AuthErrorMessage,
     GitStatusMessage,
     GitRefreshMessage,
+    CommitMessage,
+    GitResultMessage,
 ]
 
 
@@ -477,4 +506,8 @@ def decode(raw: str) -> Message:
         )
     if kind == "git_refresh":
         return GitRefreshMessage()
+    if kind == "commit":
+        return CommitMessage(message=data["message"])
+    if kind == "git_result":
+        return GitResultMessage(ok=data["ok"], detail=data["detail"])
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

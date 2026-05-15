@@ -65,3 +65,30 @@ def test_estado_tras_commit_externo(tmp_path) -> None:
     assert e.cambios == 0
     assert len(e.commits) == 1
     assert "primer commit" in e.commits[0]
+
+
+def test_commitear_crea_commit_con_autor(tmp_path) -> None:
+    r = GitRepo(tmp_path)
+    r.asegurar()
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    ok, detalle = r.commitear("primer commit", "ana", "ana@laidea.local")
+    assert ok is True
+    e = r.estado()
+    assert e.cambios == 0
+    assert "primer commit" in e.commits[0]
+    log = subprocess.run(["git", "-C", str(tmp_path), "log", "-1", "--format=%an <%ae>"],
+                          capture_output=True, text=True).stdout.strip()
+    assert log == "ana <ana@laidea.local>"
+
+
+def test_commitear_sin_cambios(tmp_path) -> None:
+    r = GitRepo(tmp_path)
+    r.asegurar()
+    ok, detalle = r.commitear("nada", "ana", "ana@laidea.local")
+    assert ok is False
+    assert "cambios" in detalle
+
+
+def test_commitear_git_deshabilitado() -> None:
+    ok, detalle = GitRepo(None).commitear("x", "a", "a@b")
+    assert ok is False and "no disponible" in detalle

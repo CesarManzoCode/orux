@@ -387,12 +387,23 @@
       gap: 3px; max-height: 120px; overflow: auto;
     }
     #git ol li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #git .hint {
-      font-size: 10.5px; color: var(--faint); margin-top: 0.6rem; line-height: 1.5;
+    #git .commitbox { display: flex; gap: 0.35rem; margin-top: 0.6rem; }
+    #git .commitbox input {
+      flex: 1; min-width: 0; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.4rem 0.55rem; font-family: inherit; font-size: 12px;
+      outline: none; transition: border-color var(--t);
     }
-    #git .hint code {
-      color: var(--accent); font-family: var(--font-mono); font-size: 10px;
+    #git .commitbox input:focus { border-color: var(--accent); }
+    #git .commitbox button {
+      border: none; border-radius: var(--r-sm); padding: 0.4rem 0.7rem;
+      background: var(--accent); color: #08130d; font-family: inherit;
+      font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;
     }
+    #git .commitbox button:hover { filter: brightness(1.08); }
+    #git .gitres { font-size: 11px; margin-top: 0.45rem; }
+    #git .gitres.ok { color: var(--ok); }
+    #git .gitres.bad { color: var(--bad); }
   </style>
 </head>
 <body>
@@ -555,8 +566,12 @@
      */
     const impactos = {};
 
-    // Estado git (capa 8). Última foto que mandó el server (solo lectura).
+    // Estado git. gitEstado: última foto del repo. gitResultado: feedback del
+    // último commit. gitMsgBorrador: lo tipeado, para no perderlo si el panel
+    // se re-renderiza por un git_status entrante.
     let gitEstado = null;
+    let gitResultado = null;
+    let gitMsgBorrador = "";
 
     // Nombre legible de un client_id. Si está presente lo sacamos del roster;
     // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
@@ -741,9 +756,16 @@
       }
 
       if (msg.type === "git_status") {
-        // Capa 8: foto del repo (solo lectura). El server la manda tras el
-        // handshake y cuando pedimos "actualizar".
+        // Foto del repo. El server la manda tras el handshake, al "actualizar"
+        // y tras un commit (de cualquiera: el repo es compartido).
         gitEstado = msg;
+        renderGit();
+      }
+
+      if (msg.type === "git_result") {
+        // Resultado de TU commit. Si salió, limpiamos el borrador.
+        gitResultado = msg;
+        if (msg.ok) gitMsgBorrador = "";
         renderGit();
       }
     };
@@ -1160,11 +1182,33 @@
         gitEl.appendChild(ol);
       }
 
-      const hint = document.createElement("div");
-      hint.className = "hint";
-      hint.innerHTML =
-        "el commit se hace en tu terminal:<br><code>cd ~/.laidea/workspace && git add -A && git commit</code>";
-      gitEl.appendChild(hint);
+      // Capa 9b: commitear desde acá (no hay terminal en el deploy). El autor
+      // lo pone el server = vos (capa 7). Sin push todavía (otra capa).
+      const form = document.createElement("div");
+      form.className = "commitbox";
+      const inp = document.createElement("input");
+      inp.placeholder = "mensaje de commit…";
+      inp.value = gitMsgBorrador;  // no se pierde al re-renderizar el panel
+      inp.addEventListener("input", () => { gitMsgBorrador = inp.value; });
+      const enviar = () => {
+        const m = inp.value.trim();
+        if (!m || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: "commit", message: m }));
+      };
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
+      const btn = document.createElement("button");
+      btn.textContent = "commit";
+      btn.addEventListener("click", enviar);
+      form.appendChild(inp);
+      form.appendChild(btn);
+      gitEl.appendChild(form);
+
+      if (gitResultado) {
+        const r = document.createElement("div");
+        r.className = "gitres " + (gitResultado.ok ? "ok" : "bad");
+        r.textContent = gitResultado.detail;
+        gitEl.appendChild(r);
+      }
     }
 
     renderLista();

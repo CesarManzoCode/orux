@@ -105,3 +105,34 @@ class GitRepo:
         return EstadoGit(
             disponible=True, rama=rama, cambios=cambios, commits=commits
         )
+
+    def commitear(
+        self, mensaje: str, autor_nombre: str, autor_email: str
+    ) -> tuple[bool, str]:
+        """`git add -A` + commit con autor dado. (ok, detalle legible).
+
+        El autor lo pone el servidor desde la identidad autenticada (capa 7),
+        NO el cliente: no podés commitear como otro. Identidad pasada inline
+        con `-c` para no tocar la config global del repo. NO hace push: el
+        remoto/credenciales es otra capa. `mensaje` viene del cliente pero va
+        como argv (lista, sin shell): no hay inyección posible.
+        """
+        if self._root is None:
+            return (False, "git no disponible")
+        self.asegurar()
+        self._run("add", "-A")
+        # Chequeamos si hay algo para commitear con `status --porcelain` en vez
+        # de parsear el texto de `git commit`: ese texto puede ir a stderr (que
+        # no capturamos) y cambia entre versiones/locale. `--porcelain` es
+        # estable y se lee siempre igual.
+        _, porcelain = self._run("status", "--porcelain")
+        if not porcelain.strip():
+            return (False, "no hay cambios para commitear")
+        rc, out = self._run(
+            "-c", f"user.name={autor_nombre}",
+            "-c", f"user.email={autor_email}",
+            "commit", "-m", mensaje,
+        )
+        if rc == 0:
+            return (True, "commit creado")
+        return (False, out.splitlines()[-1] if out else "no se pudo commitear")
