@@ -12,6 +12,7 @@ from laidea.protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    DeleteMessage,
     GitRefreshMessage,
     GitStatusMessage,
     ImpactMessage,
@@ -173,3 +174,7 @@ def test_encode_decode_git_messages_roundtrip() -> None:
         GitRefreshMessage(),
     ):
         assert decode(encode(msg)) == msg
+
+
+def test_encode_decode_delete_roundtrip() -> None:
+    assert decode(encode(DeleteMessage(path="src/a.py"))) == DeleteMessage(path="src/a.py")

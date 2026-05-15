@@ -76,6 +76,7 @@ from ..protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    DeleteMessage,
     GitRefreshMessage,
     GitStatusMessage,
     ImpactMessage,
@@ -463,6 +464,30 @@ class SyncServer:
                             message.path, viejo, message.content,
                             yo.client_id, yo.name,
                         )
+                elif isinstance(message, DeleteMessage):
+                    # Coordinación (capa 4): solo borra el dueño, o cualquiera
+                    # si el archivo no tiene dueño. Un no-dueño que intenta
+                    # borrar algo ajeno se ignora en silencio (no hay "borrado
+                    # tentativo": sería otra pieza, y borrar lo ajeno sin pedir
+                    # contradice la tesis).
+                    dueño = self.ownership.owner(message.path)
+                    if dueño is None or dueño == yo.client_id:
+                        if self.workspace.delete(message.path):
+                            self.proposals.drop_path(message.path)
+                            cambio_owner = self.ownership.liberar(message.path)
+                            # El borrado va a TODOS (incluido quien lo pidió):
+                            # converge sin que el cliente adivine.
+                            await self._broadcast_todos(
+                                encode(DeleteMessage(path=message.path))
+                            )
+                            if cambio_owner:
+                                await self._broadcast_todos(
+                                    encode(
+                                        OwnershipMessage(
+                                            owners=self.ownership.snapshot()
+                                        )
+                                    )
+                                )
                 elif isinstance(message, ClaimMessage):
                     # Reclamar ser dueño de un path. Difundimos el mapa entero
                     # a todos (incluido quien reclamó: así su UI confirma si

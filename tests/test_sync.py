@@ -853,3 +853,52 @@ async def test_sin_git_no_se_manda_git_status(server_port: int) -> None:
         await handshake(c)
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(c.recv(), timeout=0.3)
+
+
+# --- Capa 9: eliminar archivos ---
+
+
+async def test_borrar_archivo_se_difunde_a_todos(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "update", "path": "x.py", "content": "hola"}))
+        await recv_tipo(b, "update")            # B ve el archivo
+        await recv_tipo(a, "ownership")          # A queda dueño (al crear)
+        await recv_tipo(b, "ownership")
+
+        await a.send(json.dumps({"type": "delete", "path": "x.py"}))
+        # Va a TODOS, incluido A.
+        assert await recv_tipo(a, "delete") == {"type": "delete", "path": "x.py"}
+        assert await recv_tipo(b, "delete") == {"type": "delete", "path": "x.py"}
+        # Ownership de x.py liberado: el mapa nuevo no lo tiene.
+        assert await recv_tipo(a, "ownership") == {"type": "ownership", "owners": {}}
+        # Un cliente nuevo no ve x.py.
+        async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
+            assert json.loads(await c.recv()) == {"type": "init", "files": {}}
+
+
+async def test_no_dueno_no_puede_borrar_archivo_ajeno(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "update", "path": "x.py", "content": "de A"}))
+        await recv_tipo(b, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+
+        # B (no dueño) intenta borrar x.py -> ignorado, nadie recibe delete.
+        await b.send(json.dumps({"type": "delete", "path": "x.py"}))
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+        # Sigue existiendo para un cliente nuevo.
+        async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
+            assert json.loads(await c.recv()) == {
+                "type": "init", "files": {"x.py": "de A"},
+            }

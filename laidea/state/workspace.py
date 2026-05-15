@@ -89,6 +89,24 @@ class Workspace:
             except Exception:
                 logger.exception("no se pudo persistir %r (sigo en memoria)", path)
 
+    def delete(self, path: str) -> bool:
+        """Borra un archivo del workspace (memoria + disco). Devuelve si existía.
+
+        Mismo orden y misma resiliencia que `update`: primero memoria, después
+        disco; si borrar del disco falla, la memoria ya quedó coherente y el
+        tiempo real sigue. Devuelve False si el path no existía (el servidor
+        entonces no difunde nada — borrar algo inexistente es no-op).
+        """
+        if path not in self._documents:
+            return False
+        del self._documents[path]
+        if self._storage is not None:
+            try:
+                self._storage.borrar(path)
+            except Exception:
+                logger.exception("no se pudo borrar en disco %r", path)
+        return True
+
     def cargar_de_disco(self) -> None:
         """Reconstruye el workspace desde el storage. Se llama una vez, al arrancar.
 

@@ -41,3 +41,12 @@ def test_archivos_son_independientes() -> None:
     ws.update("b.py", "contenido de b")
     snap = ws.snapshot()
     assert snap == {"a.py": "contenido de a", "b.py": "contenido de b"}
+
+
+def test_delete_quita_de_memoria() -> None:
+    ws = Workspace()
+    ws.update("a.py", "uno")
+    ws.update("b.py", "dos")
+    assert ws.delete("a.py") is True
+    assert ws.snapshot() == {"b.py": "dos"}
+    assert ws.delete("a.py") is False  # ya no existe -> no-op

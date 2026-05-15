@@ -70,6 +70,21 @@ class UpdateMessage:
 
 
 @dataclass(frozen=True)
+class DeleteMessage:
+    """Borrar un archivo. Simétrico: el cliente lo pide, el servidor lo confirma.
+
+    Lo que un update no podía colar (decía el comentario de arriba): borrar es
+    una operación distinta de editar, necesita su propio mensaje. Reglas de
+    coordinación (capa 4): solo borra quien puede — el dueño, o cualquiera si
+    el archivo no tiene dueño. El servidor lo difunde a TODOS (incluido quien
+    lo pidió) para que el estado converja sin que nadie adivine.
+    """
+
+    path: str
+    type: Literal["delete"] = "delete"
+
+
+@dataclass(frozen=True)
 class PresenceState:
     """Dónde está trabajando un cliente. Es el "estado de presencia" de una persona.
 
@@ -355,6 +370,7 @@ class GitRefreshMessage:
 Message = Union[
     InitMessage,
     UpdateMessage,
+    DeleteMessage,
     WelcomeMessage,
     PresenceMessage,
     LeaveMessage,
@@ -398,6 +414,8 @@ def decode(raw: str) -> Message:
         return InitMessage(files=data.get("files", {}))
     if kind == "update":
         return UpdateMessage(path=data["path"], content=data["content"])
+    if kind == "delete":
+        return DeleteMessage(path=data["path"])
     if kind == "welcome":
         you = data["you"]
         return WelcomeMessage(

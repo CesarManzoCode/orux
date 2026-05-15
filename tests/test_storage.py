@@ -120,3 +120,18 @@ def test_cargar_ignora_el_directorio_git(tmp_path) -> None:
     (tmp_path / ".git" / "refs").mkdir()
     (tmp_path / ".git" / "refs" / "head").write_text("abc\n", encoding="utf-8")
     assert s.cargar() == {"main.py": "x = 1"}
+
+
+def test_borrar_quita_el_archivo(tmp_path) -> None:
+    s = DiskStorage(tmp_path)
+    s.guardar("a.py", "x")
+    s.guardar("b.py", "y")
+    s.borrar("a.py")
+    assert s.cargar() == {"b.py": "y"}
+    s.borrar("a.py")  # borrar lo que no está: no es error
+    assert s.cargar() == {"b.py": "y"}
+
+
+def test_borrar_valida_path(tmp_path) -> None:
+    with pytest.raises(ValueError):
+        DiskStorage(tmp_path).borrar("../escape.txt")

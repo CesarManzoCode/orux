@@ -75,6 +75,16 @@ class DiskStorage:
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(content, encoding="utf-8")
 
+    def borrar(self, path: str) -> None:
+        """Borra el archivo de disco. Valida el path igual que `guardar`.
+
+        Si el archivo no existe en disco no es error (la memoria manda; el
+        disco solo la sigue). `_destino` rechaza paths que se escapan, así un
+        cliente no puede pedir borrar fuera del workspace.
+        """
+        destino = self._destino(path)
+        destino.unlink(missing_ok=True)
+
     def cargar(self) -> dict[str, str]:
         """Lee todo el workspace de disco: `path -> contenido`.
 

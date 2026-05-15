@@ -59,3 +59,9 @@ class Proposals:
         self._pendientes = {
             pid: p for pid, p in self._pendientes.items() if p.author_id != author_id
         }
+
+    def drop_path(self, path: str) -> None:
+        """Descarta las propuestas sobre `path` (se borró el archivo): moot."""
+        self._pendientes = {
+            pid: p for pid, p in self._pendientes.items() if p.path != path
+        }

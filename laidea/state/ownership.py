@@ -61,6 +61,18 @@ class Ownership:
             return True
         return actual == client_id
 
+    def liberar(self, path: str) -> bool:
+        """Quita el dueño de `path` (se borró el archivo). Devuelve si cambió.
+
+        Un archivo que ya no existe no puede tener dueño. Lo llama el servidor
+        al borrar; persiste el mapa nuevo.
+        """
+        if path in self._owners:
+            del self._owners[path]
+            self._guardar()
+            return True
+        return False
+
     def snapshot(self) -> dict[str, str]:
         """Copia del mapa completo. Es lo que viaja en `OwnershipMessage`."""
         return dict(self._owners)

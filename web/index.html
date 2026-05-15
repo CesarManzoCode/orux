@@ -143,6 +143,15 @@
       color: #0d0e11; font-weight: 800;
       box-shadow: 0 0 0 2px var(--surface);
     }
+    #lista li .der { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+    .del-x {
+      border: none; background: transparent; color: var(--faint);
+      cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 4px;
+      border-radius: var(--r-sm); opacity: 0;
+      transition: opacity var(--t), color var(--t), background var(--t);
+    }
+    #lista li:hover .del-x { opacity: 1; }
+    .del-x:hover { color: var(--bad); background: var(--bad-bg); }
     main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     #cabecera {
       padding: 0.6rem 1.25rem;
@@ -655,6 +664,29 @@
         }
       }
 
+      if (msg.type === "delete") {
+        // Un archivo se borró (lo pediste vos o alguien con permiso). El
+        // server difunde a todos para converger sin adivinar.
+        if (typeof msg.path !== "string" || !(msg.path in files)) return;
+        delete files[msg.path];
+        if (msg.path === currentPath) {
+          // Estabas en el archivo borrado: saltá a otro o quedate sin nada.
+          currentPath = null;
+          const otro = Object.keys(files).sort()[0];
+          if (otro) {
+            seleccionar(otro);
+          } else {
+            actual.textContent = "—";
+            applyingRemote = true;
+            editor.value = "";
+            applyingRemote = false;
+            editor.disabled = true;
+            wrap.classList.add("off");
+          }
+        }
+        renderLista();
+      }
+
       if (msg.type === "welcome") {
         // El servidor me dice quién soy y quiénes más están presentes ahora.
         yo = msg.you;
@@ -1010,7 +1042,24 @@
           b.title = p.name + " · línea " + p.line;
           badges.appendChild(b);
         }
-        li.appendChild(badges);
+        const der = document.createElement("span");
+        der.className = "der";
+        der.appendChild(badges);
+        // Eliminar archivo (capa 9). El server decide si te deja (dueño, o
+        // cualquiera si no tiene dueño); acá solo pedimos confirmación.
+        const x = document.createElement("button");
+        x.className = "del-x";
+        x.textContent = "✕";
+        x.title = "eliminar " + path;
+        x.addEventListener("click", (e) => {
+          e.stopPropagation();  // no seleccionar el archivo al borrarlo
+          if (ws.readyState !== WebSocket.OPEN) return;
+          if (confirm("¿Eliminar " + path + "? No se puede deshacer.")) {
+            ws.send(JSON.stringify({ type: "delete", path }));
+          }
+        });
+        der.appendChild(x);
+        li.appendChild(der);
 
         li.addEventListener("click", () => seleccionar(path));
         lista.appendChild(li);
