@@ -652,3 +652,92 @@ async def test_el_dueno_pisa_sin_lock(server_port: int) -> None:
         assert await recv_tipo(b, "update") == {
             "type": "update", "path": "owned.py", "content": "DUENO\nl2",
         }
+
+
+# --- Capa 6: análisis semántico de impacto ---
+
+
+_MODELS_V1 = "class Usuario:\n    pass\n"
+_MODELS_V2 = "class Usuario:\n    def __init__(self):\n        self.activo = True\n"
+_AUTH = "from models import Usuario\n\n\ndef login():\n    return Usuario()\n"
+
+
+async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        wa = await handshake(a)
+        await handshake(b)
+        # A crea models.py (queda dueño).
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V1}))
+        await recv_tipo(b, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+        # B crea auth.py que usa Usuario (queda dueño).
+        await b.send(json.dumps({"type": "update", "path": "auth.py", "content": _AUTH}))
+        await recv_tipo(a, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+
+        # A modifica la clase Usuario -> B (dueño de auth.py) debe enterarse solo.
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V2}))
+        aviso = await recv_tipo(b, "impact")
+        assert aviso == {
+            "type": "impact",
+            "source_path": "models.py",
+            "author_name": wa["you"]["name"],
+            "affected_path": "auth.py",
+            "symbols": ["Usuario"],
+        }
+
+
+async def test_no_avisa_si_el_codigo_no_parsea(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V1}))
+        await recv_tipo(b, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+        await b.send(json.dumps({"type": "update", "path": "auth.py", "content": _AUTH}))
+        await recv_tipo(a, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+
+        # A deja models.py a medio escribir (SyntaxError): NO debe avisar nada.
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": "class Usuario(:\n"}))
+        await recv_tipo(b, "update")  # el update sí se difunde igual
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+
+
+async def test_impacto_tambien_al_aprobar_propuesta(server_port: int) -> None:
+    # El aviso de impacto también sale por la vía "propuesta aprobada", con el
+    # nombre del AUTOR de la propuesta, no del dueño que aprobó.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b, connect(f"ws://localhost:{server_port}") as c:
+        await handshake(a)
+        await handshake(b)
+        wc = await handshake(c)
+        # A dueño de models.py, B dueño de auth.py (usa Usuario).
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V1}))
+        await recv_tipo(b, "update"); await recv_tipo(c, "update")
+        await recv_tipo(a, "ownership"); await recv_tipo(b, "ownership"); await recv_tipo(c, "ownership")
+        await b.send(json.dumps({"type": "update", "path": "auth.py", "content": _AUTH}))
+        await recv_tipo(a, "update"); await recv_tipo(c, "update")
+        await recv_tipo(a, "ownership"); await recv_tipo(b, "ownership"); await recv_tipo(c, "ownership")
+
+        # C edita models.py (de A) -> tentativo. A recibe propuesta.
+        await c.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V2}))
+        prop = await recv_tipo(a, "proposal")
+        # A aprueba. El cambio se aplica; B (dueño de auth.py) recibe el impacto
+        # atribuido a C (el autor), no a A.
+        await a.send(json.dumps({"type": "resolve", "proposal_id": prop["proposal"]["id"], "accept": True}))
+        aviso = await recv_tipo(b, "impact")
+        assert aviso["source_path"] == "models.py"
+        assert aviso["affected_path"] == "auth.py"
+        assert aviso["symbols"] == ["Usuario"]
+        assert aviso["author_name"] == wc["you"]["name"]

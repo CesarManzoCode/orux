@@ -226,6 +226,31 @@ class ResolveMessage:
     type: Literal["resolve"] = "resolve"
 
 
+# --- Capa 6: análisis semántico de impacto ---
+
+
+@dataclass(frozen=True)
+class ImpactMessage:
+    """El servidor avisa a un dueño: "un cambio ajeno afecta un archivo tuyo".
+
+    Solo va servidor -> dueño del archivo afectado, y solo cuando el código
+    parsea (ver analysis/python.py: nada de avisos por estados a medio
+    escribir). Va agrupado por archivo afectado: "tu `affected_path` lo toca
+    `author_name` porque cambió estos `symbols` en `source_path`". El cliente
+    deduplica por (source_path, affected_path) y se queda con el último, igual
+    que las propuestas: si el autor sigue tecleando no se acumulan avisos.
+
+    No lleva identidad del receptor: se entrega dirigido a la conexión del
+    dueño, no se difunde. Es "sin clickear un botón, lo hace solo" del README.
+    """
+
+    source_path: str
+    author_name: str
+    affected_path: str
+    symbols: list[str]
+    type: Literal["impact"] = "impact"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -238,6 +263,7 @@ Message = Union[
     OwnershipMessage,
     ProposalMessage,
     ResolveMessage,
+    ImpactMessage,
 ]
 
 
@@ -296,5 +322,12 @@ def decode(raw: str) -> Message:
     if kind == "resolve":
         return ResolveMessage(
             proposal_id=data["proposal_id"], accept=data["accept"]
+        )
+    if kind == "impact":
+        return ImpactMessage(
+            source_path=data["source_path"],
+            author_name=data["author_name"],
+            affected_path=data["affected_path"],
+            symbols=list(data.get("symbols", [])),
         )
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

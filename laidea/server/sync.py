@@ -38,6 +38,12 @@ antes de aplicar un update el servidor mira (vía presencia) si alguna línea
 que el emisor pisa la está ocupando otro presente; si sí, rechaza el update
 y le devuelve el contenido autoritativo. "Nunca dos en la misma línea." El
 dueño tiene preferencia (sin lock). Sin CRDT: se previene, no se fusiona.
+
+Capa 6: análisis semántico de impacto. Cada vez que un cambio a un `.py` se
+aplica de verdad (edición directa o propuesta aprobada), el servidor calcula
+qué símbolos top cambiaron y qué otros archivos los usan, y le manda un
+`ImpactMessage` al dueño de cada archivo afectado. "Sin clickear, lo hace
+solo." Solo cuando el código parsea: cero avisos por código a medio escribir.
 """
 
 from __future__ import annotations
@@ -48,8 +54,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from websockets.asyncio.server import ServerConnection, serve
 
+from ..analysis import impacto
 from ..protocol import (
     ClaimMessage,
+    ImpactMessage,
     InitMessage,
     LeaveMessage,
     OwnershipMessage,
@@ -152,6 +160,51 @@ class SyncServer:
             except Exception:
                 self.clients.discard(client)
 
+    async def _notificar_impacto(
+        self,
+        path: str,
+        viejo: str,
+        nuevo: str,
+        autor_id: str,
+        autor_nombre: str,
+    ) -> None:
+        """Capa 6: avisa al dueño de cada archivo afectado por este cambio.
+
+        "Sin clickear un botón, lo hace solo" (README). Calcula el impacto con
+        el análisis puro y, agrupado por archivo afectado, le manda un
+        `ImpactMessage` al dueño de ese archivo. Reglas mínimas:
+
+        - Si el archivo afectado no tiene dueño, no hay a quién avisar.
+        - Si el dueño del archivo afectado es el propio autor del cambio, no
+          se le avisa: él lo hizo, ya lo sabe (evita auto-ruido).
+        - Si el código no parsea, `impacto` devuelve {} y esto no manda nada:
+          cero avisos por estados a medio escribir.
+        """
+        afectados = impacto(self.workspace.snapshot(), path, viejo, nuevo)
+        if not afectados:
+            return
+        # Reagrupamos: símbolo->archivos  ==>  archivo_afectado->símbolos,
+        # porque el aviso es "tu archivo X lo tocan estos símbolos".
+        por_archivo: dict[str, list[str]] = {}
+        for simbolo, archivos in afectados.items():
+            for af in archivos:
+                por_archivo.setdefault(af, []).append(simbolo)
+        for af, simbolos in por_archivo.items():
+            dueño = self.ownership.owner(af)
+            if dueño is None or dueño == autor_id:
+                continue
+            await self._enviar_a(
+                dueño,
+                encode(
+                    ImpactMessage(
+                        source_path=path,
+                        author_name=autor_nombre,
+                        affected_path=af,
+                        symbols=sorted(simbolos),
+                    )
+                ),
+            )
+
     async def _broadcast(self, sender: ServerConnection, payload: str) -> None:
         """Manda `payload` a todos los clientes conectados excepto al emisor.
 
@@ -238,10 +291,11 @@ class SyncServer:
                         # una línea que otro presente está tocando. Si eres el
                         # dueño, tienes preferencia y el lock no te aplica
                         # ("el owner tiene preferencia", README).
+                        # Contenido previo del archivo: lo necesitan tanto el
+                        # lock de capa 5 como el análisis de impacto de capa 6,
+                        # y hay que leerlo ANTES de aplicar. Una sola lectura.
+                        viejo = self.workspace.snapshot().get(message.path, "")
                         if dueño is None:
-                            viejo = self.workspace.snapshot().get(
-                                message.path, ""
-                            )
                             tocadas = lineas_tocadas(viejo, message.content)
                             ocupadas = self.roster.lineas_ocupadas(
                                 message.path, excepto=yo.client_id
@@ -296,6 +350,11 @@ class SyncServer:
                                     )
                                 )
                             )
+                        # Capa 6: ¿este cambio afecta código de alguien más?
+                        await self._notificar_impacto(
+                            message.path, viejo, message.content,
+                            yo.client_id, yo.name,
+                        )
                 elif isinstance(message, ClaimMessage):
                     # Reclamar ser dueño de un path. Difundimos el mapa entero
                     # a todos (incluido quien reclamó: así su UI confirma si
@@ -319,6 +378,9 @@ class SyncServer:
                             # mundo (autor, dueño y demás) — por eso va a
                             # todos, no _broadcast (que omitiría al dueño que
                             # acaba de aprobar y necesita ver el contenido).
+                            viejo = self.workspace.snapshot().get(
+                                prop.path, ""
+                            )
                             self.workspace.update(prop.path, prop.content)
                             await self._broadcast_todos(
                                 encode(
@@ -326,6 +388,12 @@ class SyncServer:
                                         path=prop.path, content=prop.content
                                     )
                                 )
+                            )
+                            # Capa 6: el cambio aprobado (del autor) puede
+                            # afectar archivos de otros dueños.
+                            await self._notificar_impacto(
+                                prop.path, viejo, prop.content,
+                                prop.author_id, prop.author_name,
                             )
                         else:
                             # Rechazada: al autor se le reenvía el contenido

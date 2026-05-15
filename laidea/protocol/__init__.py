@@ -1,5 +1,6 @@
 from .messages import (
     ClaimMessage,
+    ImpactMessage,
     InitMessage,
     LeaveMessage,
     Message,
@@ -17,6 +18,7 @@ from .messages import (
 
 __all__ = [
     "ClaimMessage",
+    "ImpactMessage",
     "InitMessage",
     "LeaveMessage",
     "Message",

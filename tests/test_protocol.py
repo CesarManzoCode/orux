@@ -10,6 +10,7 @@ import pytest
 
 from laidea.protocol import (
     ClaimMessage,
+    ImpactMessage,
     InitMessage,
     LeaveMessage,
     OwnershipMessage,
@@ -128,3 +129,16 @@ def test_encode_decode_resolve_roundtrip() -> None:
     assert decode(encode(ResolveMessage("main.py::2", False))) == ResolveMessage(
         "main.py::2", False
     )
+
+
+# --- Capa 6: análisis de impacto ---
+
+
+def test_encode_decode_impact_roundtrip() -> None:
+    msg = ImpactMessage(
+        source_path="models.py",
+        author_name="anónimo-2",
+        affected_path="auth.py",
+        symbols=["Usuario", "rol_de"],
+    )
+    assert decode(encode(msg)) == msg
