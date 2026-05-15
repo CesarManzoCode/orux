@@ -1076,7 +1076,9 @@
       out += escHtml(src.slice(last));
       return out;
     }
-    // Extensión -> lenguaje de Prism. Lo común en los stacks reales.
+    // Extensión -> lenguaje de Prism. Debe coincidir con los componentes
+    // que trae web/vendor/prism.js (ver su README): mapear algo que el
+    // bundle no incluye solo da texto plano (el try/catch lo cubre).
     const _LANG = {
       ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
       mjs: "javascript", cjs: "javascript", py: "python", json: "json",
@@ -1084,13 +1086,23 @@
       svg: "markup", vue: "markup", md: "markdown", markdown: "markdown",
       sh: "bash", bash: "bash", yml: "yaml", yaml: "yaml", toml: "yaml",
       sql: "sql", java: "java", go: "go", rs: "rust", rb: "ruby",
-      c: "c", h: "c", cpp: "cpp", cc: "cpp", hpp: "cpp", cs: "csharp",
-      php: "php", kt: "kotlin", swift: "swift",
+      c: "c", h: "c", cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp",
+      hxx: "cpp", cs: "csharp", php: "php", kt: "kotlin", kts: "kotlin",
+      swift: "swift", dockerfile: "docker",
     };
+    // Archivos SIN extensión que igual son código (Dockerfile, Makefile).
+    // Match por nombre base, también `Dockerfile.dev` / `xxx.Dockerfile`.
+    const _NOMBRE = { dockerfile: "docker", makefile: "makefile" };
     function langDe(path) {
-      const i = path && path.lastIndexOf(".");
-      if (!path || i < 0) return null;
-      return _LANG[path.slice(i + 1).toLowerCase()] || null;
+      if (!path) return null;
+      const base = path.split("/").pop().toLowerCase();
+      for (const clave in _NOMBRE) {
+        if (base === clave || base.startsWith(clave + ".") ||
+            base.endsWith("." + clave)) return _NOMBRE[clave];
+      }
+      const i = base.lastIndexOf(".");
+      if (i < 0) return null;
+      return _LANG[base.slice(i + 1)] || null;
     }
     function pintarResaltado() {
       const txt = editor.value;

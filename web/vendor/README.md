@@ -49,14 +49,17 @@ $V/components/prism-swift.min.js,\
 $V/components/prism-typescript.min.js,\
 $V/components/prism-jsx.min.js,\
 $V/components/prism-tsx.min.js,\
-$V/components/prism-markdown.min.js"
+$V/components/prism-markdown.min.js,\
+$V/components/prism-docker.min.js,\
+$V/components/prism-makefile.min.js"
 
-# Verificá que bajó algo razonable y que typescript quedó adentro:
+# Verificá que bajó algo razonable y que entraron js/ts/docker:
 head -c 80 web/vendor/prism.js ; echo
-grep -c 'languages.typescript' web/vendor/prism.js   # debe ser >= 1
+grep -c 'languages.typescript' web/vendor/prism.js   # >= 1
+grep -c 'languages.docker'     web/vendor/prism.js   # >= 1
 
 git add -f web/vendor/prism.js
-git commit -m "vendor: prism.js 1.29.0 (bundle completo, con js/ts)"
+git commit -m "vendor: prism.js 1.29.0 (stack completo: ts/js/py/java/cpp/go/kotlin/rust/docker/md/...)"
 ```
 
 NO se baja el theme de Prism a propósito: los colores los pone el CSS de
