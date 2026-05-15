@@ -49,6 +49,11 @@ Capa 7: identidad real. La app está CERRADA: al conectar no se manda nada
 hasta que el cliente pasa por `_autenticar` (register/login/session). La
 identidad ES el usuario (estable, persistido); el ownership ahora se indexa
 por usuario y sobrevive a reiniciar. El token de sesión va firmado con HMAC.
+
+Capa 8: el workspace es un repo git real (solo lectura desde la tool). Tras
+el handshake se manda `git_status` (rama, cambios sin commitear, últimos
+commits) si hay git; el cliente puede pedir `git_refresh`. No se commitea
+desde aquí: el dev lo hace en su terminal.
 """
 
 from __future__ import annotations
@@ -60,6 +65,7 @@ from secrets import token_hex
 from websockets.asyncio.server import ServerConnection, serve
 
 from ..analysis import impacto
+from ..git import GitRepo
 from ..identity import (
     UserStore,
     crear_token,
@@ -70,6 +76,8 @@ from ..protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    GitRefreshMessage,
+    GitStatusMessage,
     ImpactMessage,
     InitMessage,
     LeaveMessage,
@@ -104,6 +112,7 @@ class SyncServer:
         users: UserStore | None = None,
         ownership: Ownership | None = None,
         secret: str | None = None,
+        git: GitRepo | None = None,
     ) -> None:
         # El workspace es el estado central. Todo lo demás (clientes, retransmisión)
         # gira alrededor de mantenerlo coherente entre todos los conectados.
@@ -139,6 +148,10 @@ class SyncServer:
         # misma instancia, no dependen de cross-restart).
         self.users = users if users is not None else UserStore()
         self._secret = secret if secret is not None else token_hex(32)
+        # Capa 8: el workspace como repo git (solo lectura). None = sin git
+        # (tests): no se manda ningún `git_status`, así el handshake de los
+        # tests previos (init/welcome/ownership) no cambia.
+        self.git = git
 
     async def _enviar_a(self, client_id: str, payload: str) -> None:
         """Manda `payload` a un único cliente por su identidad. Silencioso si no está.
@@ -213,6 +226,28 @@ class SyncServer:
                     )
                 ),
             )
+
+    async def _enviar_git_status(self, websocket: ServerConnection) -> None:
+        """Consulta git y le manda el estado a ESE cliente. No-op si no hay git.
+
+        `git.estado()` es bloqueante (subprocess), así que va a un hilo para no
+        congelar el event loop mientras corre. Dirigido a una conexión, no
+        broadcast: el estado es el mismo repo para todos, pero cada quien lo
+        pide cuando le interesa (conectar / botón actualizar).
+        """
+        if self.git is None:
+            return
+        e = await asyncio.to_thread(self.git.estado)
+        await websocket.send(
+            encode(
+                GitStatusMessage(
+                    available=e.disponible,
+                    branch=e.rama,
+                    changes=e.cambios,
+                    commits=e.commits,
+                )
+            )
+        )
 
     async def _broadcast(self, sender: ServerConnection, payload: str) -> None:
         """Manda `payload` a todos los clientes conectados excepto al emisor.
@@ -334,6 +369,8 @@ class SyncServer:
             await websocket.send(
                 encode(OwnershipMessage(owners=self.ownership.snapshot()))
             )
+            # Capa 8: estado del repo git tras el handshake (si hay git).
+            await self._enviar_git_status(websocket)
 
             async for raw in websocket:
                 message = decode(raw)
@@ -502,6 +539,10 @@ class SyncServer:
                                 )
                             ),
                         )
+                elif isinstance(message, GitRefreshMessage):
+                    # Capa 8: el cliente pidió re-consultar git (botón
+                    # "actualizar", típicamente tras commitear en su terminal).
+                    await self._enviar_git_status(websocket)
                 # Si llega un InitMessage/WelcomeMessage/LeaveMessage del
                 # cliente lo ignoramos: esos los origina solo el servidor.
         finally:

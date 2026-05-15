@@ -92,6 +92,12 @@ class DiskStorage:
         for p in sorted(self.root.rglob("*")):
             if not p.is_file():
                 continue
+            partes = p.relative_to(self.root).parts
+            # El workspace puede SER un repo git (capa 8): `.git/` es interno
+            # de git, no archivos del proyecto. Si lo cargáramos, el workspace
+            # se llenaría de basura y, peor, se re-persistiría pisando el repo.
+            if ".git" in partes:
+                continue
             rel = p.relative_to(self.root).as_posix()
             try:
                 archivos[rel] = p.read_text(encoding="utf-8")

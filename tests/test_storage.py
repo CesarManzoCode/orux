@@ -108,3 +108,15 @@ def test_reinicio_completo_conserva_el_workspace(tmp_path) -> None:
     ws2 = Workspace(storage=DiskStorage(tmp_path))
     ws2.cargar_de_disco()
     assert ws2.snapshot() == {"a.py": "contenido a", "dir/b.py": "contenido b"}
+
+
+def test_cargar_ignora_el_directorio_git(tmp_path) -> None:
+    # Capa 8: el workspace puede ser un repo git. `.git/` NO son archivos del
+    # proyecto: no deben entrar al workspace ni re-persistirse.
+    s = DiskStorage(tmp_path)
+    s.guardar("main.py", "x = 1")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("[core]\n", encoding="utf-8")
+    (tmp_path / ".git" / "refs").mkdir()
+    (tmp_path / ".git" / "refs" / "head").write_text("abc\n", encoding="utf-8")
+    assert s.cargar() == {"main.py": "x = 1"}

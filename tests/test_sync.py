@@ -24,6 +24,7 @@ import pytest_asyncio
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
+from laidea.git import GitRepo
 from laidea.server.sync import SyncServer
 from laidea.state import DiskStorage
 
@@ -810,3 +811,45 @@ async def test_impacto_tambien_al_aprobar_propuesta(server_port: int) -> None:
         assert aviso["affected_path"] == "auth.py"
         assert aviso["symbols"] == ["Usuario"]
         assert aviso["author_name"] == wc["you"]["name"]
+
+
+# --- Capa 8: integración con Git (solo lectura) ---
+
+
+async def test_git_status_en_handshake_y_refresh(tmp_path) -> None:
+    # El workspace es un repo git real: tras el handshake llega git_status, y
+    # al editar (persiste en el repo) un git_refresh refleja el cambio.
+    ws_dir = tmp_path / "workspace"
+    srv = SyncServer(storage=DiskStorage(ws_dir), git=GitRepo(ws_dir))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as c:
+            await handshake(c)  # init/welcome/ownership
+            gs = await recv_tipo(c, "git_status")
+            assert gs["available"] is True
+            assert isinstance(gs["branch"], str) and gs["branch"]
+            assert gs["changes"] == 0
+            assert gs["commits"] == []
+
+            # Editar crea el archivo en el repo -> aparece como sin commitear.
+            await c.send(
+                json.dumps({"type": "update", "path": "main.py", "content": "x = 1"})
+            )
+            await asyncio.sleep(0.05)  # dar tiempo a persistir
+            await c.send(json.dumps({"type": "git_refresh"}))
+            gs2 = await recv_tipo(c, "git_status")
+            assert gs2["available"] is True
+            assert gs2["changes"] >= 1
+    finally:
+        s.close()
+        await s.wait_closed()
+
+
+async def test_sin_git_no_se_manda_git_status(server_port: int) -> None:
+    # Fixture por defecto: git=None. El handshake NO debe traer git_status
+    # (contrato: los tests sin git no cambian su coreografía).
+    async with connect(f"ws://localhost:{server_port}") as c:
+        await handshake(c)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(c.recv(), timeout=0.3)

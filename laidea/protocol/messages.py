@@ -317,6 +317,39 @@ class AuthErrorMessage:
     type: Literal["auth_error"] = "auth_error"
 
 
+# --- Capa 8: integración con Git (solo lectura) ---
+
+
+@dataclass(frozen=True)
+class GitStatusMessage:
+    """Servidor -> cliente: estado del repo del workspace.
+
+    Solo lectura: rama, cuántos archivos sin commitear y los últimos commits.
+    `available=False` si el server no tiene git habilitado o el binario no
+    está. Se manda tras el handshake (si hay git) y cuando el cliente lo pide
+    (`git_refresh`) — NO en cada tecla: correr git por pulsación sería un
+    storm de subprocess. Que el estado quede algo viejo entre refrescos es
+    aceptable: commiteas en tu terminal y das "actualizar".
+    """
+
+    available: bool
+    branch: str = ""
+    changes: int = 0
+    commits: list[str] = field(default_factory=list)
+    type: Literal["git_status"] = "git_status"
+
+
+@dataclass(frozen=True)
+class GitRefreshMessage:
+    """Cliente -> servidor: "vuelve a consultar git y mándame el estado".
+
+    Sin payload. Es de solo lectura (no commitea nada): el commit lo hace el
+    dev en su terminal; esto solo re-pregunta.
+    """
+
+    type: Literal["git_refresh"] = "git_refresh"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -335,6 +368,8 @@ Message = Union[
     SessionMessage,
     AuthOkMessage,
     AuthErrorMessage,
+    GitStatusMessage,
+    GitRefreshMessage,
 ]
 
 
@@ -415,4 +450,13 @@ def decode(raw: str) -> Message:
         return AuthOkMessage(username=data["username"], token=data["token"])
     if kind == "auth_error":
         return AuthErrorMessage(reason=data["reason"])
+    if kind == "git_status":
+        return GitStatusMessage(
+            available=data["available"],
+            branch=data.get("branch", ""),
+            changes=data.get("changes", 0),
+            commits=list(data.get("commits", [])),
+        )
+    if kind == "git_refresh":
+        return GitRefreshMessage()
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

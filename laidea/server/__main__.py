@@ -30,6 +30,7 @@ import os
 from pathlib import Path
 from secrets import token_hex
 
+from ..git import GitRepo
 from ..identity import UserStore
 from ..state import DiskStorage, Ownership
 from .sync import SyncServer
@@ -64,15 +65,19 @@ def main() -> None:
     )
     env = os.environ.get("LAIDEA_DATA")
     base = Path(env) if env else BASE_POR_DEFECTO
-    storage = DiskStorage(base / "workspace")
+    # El MISMO directorio es el workspace persistido (capa 3) y el repo git
+    # (capa 8): así "vive sobre Git" literalmente — `git clone` de esa carpeta
+    # te da el código, sin formato propietario.
+    ws = base / "workspace"
     server = SyncServer(
-        storage=storage,
+        storage=DiskStorage(ws),
         users=UserStore(base / "users.json"),
         ownership=Ownership(base / "ownership.json"),
         secret=_secreto(base),
+        git=GitRepo(ws),
     )
     logging.getLogger(__name__).info(
-        "estado en %s (workspace, users, ownership, secret)", base
+        "estado en %s (workspace=repo git, users, ownership, secret)", base
     )
     asyncio.run(server.run())
 

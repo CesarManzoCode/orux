@@ -12,6 +12,8 @@ from laidea.protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
+    GitRefreshMessage,
+    GitStatusMessage,
     ImpactMessage,
     LoginMessage,
     RegisterMessage,
@@ -159,5 +161,15 @@ def test_encode_decode_auth_messages_roundtrip() -> None:
         SessionMessage(token="abc.def"),
         AuthOkMessage(username="ana", token="abc.def"),
         AuthErrorMessage(reason="usuario o contraseña incorrectos"),
+    ):
+        assert decode(encode(msg)) == msg
+
+
+def test_encode_decode_git_messages_roundtrip() -> None:
+    for msg in (
+        GitStatusMessage(available=True, branch="main", changes=3,
+                          commits=["a1b2 primer commit", "c3d4 segundo"]),
+        GitStatusMessage(available=False),
+        GitRefreshMessage(),
     ):
         assert decode(encode(msg)) == msg
