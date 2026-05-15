@@ -9,8 +9,13 @@ que estos pasan.
 import pytest
 
 from laidea.protocol import (
+    AuthErrorMessage,
+    AuthOkMessage,
     ClaimMessage,
     ImpactMessage,
+    LoginMessage,
+    RegisterMessage,
+    SessionMessage,
     InitMessage,
     LeaveMessage,
     OwnershipMessage,
@@ -142,3 +147,17 @@ def test_encode_decode_impact_roundtrip() -> None:
         symbols=["Usuario", "rol_de"],
     )
     assert decode(encode(msg)) == msg
+
+
+# --- Capa 7: identidad real ---
+
+
+def test_encode_decode_auth_messages_roundtrip() -> None:
+    for msg in (
+        RegisterMessage(username="ana", password="x"),
+        LoginMessage(username="ana", password="x"),
+        SessionMessage(token="abc.def"),
+        AuthOkMessage(username="ana", token="abc.def"),
+        AuthErrorMessage(reason="usuario o contraseña incorrectos"),
+    ):
+        assert decode(encode(msg)) == msg

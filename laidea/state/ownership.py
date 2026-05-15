@@ -1,34 +1,45 @@
-"""Ownership: qué cliente es dueño de qué path.
+"""Ownership: qué usuario es dueño de qué path.
 
 Es el corazón de la tesis del producto: la colisión se previene con
 coordinación (hay un dueño, su palabra manda sobre su zona), no se resuelve
-fusionando después. Esta capa es la versión mínima de eso a nivel de archivo
-completo; la granularidad por zona/línea y la prevención de colisiones
-concurrentes son la capa 5, aparte.
+fusionando después.
 
-Decisiones de prototipo (a documentar porque no son obvias y se van a revisar
-cuando llegue auth):
-
-- **El ownership es efímero, por sesión.** Vive en memoria, no se persiste. En
-  el producto el ownership es durable e invisible ("la clase User es de
-  Joaquín"). Aquí, sin identidad estable ni auth, persistirlo no tendría
-  sentido: el `client_id` cambia en cada reconexión.
-
-- **Se libera al desconectar (lo hace el servidor, no esta clase).** Si el
-  dueño se va y su path sigue marcado como suyo, nadie podría editarlo de
-  verdad (todo cambio sería tentativo y no habría dueño conectado para
-  aprobarlo): deadlock. Liberar al desconectar evita ese estado muerto en el
-  prototipo. El ownership real no se liberará así.
+Capa 7: el dueño ahora es un **usuario real** (autenticado, normalizado), no
+un `client_id` efímero. Y por eso ahora SÍ tiene sentido **persistir** el
+ownership: "la clase Usuario es de joaquin" sobrevive a reiniciar el server y
+a que joaquin se reconecte desde otro navegador. Mismo patrón de inyección
+que `DiskStorage`/`UserStore`: recibe la ruta de un JSON; sin ruta (tests) es
+en memoria. Ya NO se libera al desconectar: el dueño lo sigue siendo aunque
+cierre la pestaña (lo recupera al volver a entrar como el mismo usuario).
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 
 class Ownership:
-    def __init__(self) -> None:
-        # path -> client_id del dueño. Un path que no está en el mapa
+    def __init__(self, path: Path | str | None = None) -> None:
+        # path de archivo -> usuario dueño. Un path que no está en el mapa
         # simplemente no tiene dueño (cualquiera lo edita y se aplica directo).
         self._owners: dict[str, str] = {}
+        # Persistencia opcional. None = en memoria (tests, igual que el resto
+        # del stack). Con ruta, el mapa sobrevive a reiniciar el server.
+        self._path = Path(path) if path is not None else None
+        if self._path is not None and self._path.exists():
+            try:
+                self._owners = json.loads(
+                    self._path.read_text(encoding="utf-8")
+                )
+            except (ValueError, OSError):
+                self._owners = {}
+
+    def _guardar(self) -> None:
+        if self._path is None:
+            return
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(self._owners), encoding="utf-8")
 
     def owner(self, path: str) -> str | None:
         """Quién es el dueño de `path`, o None si no tiene."""
@@ -46,20 +57,9 @@ class Ownership:
         actual = self._owners.get(path)
         if actual is None:
             self._owners[path] = client_id
+            self._guardar()
             return True
         return actual == client_id
-
-    def release_all(self, client_id: str) -> bool:
-        """Suelta todos los paths que poseía `client_id` (se desconectó).
-
-        Devuelve True si algo cambió, para que el servidor sepa si tiene que
-        volver a difundir el mapa.
-        """
-        antes = len(self._owners)
-        self._owners = {
-            p: c for p, c in self._owners.items() if c != client_id
-        }
-        return len(self._owners) != antes
 
     def snapshot(self) -> dict[str, str]:
         """Copia del mapa completo. Es lo que viaja en `OwnershipMessage`."""

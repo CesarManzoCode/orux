@@ -29,11 +29,13 @@ def normalizar(username: str) -> str:
 
 
 class UserStore:
-    def __init__(self, path: Path | str) -> None:
-        self._path = Path(path)
+    def __init__(self, path: Path | str | None = None) -> None:
+        # None = en memoria (tests), igual que DiskStorage/Ownership. Con ruta,
+        # los usuarios sobreviven a reiniciar el server.
+        self._path = Path(path) if path is not None else None
         # usuario_normalizado -> registro de contraseña (string autodescriptivo).
         self._usuarios: dict[str, str] = {}
-        if self._path.exists():
+        if self._path is not None and self._path.exists():
             try:
                 self._usuarios = json.loads(
                     self._path.read_text(encoding="utf-8")
@@ -44,6 +46,8 @@ class UserStore:
                 self._usuarios = {}
 
     def _guardar(self) -> None:
+        if self._path is None:
+            return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(
             json.dumps(self._usuarios), encoding="utf-8"

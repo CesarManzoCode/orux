@@ -46,9 +46,9 @@ def test_cambiar_la_ultima_linea() -> None:
 
 def test_roster_lineas_ocupadas_excluye_al_propio_y_otros_paths() -> None:
     r = Roster()
-    a = r.asignar()
-    b = r.asignar()
-    c = r.asignar()
+    a = r.asignar("ana")
+    b = r.asignar("beto")
+    c = r.asignar("caro")
     r.mover(a.client_id, "main.py", 10)
     r.mover(b.client_id, "main.py", 4)
     r.mover(c.client_id, "otro.py", 4)

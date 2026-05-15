@@ -28,12 +28,33 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+from secrets import token_hex
 
-from ..state import DiskStorage
+from ..identity import UserStore
+from ..state import DiskStorage, Ownership
 from .sync import SyncServer
 
-# Estado de ejecución, fuera del árbol del proyecto a propósito (ver docstring).
-DIRECTORIO_POR_DEFECTO = Path.home() / ".laidea" / "workspace"
+# Todo el estado de ejecución vive bajo ~/.laidea, FUERA del árbol del
+# proyecto a propósito (ver más abajo). El workspace en un subdir; usuarios,
+# ownership y el secreto de firma como archivos hermanos.
+BASE_POR_DEFECTO = Path.home() / ".laidea"
+
+
+def _secreto(base: Path) -> str:
+    """Secreto para firmar tokens de sesión, estable entre reinicios.
+
+    Se guarda en `~/.laidea/secret` y se genera la primera vez. Estable =
+    los tokens de sesión guardados en los clientes siguen valiendo tras
+    reiniciar el server (no obliga a re-loguear a todos). Si alguien borra el
+    archivo, simplemente todos re-loguean una vez.
+    """
+    f = base / "secret"
+    if f.exists():
+        return f.read_text(encoding="utf-8").strip()
+    base.mkdir(parents=True, exist_ok=True)
+    s = token_hex(32)
+    f.write_text(s, encoding="utf-8")
+    return s
 
 
 def main() -> None:
@@ -42,10 +63,18 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     env = os.environ.get("LAIDEA_DATA")
-    root = Path(env) if env else DIRECTORIO_POR_DEFECTO
-    storage = DiskStorage(root)
-    logging.getLogger(__name__).info("workspace persistido en %s", storage.root)
-    asyncio.run(SyncServer(storage=storage).run())
+    base = Path(env) if env else BASE_POR_DEFECTO
+    storage = DiskStorage(base / "workspace")
+    server = SyncServer(
+        storage=storage,
+        users=UserStore(base / "users.json"),
+        ownership=Ownership(base / "ownership.json"),
+        secret=_secreto(base),
+    )
+    logging.getLogger(__name__).info(
+        "estado en %s (workspace, users, ownership, secret)", base
+    )
+    asyncio.run(server.run())
 
 
 if __name__ == "__main__":

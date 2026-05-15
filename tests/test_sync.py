@@ -16,6 +16,7 @@ devuelve el welcome, para que cada test no tenga que repetir esa coreografía.
 """
 
 import asyncio
+import itertools
 import json
 
 import pytest
@@ -25,6 +26,12 @@ from websockets.asyncio.server import serve
 
 from laidea.server.sync import SyncServer
 from laidea.state import DiskStorage
+
+# Capa 7: la app está cerrada. Cada test necesita usuarios; este contador da
+# nombres únicos para que dos clientes de un test sean identidades distintas.
+# Cada test tiene su server (UserStore en memoria), así que repetir entre
+# tests es inocuo.
+_user_seq = itertools.count(1)
 
 
 @pytest_asyncio.fixture
@@ -60,14 +67,36 @@ async def servidor():
         await ws_server.wait_closed()
 
 
-async def handshake(ws) -> dict:
-    """Consume init + welcome + ownership (handshake completo). Devuelve el welcome.
+async def autenticar(ws, *, user=None, password="pw", registrar=True):
+    """Pasa la compuerta de auth (capa 7). Devuelve (usuario, auth_ok dict).
 
-    Casi todos los tests no estudian el handshake, solo necesitan pasarlo para
-    llegar al comportamiento que sí prueban. Centralizarlo aquí evita que cada
-    test conozca el detalle de cuántos mensajes manda el servidor al conectar
-    (init capa 1, welcome capa 2, ownership capa 4).
+    - `user=None`: registra un usuario único nuevo (caso común: clientes
+      distintos = identidades distintas).
+    - `user` dado + `registrar=True`: lo registra. `registrar=False`: hace
+      login (para tests de reconexión con la MISMA identidad).
+
+    Deja la conexión justo antes del `init`: lo que el server manda después
+    de `auth_ok` es el handshake normal.
     """
+    if user is None:
+        user = f"user{next(_user_seq)}"
+    tipo = "register" if registrar else "login"
+    await ws.send(
+        json.dumps({"type": tipo, "username": user, "password": password})
+    )
+    authok = json.loads(await ws.recv())
+    assert authok["type"] == "auth_ok", f"auth falló: {authok}"
+    return user, authok
+
+
+async def handshake(ws, *, user=None, password="pw", registrar=True) -> dict:
+    """autenticar + consumir init+welcome+ownership. Devuelve el welcome.
+
+    Capa 7: ahora hay un paso de auth ANTES del handshake. La mayoría de los
+    tests solo necesitan "estar dentro como alguien"; este helper lo resuelve.
+    `welcome["you"]["client_id"]` es el usuario (la identidad ya es real).
+    """
+    await autenticar(ws, user=user, password=password, registrar=registrar)
     init = json.loads(await ws.recv())
     assert init["type"] == "init"
     welcome = json.loads(await ws.recv())
@@ -97,6 +126,7 @@ async def test_initial_state_is_empty(server_port: int) -> None:
     # Cliente solo, sin nadie más conectado. El PRIMER mensaje sigue siendo el
     # init con files vacío: ese contrato de capa 1 no cambió.
     async with connect(f"ws://localhost:{server_port}") as ws:
+        await autenticar(ws)  # capa 7: la app está cerrada
         msg = json.loads(await ws.recv())
         assert msg == {"type": "init", "files": {}}
 
@@ -124,6 +154,7 @@ async def test_late_joiner_gets_current_state(server_port: int) -> None:
         await a.send(json.dumps({"type": "update", "path": "b.py", "content": "dos"}))
         await asyncio.sleep(0.05)  # darle tiempo al servidor a aplicar
         async with connect(f"ws://localhost:{server_port}") as late:
+            await autenticar(late)
             msg = json.loads(await late.recv())
             assert msg == {"type": "init", "files": {"a.py": "uno", "b.py": "dos"}}
 
@@ -184,6 +215,7 @@ async def test_edits_to_different_files_dont_interfere(server_port: int) -> None
 
         # Verificamos que un tercer cliente que entre vea ambos archivos sanos.
         async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
             init_c = json.loads(await c.recv())
             assert init_c == {
                 "type": "init",
@@ -194,28 +226,28 @@ async def test_edits_to_different_files_dont_interfere(server_port: int) -> None
 # --- Capa 2: presencia ---
 
 
-async def test_welcome_assigns_anonymous_identity(server_port: int) -> None:
-    # Al conectar, el servidor te asigna identidad (id, nombre, color) y te la
-    # manda en el welcome. El cliente no la elige. Sin nadie más, peers vacío.
+async def test_welcome_lleva_identidad_real(server_port: int) -> None:
+    # Capa 7: la identidad ES el usuario autenticado (no anónimo). El welcome
+    # la trae derivada del usuario; el cliente no la elige. peers vacío solo.
     async with connect(f"ws://localhost:{server_port}") as a:
-        welcome = await handshake(a)
+        welcome = await handshake(a, user="joaquin")
         yo = welcome["you"]
-        assert yo["client_id"]
-        assert yo["name"].startswith("anónimo-")
+        assert yo["client_id"] == "joaquin"
+        assert yo["name"] == "joaquin"
         assert yo["color"].startswith("#")
         assert yo["path"] is None  # conectado pero todavía no presente
         assert welcome["peers"] == []
 
 
-async def test_distinct_clients_get_distinct_ids(server_port: int) -> None:
-    # Dos conexiones nunca comparten client_id: si lo hicieran, no podrías
-    # distinguir quién está dónde.
+async def test_distinct_users_get_distinct_ids(server_port: int) -> None:
+    # Dos usuarios distintos => identidades distintas.
     async with connect(f"ws://localhost:{server_port}") as a, connect(
         f"ws://localhost:{server_port}"
     ) as b:
-        wa = await handshake(a)
-        wb = await handshake(b)
-        assert wa["you"]["client_id"] != wb["you"]["client_id"]
+        wa = await handshake(a, user="ana")
+        wb = await handshake(b, user="beto")
+        assert wa["you"]["client_id"] == "ana"
+        assert wb["you"]["client_id"] == "beto"
 
 
 async def test_presence_propagates_with_path_and_line(server_port: int) -> None:
@@ -322,6 +354,7 @@ async def test_server_reiniciado_sirve_lo_persistido(tmp_path) -> None:
     port_b = ws_b.sockets[0].getsockname()[1]
     try:
         async with connect(f"ws://localhost:{port_b}") as c:
+            await autenticar(c)
             init = json.loads(await c.recv())
             assert init == {"type": "init", "files": {"main.py": "x = 1"}}
     finally:
@@ -355,6 +388,7 @@ async def test_ownership_vacio_en_el_handshake(server_port: int) -> None:
     # Tercer mensaje del handshake (capa 4): el mapa de ownership, vacío al
     # arrancar. init (capa 1) -> welcome (capa 2) -> ownership (capa 4).
     async with connect(f"ws://localhost:{server_port}") as a:
+        await autenticar(a)
         assert json.loads(await a.recv())["type"] == "init"
         assert json.loads(await a.recv())["type"] == "welcome"
         assert json.loads(await a.recv()) == {"type": "ownership", "owners": {}}
@@ -400,6 +434,7 @@ async def test_edit_de_no_dueno_es_tentativo(server_port: int) -> None:
 
         # El workspace autoritativo no cambió: un cliente nuevo no ve main.py.
         async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
@@ -449,6 +484,7 @@ async def test_aprobar_propuesta_aplica_y_converge(server_port: int) -> None:
         assert json.loads(await asyncio.wait_for(a.recv(), timeout=2)) == esperado
         assert json.loads(await asyncio.wait_for(b.recv(), timeout=2)) == esperado
         async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
             assert json.loads(await c.recv()) == {
                 "type": "init",
                 "files": {"main.py": "v de B"},
@@ -504,68 +540,100 @@ async def test_solo_el_dueno_puede_resolver(server_port: int) -> None:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(b.recv(), timeout=0.3)
         async with connect(f"ws://localhost:{server_port}") as c:
+            await autenticar(c)
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
-# --- Identidad estable mínima (token, sin auth) ---
+# --- Capa 7: identidad real (login obligatorio) ---
 
 
-async def test_mismo_token_misma_identidad(server_port: int) -> None:
-    # Reconectar con el mismo token devuelve la MISMA identidad: es lo que
-    # hace que recargar la página no pierda el ownership.
-    tok = "tok-estable"
-    async with connect(f"ws://localhost:{server_port}/?token={tok}") as a:
-        w1 = await handshake(a)
-    async with connect(f"ws://localhost:{server_port}/?token={tok}") as a2:
-        w2 = await handshake(a2)
-    assert w2["you"]["client_id"] == w1["you"]["client_id"]
-    assert w2["you"]["name"] == w1["you"]["name"]
+async def test_app_cerrada_sin_login(server_port: int) -> None:
+    # Mandar un mensaje de app antes de autenticarse NO entra: auth_error y
+    # nunca un init. La app está cerrada.
+    async with connect(f"ws://localhost:{server_port}") as ws:
+        await ws.send(json.dumps({"type": "update", "path": "x.py", "content": "hola"}))
+        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert msg["type"] == "auth_error"
+
+
+async def test_login_password_incorrecta(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await autenticar(a, user="ana", password="buena")  # registra ana
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await b.send(json.dumps({"type": "login", "username": "ana", "password": "mala"}))
+        msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
+        assert msg["type"] == "auth_error"
+        # Y se puede reintentar en la MISMA conexión con la buena.
+        await b.send(json.dumps({"type": "login", "username": "ana", "password": "buena"}))
+        assert json.loads(await asyncio.wait_for(b.recv(), timeout=2))["type"] == "auth_ok"
+
+
+async def test_registrar_duplicado_falla(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await autenticar(a, user="ana")
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await b.send(json.dumps({"type": "register", "username": "ana", "password": "x"}))
+        assert json.loads(await asyncio.wait_for(b.recv(), timeout=2))["type"] == "auth_error"
+
+
+async def test_mismo_usuario_misma_identidad(server_port: int) -> None:
+    # Loguearse de nuevo (otra conexión/navegador) devuelve la MISMA identidad.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        w1 = await handshake(a, user="ana")
+    async with connect(f"ws://localhost:{server_port}") as a2:
+        w2 = await handshake(a2, user="ana", registrar=False)  # login
+    assert w2["you"]["client_id"] == w1["you"]["client_id"] == "ana"
     assert w2["you"]["color"] == w1["you"]["color"]
 
 
-async def test_sin_token_identidad_fresca(server_port: int) -> None:
-    # Sin token (cliente viejo / test) seguimos dando identidad anónima nueva
-    # cada vez: no rompemos el comportamiento previo.
+async def test_session_token_auto_login(server_port: int) -> None:
+    # El auth_ok trae un token firmado; presentarlo (session) reloguea sin
+    # contraseña. Es lo que hace que recargar no moleste.
     async with connect(f"ws://localhost:{server_port}") as a:
-        w1 = await handshake(a)
-    async with connect(f"ws://localhost:{server_port}") as b:
-        w2 = await handshake(b)
-    assert w1["you"]["client_id"] != w2["you"]["client_id"]
+        _, authok = await autenticar(a, user="ana")
+        token = authok["token"]
+    async with connect(f"ws://localhost:{server_port}") as a2:
+        await a2.send(json.dumps({"type": "session", "token": token}))
+        ok = json.loads(await asyncio.wait_for(a2.recv(), timeout=2))
+        assert ok["type"] == "auth_ok" and ok["username"] == "ana"
+
+
+async def test_session_token_invalido_se_rechaza(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as ws:
+        await ws.send(json.dumps({"type": "session", "token": "falso.dead"}))
+        assert json.loads(await asyncio.wait_for(ws.recv(), timeout=2))["type"] == "auth_error"
 
 
 async def test_ownership_sobrevive_reconexion(server_port: int) -> None:
-    # El fix de fondo: A reclama, "recarga la página" (se desconecta y vuelve
-    # con el mismo token) y SIGUE siendo dueño. Antes el ownership se liberaba
-    # al desconectar y se perdía en el hueco.
-    tok = "tok-dueno"
+    # El fix de fondo, ahora con identidad real: ana reclama, "recarga"
+    # (se desconecta y vuelve a loguearse) y SIGUE siendo dueña.
     async with connect(f"ws://localhost:{server_port}") as b:
-        await handshake(b)
-        async with connect(f"ws://localhost:{server_port}/?token={tok}") as a:
-            wa = await handshake(a)
+        await handshake(b, user="beto")
+        async with connect(f"ws://localhost:{server_port}") as a:
+            await handshake(a, user="ana")
             await a.send(json.dumps({"type": "claim", "path": "x.py"}))
             await _drenar_ownership(a)
             assert await _drenar_ownership(b) == {
-                "type": "ownership", "owners": {"x.py": wa["you"]["client_id"]},
+                "type": "ownership", "owners": {"x.py": "ana"},
             }
-        # A se desconectó: B NO debe recibir un mapa vacío (ya no se libera).
+        # A se desconectó: B NO recibe un mapa vacío (el ownership no se libera).
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(b.recv(), timeout=0.3)
 
-        # A vuelve con el mismo token: misma identidad y sigue siendo dueño.
-        async with connect(f"ws://localhost:{server_port}/?token={tok}") as a2:
+        # ana vuelve (login): misma identidad y sigue siendo dueña.
+        async with connect(f"ws://localhost:{server_port}") as a2:
+            await autenticar(a2, user="ana", registrar=False)
             assert json.loads(await a2.recv())["type"] == "init"
             welcome = json.loads(await a2.recv())
-            assert welcome["you"]["client_id"] == wa["you"]["client_id"]
+            assert welcome["you"]["client_id"] == "ana"
             own = json.loads(await a2.recv())
-            assert own == {
-                "type": "ownership", "owners": {"x.py": wa["you"]["client_id"]},
-            }
-            # Prueba fuerte: B (no dueño) edita x.py -> es tentativo y la
-            # propuesta le llega a A2. Solo pasa si A2 sigue siendo el dueño.
-            await b.send(json.dumps({"type": "update", "path": "x.py", "content": "B intenta"}))
+            assert own == {"type": "ownership", "owners": {"x.py": "ana"}}
+            # Prueba fuerte: beto (no dueño) edita x.py -> tentativo, la
+            # propuesta le llega a ana. Solo pasa si ana sigue siendo dueña.
+            await b.send(json.dumps({"type": "update", "path": "x.py", "content": "beto intenta"}))
             prop = await recv_tipo(a2, "proposal")
             assert prop["proposal"]["path"] == "x.py"
-            assert prop["proposal"]["content"] == "B intenta"
+            assert prop["proposal"]["content"] == "beto intenta"
 
 
 # --- Capa 5: prevención de colisiones por línea ---
@@ -598,6 +666,7 @@ async def test_no_puedes_pisar_la_linea_de_otro(servidor) -> None:
 
         # El workspace no cambió: un cliente nuevo ve el contenido original.
         async with connect(f"ws://localhost:{port}") as d:
+            await autenticar(d)
             assert json.loads(await d.recv()) == {
                 "type": "init", "files": {"shared.py": "l1\nl2\nl3"},
             }

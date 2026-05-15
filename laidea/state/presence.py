@@ -9,12 +9,10 @@ Por eso vive en su propia clase y no se mete dentro de `Workspace`.
 
 Decisiones de esta capa:
 
-- **La identidad la asigna el servidor, no el cliente.** El cliente no elige su
-  `client_id` ni su nombre: si pudiera, podría hacerse pasar por otro. El
-  servidor lleva un contador y reparte identidades anónimas ("anónimo-3") con
-  un color de una paleta fija. Cuando llegue la capa de autenticación, este es
-  el único lugar donde "anónimo-N" se reemplaza por el nombre real; el resto
-  del sistema ya habla en términos de `PresenceState`.
+- **La identidad es el usuario autenticado (capa 7).** Ya no hay anónimos ni
+  contadores ni tokens: el server solo llama `asignar(usuario)` después de que
+  el usuario pasó el login, y la identidad (client_id/nombre/color) se deriva
+  determinísticamente de su nombre. El cliente nunca elige su identidad.
 
 - **Estar conectado no es estar presente.** Un cliente recién conectado que
   todavía no abrió ningún archivo tiene `path = None`: está en la sala pero no
@@ -25,60 +23,50 @@ Decisiones de esta capa:
 
 from __future__ import annotations
 
+from hashlib import sha256
+
 from ..protocol import PresenceState
 
-# Paleta fija. Los colores se reparten ciclando: el cliente N usa el color
-# N % len(PALETA). Con pocos usuarios (el público objetivo son equipos de 2 a
-# 50) las colisiones de color son improbables y, si pasan, no rompen nada:
-# son una ayuda visual, no un identificador. El identificador es client_id.
+# Paleta fija. El color de un usuario se deriva de su nombre con un hash, así
+# es estable entre sesiones y dispositivos (mismo usuario, mismo color) sin
+# guardar nada. Si dos usuarios colisionan de color no pasa nada: es ayuda
+# visual, el identificador real es el usuario.
 PALETA = ["#e0607a", "#5fa8e0", "#8de0a8", "#e0c46a", "#b98de0", "#e09a5f"]
+
+
+def color_de(username: str) -> str:
+    """Color estable y determinista para un usuario."""
+    h = int(sha256(username.encode("utf-8")).hexdigest(), 16)
+    return PALETA[h % len(PALETA)]
 
 
 class Roster:
     def __init__(self) -> None:
         # client_id -> PresenceState. EFÍMERO: es "quién está y dónde *ahora*".
-        # Se crea al conectar y se borra al desconectar (la presencia no
+        # Se crea al autenticar y se borra al desconectar (la presencia no
         # sobrevive a cerrar la pestaña: si no estás, no estás "aquí").
+        #
+        # Capa 7: `client_id` ES el usuario real (normalizado). La identidad
+        # ya no es un token anónimo con tablas auxiliares: es determinista a
+        # partir del usuario (nombre = usuario, color = hash del usuario), así
+        # que reconectar desde otro navegador o tras reiniciar el server
+        # devuelve exactamente la misma identidad sin guardar mapeos.
         self._estados: dict[str, PresenceState] = {}
-        # Contador monotónico para repartir client_id. Nunca se reinicia ni
-        # reutiliza: ids viejos confundirían a clientes que aún los tienen
-        # pintados.
-        self._contador = 0
-        # IDENTIDAD ESTABLE (mínimo viable, sin auth real). El cliente guarda
-        # un token aleatorio en localStorage y lo manda al conectar. Aquí
-        # mapeamos token -> client_id, y client_id -> (id, name, color) para
-        # poder reconstruir la MISMA identidad cuando recarga la página. Sin
-        # esto, cada reload daba un client_id nuevo y se perdía el ownership.
-        # Ambos diccionarios son persistentes mientras viva el server (la
-        # identidad NO se borra al desconectar, solo la presencia).
-        self._por_token: dict[str, str] = {}
-        self._identidades: dict[str, dict] = {}
 
-    def asignar(self, token: str | None = None) -> PresenceState:
-        """Da identidad a una conexión y le crea su presencia (sin archivo).
+    def asignar(self, username: str) -> PresenceState:
+        """Crea la presencia (sin archivo) para un usuario ya autenticado.
 
-        Con `token`: si ya se vio ese token, se REUSA su identidad (mismo
-        client_id/nombre/color) — así recargar la página no pierde el
-        ownership, que se indexa por client_id. Sin token (o token nuevo): se
-        asigna identidad fresca. La presencia siempre nace limpia (`path=None`):
-        reconectar no te devuelve a donde estabas, eso es estado efímero.
+        La identidad se deriva del usuario, no se inventa: mismo usuario =
+        mismo client_id/nombre/color, siempre. La presencia nace limpia
+        (`path=None`): reconectar no te devuelve a donde estabas, eso es
+        estado efímero.
         """
-        if token is not None and token in self._por_token:
-            ident = self._identidades[self._por_token[token]]
-        else:
-            self._contador += 1
-            n = self._contador
-            ident = {
-                "client_id": str(n),
-                "name": f"anónimo-{n}",
-                "color": PALETA[(n - 1) % len(PALETA)],
-            }
-            self._identidades[ident["client_id"]] = ident
-            if token is not None:
-                self._por_token[token] = ident["client_id"]
-
-        estado = PresenceState(**ident)  # path=None, line=1 por defecto
-        self._estados[ident["client_id"]] = estado
+        estado = PresenceState(
+            client_id=username,
+            name=username,
+            color=color_de(username),
+        )
+        self._estados[username] = estado
         return estado
 
     def presentes(self, excepto: str | None = None) -> list[PresenceState]:

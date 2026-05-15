@@ -251,6 +251,72 @@ class ImpactMessage:
     type: Literal["impact"] = "impact"
 
 
+# --- Capa 7: identidad real (login obligatorio) ---
+#
+# La app está CERRADA: al conectar, el servidor no manda nada hasta que el
+# cliente se autentica. Tres formas de autenticarse, las tres cliente->server:
+# registrarse, loguearse, o presentar un token de sesión firmado (auto-login
+# al recargar). El servidor responde `auth_ok` (con un token fresco para
+# guardar) o `auth_error`. Recién entonces empieza el handshake normal
+# (init/welcome/ownership). La identidad ES el usuario, estable y persistida.
+
+
+@dataclass(frozen=True)
+class RegisterMessage:
+    """Crear cuenta. Si el usuario es nuevo, queda registrado y autenticado."""
+
+    username: str
+    password: str
+    type: Literal["register"] = "register"
+
+
+@dataclass(frozen=True)
+class LoginMessage:
+    """Entrar con usuario+contraseña ya registrados."""
+
+    username: str
+    password: str
+    type: Literal["login"] = "login"
+
+
+@dataclass(frozen=True)
+class SessionMessage:
+    """Auto-login: presentar el token de sesión firmado guardado en el cliente.
+
+    Reemplaza al token anónimo sin firmar de la identidad mínima. Si la firma
+    es válida (la emitió este servidor) y el usuario aún existe, entra sin
+    reescribir contraseña — eso es lo que hace que recargar no moleste.
+    """
+
+    token: str
+    type: Literal["session"] = "session"
+
+
+@dataclass(frozen=True)
+class AuthOkMessage:
+    """Servidor -> cliente: autenticado. `token` es de sesión, para guardar.
+
+    El cliente lo persiste y lo presenta como `SessionMessage` al reconectar.
+    """
+
+    username: str
+    token: str
+    type: Literal["auth_ok"] = "auth_ok"
+
+
+@dataclass(frozen=True)
+class AuthErrorMessage:
+    """Servidor -> cliente: el intento de autenticación falló. `reason` legible.
+
+    La conexión NO se cierra: el cliente puede reintentar (otra contraseña,
+    registrarse) sobre la misma conexión. Mensajes de app antes de
+    autenticarse también responden con esto.
+    """
+
+    reason: str
+    type: Literal["auth_error"] = "auth_error"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -264,6 +330,11 @@ Message = Union[
     ProposalMessage,
     ResolveMessage,
     ImpactMessage,
+    RegisterMessage,
+    LoginMessage,
+    SessionMessage,
+    AuthOkMessage,
+    AuthErrorMessage,
 ]
 
 
@@ -330,4 +401,18 @@ def decode(raw: str) -> Message:
             affected_path=data["affected_path"],
             symbols=list(data.get("symbols", [])),
         )
+    if kind == "register":
+        return RegisterMessage(
+            username=data["username"], password=data["password"]
+        )
+    if kind == "login":
+        return LoginMessage(
+            username=data["username"], password=data["password"]
+        )
+    if kind == "session":
+        return SessionMessage(token=data["token"])
+    if kind == "auth_ok":
+        return AuthOkMessage(username=data["username"], token=data["token"])
+    if kind == "auth_error":
+        return AuthErrorMessage(reason=data["reason"])
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

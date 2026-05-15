@@ -44,26 +44,42 @@ aplica de verdad (edición directa o propuesta aprobada), el servidor calcula
 qué símbolos top cambiaron y qué otros archivos los usan, y le manda un
 `ImpactMessage` al dueño de cada archivo afectado. "Sin clickear, lo hace
 solo." Solo cuando el código parsea: cero avisos por código a medio escribir.
+
+Capa 7: identidad real. La app está CERRADA: al conectar no se manda nada
+hasta que el cliente pasa por `_autenticar` (register/login/session). La
+identidad ES el usuario (estable, persistido); el ownership ahora se indexa
+por usuario y sobrevive a reiniciar. El token de sesión va firmado con HMAC.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from urllib.parse import parse_qs, urlsplit
+from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
 
 from ..analysis import impacto
+from ..identity import (
+    UserStore,
+    crear_token,
+    normalizar,
+    usuario_de_token,
+)
 from ..protocol import (
+    AuthErrorMessage,
+    AuthOkMessage,
     ClaimMessage,
     ImpactMessage,
     InitMessage,
     LeaveMessage,
+    LoginMessage,
     OwnershipMessage,
     PresenceMessage,
     ProposalMessage,
+    RegisterMessage,
     ResolveMessage,
+    SessionMessage,
     UpdateMessage,
     WelcomeMessage,
     decode,
@@ -81,27 +97,14 @@ from ..state import (
 logger = logging.getLogger(__name__)
 
 
-def _token_de(websocket: ServerConnection) -> str | None:
-    """Saca el `token` de identidad del query string de la conexión.
-
-    El cliente conecta a `ws://host:port/?token=XXX` (token aleatorio que
-    guarda en localStorage). Lo leemos ANTES de mandar nada, para asignar la
-    identidad estable de entrada. Sin token (cliente viejo, o un test que no lo
-    manda) devolvemos None y el roster cae a identidad anónima fresca.
-
-    Esto es identidad mínima viable, no auth: el token no se valida ni se
-    firma, va en la URL (puede aparecer en logs). Suficiente para que recargar
-    la página no te borre el ownership; la auth real es una capa futura.
-    """
-    req = getattr(websocket, "request", None)
-    if req is None or not getattr(req, "path", None):
-        return None
-    valores = parse_qs(urlsplit(req.path).query).get("token")
-    return valores[0] if valores else None
-
-
 class SyncServer:
-    def __init__(self, storage: DiskStorage | None = None) -> None:
+    def __init__(
+        self,
+        storage: DiskStorage | None = None,
+        users: UserStore | None = None,
+        ownership: Ownership | None = None,
+        secret: str | None = None,
+    ) -> None:
         # El workspace es el estado central. Todo lo demás (clientes, retransmisión)
         # gira alrededor de mantenerlo coherente entre todos los conectados.
         #
@@ -126,10 +129,16 @@ class SyncServer:
         # un mensaje dirigido a UN cliente concreto (al dueño de un archivo, al
         # autor de una propuesta), no un broadcast.
         self._conns: dict[str, ServerConnection] = {}
-        # Capa 4: quién es dueño de qué (coordinación) y qué cambios tentativos
-        # están esperando aprobación. Ambos efímeros, por sesión.
-        self.ownership = Ownership()
+        # Capa 4/7: ownership ahora por usuario y persistido (inyectado).
+        # Sin argumento = en memoria (tests). Las propuestas siguen efímeras.
+        self.ownership = ownership if ownership is not None else Ownership()
         self.proposals = Proposals()
+        # Capa 7: identidad real. `users` inyectado (en memoria si None, como
+        # el resto del stack en tests). `secret` firma los tokens de sesión;
+        # efímero por instancia si no se pasa (tests se loguean dentro de la
+        # misma instancia, no dependen de cross-restart).
+        self.users = users if users is not None else UserStore()
+        self._secret = secret if secret is not None else token_hex(32)
 
     async def _enviar_a(self, client_id: str, payload: str) -> None:
         """Manda `payload` a un único cliente por su identidad. Silencioso si no está.
@@ -223,33 +232,97 @@ class SyncServer:
             except Exception:
                 self.clients.discard(client)
 
+    async def _autenticar(self, websocket: ServerConnection) -> str | None:
+        """Compuerta de la capa 7: nada de app hasta autenticarse.
+
+        Lee mensajes hasta que uno autentique (register/login/session) y
+        devuelve el usuario normalizado. Mientras no lo logre responde
+        `auth_error` y sigue escuchando en la MISMA conexión (el cliente
+        reintenta sin reconectar). Devuelve None si la conexión se cierra sin
+        autenticarse — la app jamás manda init/welcome a un desconocido.
+        """
+        async for raw in websocket:
+            try:
+                msg = decode(raw)
+            except ValueError:
+                await websocket.send(
+                    encode(AuthErrorMessage(reason="mensaje inválido"))
+                )
+                continue
+            if isinstance(msg, RegisterMessage):
+                try:
+                    return self.users.registrar(msg.username, msg.password)
+                except ValueError as e:
+                    await websocket.send(
+                        encode(AuthErrorMessage(reason=str(e)))
+                    )
+            elif isinstance(msg, LoginMessage):
+                if self.users.verificar(msg.username, msg.password):
+                    return normalizar(msg.username)
+                await websocket.send(
+                    encode(
+                        AuthErrorMessage(
+                            reason="usuario o contraseña incorrectos"
+                        )
+                    )
+                )
+            elif isinstance(msg, SessionMessage):
+                # Auto-login: token firmado por ESTE server y usuario que aún
+                # existe. Reemplaza al token anónimo sin firmar de antes.
+                user = usuario_de_token(msg.token, self._secret)
+                if user is not None and self.users.existe(user):
+                    return user
+                await websocket.send(
+                    encode(
+                        AuthErrorMessage(reason="sesión inválida, inicia sesión")
+                    )
+                )
+            else:
+                await websocket.send(
+                    encode(
+                        AuthErrorMessage(reason="debes autenticarte primero")
+                    )
+                )
+        return None
+
     async def handle(self, websocket: ServerConnection) -> None:
-        """Handler por cada conexión nueva. Vive durante toda la sesión del cliente.
+        """Handler por cada conexión. Capa 7: primero autenticar, luego app.
 
-        El flujo es: registrar al cliente -> mandarle el snapshot inicial ->
-        procesar mensajes hasta que se desconecte -> sacarlo del set.
+        Flujo: conectar -> _autenticar (cerrado: sin login no se entra) ->
+        identidad = usuario real -> auth_ok + handshake (init/welcome/
+        ownership) -> bucle de mensajes -> finally.
 
-        El `async for` itera mensajes a medida que llegan. Cuando el cliente
-        cierra la conexión, el for termina solo y caemos al `finally`.
+        Nota de prototipo: si el mismo usuario abre dos conexiones a la vez
+        (dos pestañas/dispositivos), comparten identidad; la presencia y el
+        canal dirigido se quedan con la última conexión. Aceptable para el
+        público objetivo; el manejo fino multi-sesión es trabajo posterior.
         """
         self.clients.add(websocket)
-        # El servidor asigna la identidad: el cliente no elige id/nombre/color,
-        # pero SÍ presenta un token estable (localStorage) para que recargar la
-        # página le devuelva la misma identidad y conserve su ownership.
-        yo = self.roster.asignar(_token_de(websocket))
-        self._ids[websocket] = yo.client_id
-        self._conns[yo.client_id] = websocket
-        logger.info(
-            "cliente conectado: %s (total: %d)", yo.client_id, len(self.clients)
-        )
+        yo = None
         try:
-            # Snapshot inicial: le mandamos al recién llegado todo lo que existe
-            # ahora mismo en el workspace. Sin esto, vería pantalla vacía aunque
-            # haya gente trabajando.
+            usuario = await self._autenticar(websocket)
+            if usuario is None:
+                return  # se desconectó sin autenticarse: nunca fue "alguien"
+            yo = self.roster.asignar(usuario)
+            self._ids[websocket] = yo.client_id
+            self._conns[yo.client_id] = websocket
+            logger.info(
+                "usuario autenticado: %s (total: %d)",
+                yo.client_id,
+                len(self.clients),
+            )
+            # auth_ok con token de sesión fresco: el cliente lo guarda y lo
+            # presenta como `session` al recargar (auto-login firmado).
+            await websocket.send(
+                encode(
+                    AuthOkMessage(
+                        username=yo.client_id,
+                        token=crear_token(yo.client_id, self._secret),
+                    )
+                )
+            )
+            # Handshake normal (ya autenticado): workspace, presencia, ownership.
             await websocket.send(encode(InitMessage(files=self.workspace.snapshot())))
-            # Justo después, su identidad y quiénes más están presentes. Va como
-            # mensaje aparte y no dentro del init a propósito: el snapshot del
-            # workspace es un contrato estable, la presencia tiene otro ciclo.
             await websocket.send(
                 encode(
                     WelcomeMessage(
@@ -258,8 +331,6 @@ class SyncServer:
                     )
                 )
             )
-            # Tercer mensaje del handshake: el mapa de ownership actual. Mismo
-            # criterio que welcome — va aparte, snapshot completo, idempotente.
             await websocket.send(
                 encode(OwnershipMessage(owners=self.ownership.snapshot()))
             )
@@ -435,33 +506,32 @@ class SyncServer:
                 # cliente lo ignoramos: esos los origina solo el servidor.
         finally:
             self.clients.discard(websocket)
-            self._ids.pop(websocket, None)
-            # Solo soltamos el mapa conexión->id si sigue apuntando a ESTA
-            # conexión: en una recarga la conexión nueva puede registrarse
-            # antes de que corra este finally, y no queremos que el cierre de
-            # la vieja borre el registro de la nueva (mismo client_id).
-            if self._conns.get(yo.client_id) is websocket:
-                self._conns.pop(yo.client_id, None)
-            # IDENTIDAD ESTABLE: ya NO se libera el ownership ni se descartan
-            # las propuestas al desconectar. Recargar la página dispara un
-            # disconnect; si soltáramos aquí, al reconectar (mismo token, mismo
-            # client_id) el ownership ya se habría perdido — justo el bug que
-            # esto arregla. Trade-off asumido del prototipo: un dueño que se va
-            # de verdad retiene sus archivos hasta reiniciar el server; la
-            # gestión de ciclo de vida real es la futura capa de auth.
-            ultimo = self.roster.quitar(yo.client_id)
-            # Solo avisamos si la persona llegó a estar presente en algún
-            # archivo. Si nunca abrió nada, nadie la tenía pintada y mandar un
-            # Leave por ella sería ruido (y rompería tests que no usan presencia).
-            if ultimo is not None and ultimo.path is not None:
-                await self._broadcast(
-                    websocket, encode(LeaveMessage(client_id=yo.client_id))
+            if yo is not None:
+                # Solo si llegó a autenticarse. Una conexión que se cerró en la
+                # compuerta de login nunca fue "alguien": no hay nada que limpiar.
+                self._ids.pop(websocket, None)
+                # Soltamos el mapa conexión->id solo si sigue apuntando a ESTA
+                # conexión: en una recarga la conexión nueva puede registrarse
+                # antes de que corra este finally, y no queremos que el cierre
+                # de la vieja borre el registro de la nueva (mismo usuario).
+                if self._conns.get(yo.client_id) is websocket:
+                    self._conns.pop(yo.client_id, None)
+                # El ownership NO se toca al desconectar: ahora es por usuario y
+                # persistido. El dueño lo sigue siendo aunque cierre la pestaña;
+                # lo recupera al volver a entrar como el mismo usuario. Solo la
+                # presencia es efímera.
+                ultimo = self.roster.quitar(yo.client_id)
+                # Avisamos del Leave solo si llegó a estar presente en algún
+                # archivo (si nunca abrió nada, nadie lo tenía pintado).
+                if ultimo is not None and ultimo.path is not None:
+                    await self._broadcast(
+                        websocket, encode(LeaveMessage(client_id=yo.client_id))
+                    )
+                logger.info(
+                    "usuario desconectado: %s (total: %d)",
+                    yo.client_id,
+                    len(self.clients),
                 )
-            logger.info(
-                "cliente desconectado: %s (total: %d)",
-                yo.client_id,
-                len(self.clients),
-            )
 
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
         """Arranca el servidor WebSocket y lo deja escuchando para siempre.
