@@ -235,7 +235,7 @@
       font-family: var(--font-mono);      /* código: SIEMPRE monoespaciado */
       font-size: 14px;
       line-height: 22px;                  /* px fijos: clave para alinear marcas */
-      padding: 20px 24px;                 /* idem: LINE_H/PAD_TOP del JS dependen de esto */
+      padding: 20px 24px 20px 64px;   /* left = ancho del gutter (52) + aire */                 /* idem: LINE_H/PAD_TOP del JS dependen de esto */
       resize: none;
       outline: none;
       white-space: pre;                   /* sin wrap: 1 línea lógica = 1 fila */
@@ -253,7 +253,7 @@
       position: absolute; inset: 0; margin: 0; z-index: 0;
       overflow: hidden; pointer-events: none;
       font-family: var(--font-mono); font-size: 14px; line-height: 22px;
-      padding: 20px 24px; white-space: pre; tab-size: 4;
+      padding: 20px 24px 20px 64px;   /* left = ancho del gutter (52) + aire */ white-space: pre; tab-size: 4;
       color: var(--text); background: transparent;
     }
     #resaltado code {
@@ -267,6 +267,31 @@
     .tk-num { color: #e0905f; }      /* números */
     .tk-bi  { color: #6cb6ff; }      /* builtins */
     .tk-dec { color: #56d98a; }      /* decoradores */
+
+    /* Gutter de números de línea: columna fija a la izquierda, misma métrica
+       que el textarea (PAD_TOP=20, LINE_H=22) para que el número N quede
+       frente a la línea N. z-index 3 = tapa limpio el tinte de presencia en
+       su franja. pointer-events:none → los clics caen en el textarea. */
+    #gutter {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 52px;
+      overflow: hidden; pointer-events: none; z-index: 3;
+      background: var(--surface); border-right: 1px solid var(--border-soft);
+      font-family: var(--font-mono); font-size: 14px; line-height: 22px;
+    }
+    #gutter-scroll {
+      padding: 20px 10px 0 0; text-align: right;
+      color: var(--faint); white-space: pre; will-change: transform;
+    }
+    /* Línea actual: banda tenue a lo ancho. z-index 0 + va ANTES de
+       #resaltado en el DOM → el código (texto opaco) se pinta encima y la
+       banda se ve en los huecos, como en un editor de verdad. */
+    #lineaActiva {
+      position: absolute; left: 52px; right: 0; height: 22px;
+      background: rgba(255,255,255,0.035); z-index: 0;
+      pointer-events: none; display: none;
+    }
+    .editor-wrap.off #gutter,
+    .editor-wrap.off #lineaActiva { display: none; }
 
     /* --- Capa 4: ownership --- */
     #owner { font-size: 11px; }
@@ -513,9 +538,11 @@
       <div id="impactos"></div>
       <div id="aviso"></div>
       <div class="editor-wrap off" id="wrap">
+        <div id="lineaActiva"></div>
         <pre id="resaltado" aria-hidden="true"><code></code></pre>
         <div id="capa-presencia"><div id="capa-scroll"></div></div>
         <textarea id="editor" placeholder="selecciona un archivo o crea uno nuevo" spellcheck="false" disabled></textarea>
+        <div id="gutter" aria-hidden="true"><div id="gutter-scroll"></div></div>
       </div>
     </main>
   </div>
@@ -543,6 +570,8 @@
     const wrap = document.getElementById("wrap");
     const capaScroll = document.getElementById("capa-scroll");
     const resaltadoCode = document.querySelector("#resaltado code");
+    const gutterScroll = document.getElementById("gutter-scroll");
+    const lineaActivaEl = document.getElementById("lineaActiva");
     const ownerEl = document.getElementById("owner");
     const reclamarBtn = document.getElementById("reclamar");
     const propuestasEl = document.getElementById("propuestas");
@@ -1006,11 +1035,34 @@
         currentPath && currentPath.endsWith(".py")
           ? resaltarPy(txt)
           : escHtml(txt);
+      // Gutter: un número por línea (mismo line-height → alineado).
+      const n = txt.split("\n").length;
+      let g = "";
+      for (let i = 1; i <= n; i++) g += i + "\n";
+      gutterScroll.textContent = g;
+      posicionarLineaActiva();
+    }
+    // Banda de la línea donde está el cursor. Reusa LINE_H/PAD_TOP: misma
+    // matemática que los marcadores de presencia.
+    function posicionarLineaActiva() {
+      if (!currentPath || editor.disabled) {
+        lineaActivaEl.style.display = "none";
+        return;
+      }
+      const ln = editor.value.slice(0, editor.selectionStart).split("\n").length;
+      lineaActivaEl.style.display = "block";
+      lineaActivaEl.style.top =
+        (PAD_TOP + (ln - 1) * LINE_H - editor.scrollTop) + "px";
     }
     editor.addEventListener("input", pintarResaltado);
+    for (const ev of ["keyup", "click", "select"]) {
+      editor.addEventListener(ev, posicionarLineaActiva);
+    }
     editor.addEventListener("scroll", () => {
       resaltadoCode.style.transform =
         "translate(" + (-editor.scrollLeft) + "px," + (-editor.scrollTop) + "px)";
+      gutterScroll.style.transform = "translateY(" + (-editor.scrollTop) + "px)";
+      posicionarLineaActiva();
     });
 
     /*
