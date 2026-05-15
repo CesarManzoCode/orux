@@ -63,6 +63,8 @@ Capa 6 (análisis de impacto, Python) COMPLETA y validada end-to-end por el usua
 - Sin modo offline. Estado compartido en tiempo real es la base.
 - Público objetivo inicial: equipos nuevos sin inercia, open source que empieza, founders técnicos 2-3 personas.
 - Decisor de adopción: líder del equipo (CTO, tech lead, founder técnico).
+- **Regla de dependencias** (acordada con el usuario): el "cero deps" fue disciplina de prototipo, no permanente. Una dependencia entra cuando un **usuario real** choca con un cuello de botella concreto que esa dep específica resuelve — por evidencia, no preventivo, idealmente post-validación. La primera prevista: un editor real (CodeMirror) cuando el resaltador casero vanilla toque su techo con gente usándolo. Hasta entonces, vanilla/stdlib.
+- **Pulido de UX (capa de testeabilidad, sin features ni deps)**: árbol de carpetas colapsable (reemplazó la lista plana de rutas), ergonomía de editor (cerrar pares, Tab=4, Enter mantiene sangría) y resaltado de sintaxis Python como overlay `<pre>` detrás del textarea transparente (misma técnica/métricas que el overlay de presencia; no reemplaza el editor → presencia/locks/tentativo intactos). Heurístico, no compilador.
 
 ## Qué falta definir (no decidir todavía sin que el usuario lo pida)
 
