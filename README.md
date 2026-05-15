@@ -6,6 +6,18 @@ Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rá
 
 **Las 8 capas del README están implementadas.** El workspace persistido **es un repositorio git real**: `git clone ~/.laidea/workspace` te da el código, sin formato propietario — la herramienta vive *sobre* Git, no lo reemplaza. El cliente muestra un panel de solo lectura (rama, cambios sin commitear, últimos commits, botón "actualizar"). El commit/push/branch lo hace el dev en su terminal; la tool no se interpone. Alcance mínimo deliberado: no hay commit/push/PRs desde la herramienta (eso necesitaría credenciales git por usuario — otra capa).
 
+## Despliegue (Docker)
+
+El prototipo está empaquetado para correr en un VPS — **sin features nuevas**, solo desplegable y sólido. Caddy es lo único expuesto: sirve el cliente estático, termina TLS automático y proxya el WebSocket; el server Python no publica puertos. El estado (workspace=repo git, usuarios, ownership, secreto) vive en un volumen y sobrevive a recrear los contenedores. Sin base de datos a propósito: para 2–50 personas, JSON + git sobre un volumen persistente es lo correcto y coherente con "un `git clone` basta".
+
+```bash
+cp .env.example .env          # poné tu dominio en LAIDEA_SITE_ADDRESS
+make up                       # build + levanta server + Caddy
+make logs                     # seguir logs   |   make down para apagar
+```
+
+Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local sigue igual: `make dev` + abrir `web/index.html` con Live Server (el cliente detecta dev y usa `ws://localhost:8765`).
+
 ### Capa 7 — identidad real
 
 La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.laidea/` (`users.json`, `ownership.json`, `secret`, `workspace/`).

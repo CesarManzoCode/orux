@@ -475,7 +475,22 @@
      * si no, mostramos el formulario. El token lo emite el server (va firmado
      * con HMAC); reemplaza al token anónimo sin firmar de antes.
      */
-    const ws = new WebSocket("ws://localhost:8765");
+    /*
+     * URL del WebSocket. Tiene que funcionar en DOS mundos sin tocar nada:
+     *  - Dev: el cliente lo sirve Live Server (puerto 5500) o se abre como
+     *    file://, y el server corre aparte en localhost:8765.
+     *  - Deploy: Caddy sirve esta página por https en el dominio real y
+     *    proxya `/ws` al server -> mismo host, wss, ruta /ws.
+     * Antes estaba hardcodeado a ws://localhost:8765, lo que rompía cualquier
+     * despliegue. Esto lo deriva del origen de la página.
+     */
+    const WS_URL = (function () {
+      const dev = location.protocol === "file:" || location.port === "5500";
+      if (dev) return "ws://localhost:8765";
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      return proto + "//" + location.host + "/ws";
+    })();
+    const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
       statusEl.textContent = "conectado"; statusEl.className = "ok";

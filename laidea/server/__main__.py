@@ -76,10 +76,15 @@ def main() -> None:
         secret=_secreto(base),
         git=GitRepo(ws),
     )
+    # Host/puerto por entorno. Default `localhost` para que en una máquina de
+    # dev NO se exponga sola; el contenedor pone LAIDEA_HOST=0.0.0.0 para
+    # escuchar en todas las interfaces (Caddy/Docker lo necesitan).
+    host = os.environ.get("LAIDEA_HOST", "localhost")
+    port = int(os.environ.get("LAIDEA_PORT", "8765"))
     logging.getLogger(__name__).info(
         "estado en %s (workspace=repo git, users, ownership, secret)", base
     )
-    asyncio.run(server.run())
+    asyncio.run(server.run(host=host, port=port))
 
 
 if __name__ == "__main__":

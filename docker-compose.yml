@@ -1,0 +1,38 @@
+# Despliegue real de laidea: el server Python detrás de Caddy.
+#
+# Caddy es lo ÚNICO expuesto a internet (80/443): sirve el cliente estático,
+# termina TLS automático (Let's Encrypt si hay dominio real) y proxya el
+# WebSocket al server. El server `laidea` no publica puertos: solo es
+# alcanzable dentro de la red de compose. El estado vive en un volumen, así
+# sobrevive a recrear los contenedores.
+services:
+  laidea:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "8765"          # solo dentro de la red de compose, no al host
+    volumes:
+      - laidea-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - laidea
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Dominio real -> TLS automático. Sin dominio queda "localhost" (cert
+      # local, el navegador avisa: ok para probar, no para producción real).
+      - LAIDEA_SITE_ADDRESS=${LAIDEA_SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+      - caddy-data:/data       # certificados
+      - caddy-config:/config
+
+volumes:
+  laidea-data:
+  caddy-data:
+  caddy-config:
