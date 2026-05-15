@@ -2,7 +2,11 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 7 — identidad real
+## Estado actual: capa 8 — integración con Git (prototipo completo)
+
+**Las 8 capas del README están implementadas.** El workspace persistido **es un repositorio git real**: `git clone ~/.laidea/workspace` te da el código, sin formato propietario — la herramienta vive *sobre* Git, no lo reemplaza. El cliente muestra un panel de solo lectura (rama, cambios sin commitear, últimos commits, botón "actualizar"). El commit/push/branch lo hace el dev en su terminal; la tool no se interpone. Alcance mínimo deliberado: no hay commit/push/PRs desde la herramienta (eso necesitaría credenciales git por usuario — otra capa).
+
+### Capa 7 — identidad real
 
 La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.laidea/` (`users.json`, `ownership.json`, `secret`, `workspace/`).
 

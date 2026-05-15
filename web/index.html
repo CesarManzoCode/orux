@@ -265,6 +265,36 @@
       font-size: 11px; color: #888; cursor: pointer; text-decoration: underline;
     }
     #salir:hover { color: #e6e6e6; }
+
+    /* Capa 8: panel Git de SOLO LECTURA, al fondo del sidebar (es info
+       global del repo, como la lista de archivos). El commit se hace en la
+       terminal del dev — la tool no se interpone. */
+    #git { margin-top: auto; border-top: 1px solid #2a2a2e; padding-top: 0.75rem; }
+    #git .cab {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #888; margin-bottom: 0.4rem;
+    }
+    #git .cab button {
+      background: #1f1f23; color: #9fc4e4; border: 1px solid #2a2a2e;
+      border-radius: 4px; padding: 0.1rem 0.45rem; font-family: inherit;
+      font-size: 10px; cursor: pointer;
+    }
+    #git .cab button:hover { background: #2a2a2e; }
+    #git .rama { font-size: 12px; color: #e6e6e6; }
+    #git .rama b { color: #8de0a8; }
+    #git .cambios { font-size: 11px; color: #e0c46a; margin: 0.2rem 0; }
+    #git .cambios.limpio { color: #6a8f6a; }
+    #git ol {
+      list-style: none; margin: 0.4rem 0 0; padding: 0;
+      font-size: 11px; color: #888; display: flex; flex-direction: column;
+      gap: 2px; max-height: 120px; overflow: auto;
+    }
+    #git ol li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #git .hint {
+      font-size: 10px; color: #5f6b76; margin-top: 0.5rem; line-height: 1.4;
+    }
+    #git .hint code { color: #9fc4e4; }
   </style>
 </head>
 <body>
@@ -283,7 +313,7 @@
   </div>
 
   <header>
-    <h1>laidea — capa 7: identidad</h1>
+    <h1>laidea — capa 8: git</h1>
     <span id="status">conectando...</span>
     <span id="yo" style="font-size:11px;color:#888;"></span>
     <span id="salir" style="display:none;">salir</span>
@@ -294,6 +324,7 @@
       <h2>archivos</h2>
       <button id="nuevo">+ nuevo archivo</button>
       <ul id="lista"></ul>
+      <div id="git"></div>
     </aside>
     <main>
       <div id="cabecera">
@@ -346,6 +377,7 @@
     const entrarBtn = document.getElementById("entrar");
     const crearBtn = document.getElementById("crear");
     const salirEl = document.getElementById("salir");
+    const gitEl = document.getElementById("git");
 
     function mostrarLogin(err) {
       loginEl.classList.add("on");
@@ -423,6 +455,9 @@
      * un cambio ajeno toca un archivo MÍO.
      */
     const impactos = {};
+
+    // Estado git (capa 8). Última foto que mandó el server (solo lectura).
+    let gitEstado = null;
 
     // Nombre legible de un client_id. Si está presente lo sacamos del roster;
     // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
@@ -566,6 +601,13 @@
         // Clave determinista source::affected: tecleo del autor -> reemplaza.
         impactos[msg.source_path + "::" + msg.affected_path] = msg;
         renderImpactos();
+      }
+
+      if (msg.type === "git_status") {
+        // Capa 8: foto del repo (solo lectura). El server la manda tras el
+        // handshake y cuando pedimos "actualizar".
+        gitEstado = msg;
+        renderGit();
       }
     };
 
@@ -913,6 +955,62 @@
         capaScroll.appendChild(marca);
       }
       capaScroll.style.transform = "translateY(" + (-editor.scrollTop) + "px)";
+    }
+
+    /*
+     * Panel Git (capa 8). SOLO LECTURA: rama, cuántos cambios sin commitear,
+     * últimos commits, y un botón para re-consultar. El commit se hace en la
+     * terminal del dev — la herramienta no se interpone (vive sobre Git, no
+     * lo reemplaza). Si el server no tiene git, el panel no aparece.
+     */
+    function renderGit() {
+      gitEl.innerHTML = "";
+      if (!gitEstado || !gitEstado.available) return;
+
+      const cab = document.createElement("div");
+      cab.className = "cab";
+      const titulo = document.createElement("span");
+      titulo.textContent = "git";
+      const act = document.createElement("button");
+      act.textContent = "actualizar";
+      act.addEventListener("click", () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "git_refresh" }));
+        }
+      });
+      cab.appendChild(titulo);
+      cab.appendChild(act);
+      gitEl.appendChild(cab);
+
+      const rama = document.createElement("div");
+      rama.className = "rama";
+      rama.innerHTML = "rama <b>" + gitEstado.branch + "</b>";
+      gitEl.appendChild(rama);
+
+      const n = gitEstado.changes;
+      const cambios = document.createElement("div");
+      cambios.className = "cambios" + (n === 0 ? " limpio" : "");
+      cambios.textContent = n === 0
+        ? "sin cambios sin commitear"
+        : n + (n === 1 ? " cambio sin commitear" : " cambios sin commitear");
+      gitEl.appendChild(cambios);
+
+      if (gitEstado.commits.length) {
+        const ol = document.createElement("ol");
+        for (const c of gitEstado.commits) {
+          const li = document.createElement("li");
+          li.textContent = c;
+          li.title = c;
+          ol.appendChild(li);
+        }
+        gitEl.appendChild(ol);
+      }
+
+      const hint = document.createElement("div");
+      hint.className = "hint";
+      hint.innerHTML =
+        "el commit se hace en tu terminal:<br><code>cd ~/.laidea/workspace && git add -A && git commit</code>";
+      gitEl.appendChild(hint);
     }
 
     renderLista();
