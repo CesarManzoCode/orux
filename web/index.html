@@ -303,7 +303,21 @@
       return "anónimo-" + cid;
     }
 
-    const ws = new WebSocket("ws://localhost:8765");
+    /*
+     * Identidad estable mínima (sin auth todavía). Guardamos un token
+     * aleatorio en localStorage la primera vez y lo reusamos siempre. Lo
+     * mandamos en la URL del WebSocket: así, cuando la página se recarga
+     * (Live Server, un F5, un crash), el servidor nos reconoce por el token
+     * y nos devuelve la MISMA identidad — y con ella nuestro ownership. Sin
+     * esto, cada recarga era un cliente nuevo y se perdían los dueños.
+     */
+    let token = localStorage.getItem("laidea_token");
+    if (!token) {
+      token = (crypto.randomUUID && crypto.randomUUID()) ||
+        String(Date.now()) + Math.random().toString(16).slice(2);
+      localStorage.setItem("laidea_token", token);
+    }
+    const ws = new WebSocket("ws://localhost:8765/?token=" + encodeURIComponent(token));
 
     ws.onopen = () => { statusEl.textContent = "conectado"; statusEl.className = "ok"; };
     ws.onclose = () => { statusEl.textContent = "desconectado"; statusEl.className = "bad"; editor.disabled = true; };

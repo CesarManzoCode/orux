@@ -36,29 +36,49 @@ PALETA = ["#e0607a", "#5fa8e0", "#8de0a8", "#e0c46a", "#b98de0", "#e09a5f"]
 
 class Roster:
     def __init__(self) -> None:
-        # client_id -> PresenceState. Fuente de verdad de "quién está y dónde".
+        # client_id -> PresenceState. EFÍMERO: es "quién está y dónde *ahora*".
+        # Se crea al conectar y se borra al desconectar (la presencia no
+        # sobrevive a cerrar la pestaña: si no estás, no estás "aquí").
         self._estados: dict[str, PresenceState] = {}
-        # Contador monotónico para asignar identidades. Nunca se reinicia
-        # mientras viva el servidor: si alguien se va y otro entra, el nuevo
-        # NO reutiliza el id del que se fue. Reutilizar ids confundiría a los
-        # clientes que todavía tienen al viejo pintado.
+        # Contador monotónico para repartir client_id. Nunca se reinicia ni
+        # reutiliza: ids viejos confundirían a clientes que aún los tienen
+        # pintados.
         self._contador = 0
+        # IDENTIDAD ESTABLE (mínimo viable, sin auth real). El cliente guarda
+        # un token aleatorio en localStorage y lo manda al conectar. Aquí
+        # mapeamos token -> client_id, y client_id -> (id, name, color) para
+        # poder reconstruir la MISMA identidad cuando recarga la página. Sin
+        # esto, cada reload daba un client_id nuevo y se perdía el ownership.
+        # Ambos diccionarios son persistentes mientras viva el server (la
+        # identidad NO se borra al desconectar, solo la presencia).
+        self._por_token: dict[str, str] = {}
+        self._identidades: dict[str, dict] = {}
 
-    def asignar(self) -> PresenceState:
-        """Crea una identidad anónima nueva para un cliente que acaba de conectar.
+    def asignar(self, token: str | None = None) -> PresenceState:
+        """Da identidad a una conexión y le crea su presencia (sin archivo).
 
-        Devuelve el estado inicial (sin archivo: `path=None`). El servidor se
-        lo manda al cliente dentro del WelcomeMessage como su `you`, y guarda
-        el `client_id` para asociarlo a esa conexión.
+        Con `token`: si ya se vio ese token, se REUSA su identidad (mismo
+        client_id/nombre/color) — así recargar la página no pierde el
+        ownership, que se indexa por client_id. Sin token (o token nuevo): se
+        asigna identidad fresca. La presencia siempre nace limpia (`path=None`):
+        reconectar no te devuelve a donde estabas, eso es estado efímero.
         """
-        self._contador += 1
-        n = self._contador
-        estado = PresenceState(
-            client_id=str(n),
-            name=f"anónimo-{n}",
-            color=PALETA[(n - 1) % len(PALETA)],
-        )
-        self._estados[estado.client_id] = estado
+        if token is not None and token in self._por_token:
+            ident = self._identidades[self._por_token[token]]
+        else:
+            self._contador += 1
+            n = self._contador
+            ident = {
+                "client_id": str(n),
+                "name": f"anónimo-{n}",
+                "color": PALETA[(n - 1) % len(PALETA)],
+            }
+            self._identidades[ident["client_id"]] = ident
+            if token is not None:
+                self._por_token[token] = ident["client_id"]
+
+        estado = PresenceState(**ident)  # path=None, line=1 por defecto
+        self._estados[ident["client_id"]] = estado
         return estado
 
     def presentes(self, excepto: str | None = None) -> list[PresenceState]:

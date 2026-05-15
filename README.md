@@ -10,7 +10,7 @@ Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, e
 
 Un archivo puede tener **dueño** (quien lo crea lo es, sin botón). Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, converge todo el mundo; si rechaza, al autor se le revierte.
 
-Andamiaje del prototipo: identidad anónima por sesión, el ownership se libera al desconectar.
+Andamiaje del prototipo: identidad anónima pero **estable por token** (el cliente guarda un token en `localStorage`; recargar la página conserva tu identidad y tu ownership). No es auth real todavía. Como la identidad sobrevive al reload, el ownership ya no se libera al desconectar.
 
 ### Capa 3 — persistencia
 

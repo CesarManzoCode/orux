@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import parse_qs, urlsplit
 
 from websockets.asyncio.server import ServerConnection, serve
 
@@ -70,6 +71,25 @@ from ..state import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _token_de(websocket: ServerConnection) -> str | None:
+    """Saca el `token` de identidad del query string de la conexión.
+
+    El cliente conecta a `ws://host:port/?token=XXX` (token aleatorio que
+    guarda en localStorage). Lo leemos ANTES de mandar nada, para asignar la
+    identidad estable de entrada. Sin token (cliente viejo, o un test que no lo
+    manda) devolvemos None y el roster cae a identidad anónima fresca.
+
+    Esto es identidad mínima viable, no auth: el token no se valida ni se
+    firma, va en la URL (puede aparecer en logs). Suficiente para que recargar
+    la página no te borre el ownership; la auth real es una capa futura.
+    """
+    req = getattr(websocket, "request", None)
+    if req is None or not getattr(req, "path", None):
+        return None
+    valores = parse_qs(urlsplit(req.path).query).get("token")
+    return valores[0] if valores else None
 
 
 class SyncServer:
@@ -160,9 +180,10 @@ class SyncServer:
         cierra la conexión, el for termina solo y caemos al `finally`.
         """
         self.clients.add(websocket)
-        # El servidor asigna la identidad: el cliente no la elige (ver
-        # state/presence.py). La guardamos atada a esta conexión.
-        yo = self.roster.asignar()
+        # El servidor asigna la identidad: el cliente no elige id/nombre/color,
+        # pero SÍ presenta un token estable (localStorage) para que recargar la
+        # página le devuelva la misma identidad y conserve su ownership.
+        yo = self.roster.asignar(_token_de(websocket))
         self._ids[websocket] = yo.client_id
         self._conns[yo.client_id] = websocket
         logger.info(
@@ -347,17 +368,19 @@ class SyncServer:
         finally:
             self.clients.discard(websocket)
             self._ids.pop(websocket, None)
-            self._conns.pop(yo.client_id, None)
-            # Soltar el ownership de quien se va (ver ownership.py: sin esto el
-            # archivo quedaría en deadlock, nadie podría aplicarle cambios). Si
-            # cambió algo, todos necesitan el mapa nuevo.
-            if self.ownership.release_all(yo.client_id):
-                await self._broadcast(
-                    websocket,
-                    encode(OwnershipMessage(owners=self.ownership.snapshot())),
-                )
-            # Sus propuestas pendientes ya no tienen autor a quien converger.
-            self.proposals.drop_author(yo.client_id)
+            # Solo soltamos el mapa conexión->id si sigue apuntando a ESTA
+            # conexión: en una recarga la conexión nueva puede registrarse
+            # antes de que corra este finally, y no queremos que el cierre de
+            # la vieja borre el registro de la nueva (mismo client_id).
+            if self._conns.get(yo.client_id) is websocket:
+                self._conns.pop(yo.client_id, None)
+            # IDENTIDAD ESTABLE: ya NO se libera el ownership ni se descartan
+            # las propuestas al desconectar. Recargar la página dispara un
+            # disconnect; si soltáramos aquí, al reconectar (mismo token, mismo
+            # client_id) el ownership ya se habría perdido — justo el bug que
+            # esto arregla. Trade-off asumido del prototipo: un dueño que se va
+            # de verdad retiene sus archivos hasta reiniciar el server; la
+            # gestión de ciclo de vida real es la futura capa de auth.
             ultimo = self.roster.quitar(yo.client_id)
             # Solo avisamos si la persona llegó a estar presente en algún
             # archivo. Si nunca abrió nada, nadie la tenía pintada y mandar un

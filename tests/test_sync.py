@@ -41,6 +41,25 @@ async def server_port():
         await ws_server.wait_closed()
 
 
+@pytest_asyncio.fixture
+async def servidor():
+    """Como `server_port` pero cede (SyncServer, puerto).
+
+    Útil cuando el test necesita pre-sembrar el workspace: un archivo con
+    contenido y SIN dueño. Ese estado es real, no artificial: es exactamente
+    lo que hay tras hidratar de disco al arrancar (capa 3), porque el
+    ownership es efímero y no se persiste.
+    """
+    sync_server = SyncServer()
+    ws_server = await serve(sync_server.handle, "localhost", 0)
+    port = ws_server.sockets[0].getsockname()[1]
+    try:
+        yield sync_server, port
+    finally:
+        ws_server.close()
+        await ws_server.wait_closed()
+
+
 async def handshake(ws) -> dict:
     """Consume init + welcome + ownership (handshake completo). Devuelve el welcome.
 
@@ -488,47 +507,79 @@ async def test_solo_el_dueno_puede_resolver(server_port: int) -> None:
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
-async def test_ownership_se_libera_al_desconectar(server_port: int) -> None:
+# --- Identidad estable mínima (token, sin auth) ---
+
+
+async def test_mismo_token_misma_identidad(server_port: int) -> None:
+    # Reconectar con el mismo token devuelve la MISMA identidad: es lo que
+    # hace que recargar la página no pierda el ownership.
+    tok = "tok-estable"
+    async with connect(f"ws://localhost:{server_port}/?token={tok}") as a:
+        w1 = await handshake(a)
+    async with connect(f"ws://localhost:{server_port}/?token={tok}") as a2:
+        w2 = await handshake(a2)
+    assert w2["you"]["client_id"] == w1["you"]["client_id"]
+    assert w2["you"]["name"] == w1["you"]["name"]
+    assert w2["you"]["color"] == w1["you"]["color"]
+
+
+async def test_sin_token_identidad_fresca(server_port: int) -> None:
+    # Sin token (cliente viejo / test) seguimos dando identidad anónima nueva
+    # cada vez: no rompemos el comportamiento previo.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        w1 = await handshake(a)
+    async with connect(f"ws://localhost:{server_port}") as b:
+        w2 = await handshake(b)
+    assert w1["you"]["client_id"] != w2["you"]["client_id"]
+
+
+async def test_ownership_sobrevive_reconexion(server_port: int) -> None:
+    # El fix de fondo: A reclama, "recarga la página" (se desconecta y vuelve
+    # con el mismo token) y SIGUE siendo dueño. Antes el ownership se liberaba
+    # al desconectar y se perdía en el hueco.
+    tok = "tok-dueno"
     async with connect(f"ws://localhost:{server_port}") as b:
         await handshake(b)
-        async with connect(f"ws://localhost:{server_port}") as a:
+        async with connect(f"ws://localhost:{server_port}/?token={tok}") as a:
             wa = await handshake(a)
             await a.send(json.dumps({"type": "claim", "path": "x.py"}))
             await _drenar_ownership(a)
             assert await _drenar_ownership(b) == {
                 "type": "ownership", "owners": {"x.py": wa["you"]["client_id"]},
             }
-        # A se desconectó: su ownership se libera y B recibe el mapa vacío.
-        assert await _drenar_ownership(b) == {"type": "ownership", "owners": {}}
+        # A se desconectó: B NO debe recibir un mapa vacío (ya no se libera).
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+
+        # A vuelve con el mismo token: misma identidad y sigue siendo dueño.
+        async with connect(f"ws://localhost:{server_port}/?token={tok}") as a2:
+            assert json.loads(await a2.recv())["type"] == "init"
+            welcome = json.loads(await a2.recv())
+            assert welcome["you"]["client_id"] == wa["you"]["client_id"]
+            own = json.loads(await a2.recv())
+            assert own == {
+                "type": "ownership", "owners": {"x.py": wa["you"]["client_id"]},
+            }
+            # Prueba fuerte: B (no dueño) edita x.py -> es tentativo y la
+            # propuesta le llega a A2. Solo pasa si A2 sigue siendo el dueño.
+            await b.send(json.dumps({"type": "update", "path": "x.py", "content": "B intenta"}))
+            prop = await recv_tipo(a2, "proposal")
+            assert prop["proposal"]["path"] == "x.py"
+            assert prop["proposal"]["content"] == "B intenta"
 
 
 # --- Capa 5: prevención de colisiones por línea ---
 
 
-async def _archivo_sin_dueno(port: str):
-    """Crea 'shared.py' con contenido y lo deja SIN dueño.
-
-    Truco: el creador se vuelve dueño (capa 4), pero al desconectarse se libera
-    el ownership y el contenido queda en el workspace. Así obtenemos un archivo
-    con contenido y sin dueño, que es el escenario donde aplica el lock.
-    """
-    async with connect(f"ws://localhost:{port}") as creador:
-        await handshake(creador)
-        await creador.send(
-            json.dumps({"type": "update", "path": "shared.py", "content": "l1\nl2\nl3"})
-        )
-        await asyncio.sleep(0.05)  # que aplique y auto-reclame
-    await asyncio.sleep(0.05)  # que el desconectar libere el ownership
-
-
-async def test_no_puedes_pisar_la_linea_de_otro(server_port: int) -> None:
-    await _archivo_sin_dueno(server_port)
-    async with connect(f"ws://localhost:{server_port}") as b, connect(
-        f"ws://localhost:{server_port}"
+async def test_no_puedes_pisar_la_linea_de_otro(servidor) -> None:
+    srv, port = servidor
+    # Archivo con contenido y SIN dueño: el estado real tras hidratar de disco.
+    srv.workspace.update("shared.py", "l1\nl2\nl3")
+    async with connect(f"ws://localhost:{port}") as b, connect(
+        f"ws://localhost:{port}"
     ) as c:
-        wb = await handshake(b)
+        await handshake(b)
         await handshake(c)
-        assert wb["you"]  # b conectado
 
         # B se para en la línea 2 de shared.py.
         await b.send(json.dumps({"type": "presence", "path": "shared.py", "line": 2}))
@@ -546,16 +597,17 @@ async def test_no_puedes_pisar_la_linea_de_otro(server_port: int) -> None:
             await asyncio.wait_for(b.recv(), timeout=0.3)
 
         # El workspace no cambió: un cliente nuevo ve el contenido original.
-        async with connect(f"ws://localhost:{server_port}") as d:
+        async with connect(f"ws://localhost:{port}") as d:
             assert json.loads(await d.recv()) == {
                 "type": "init", "files": {"shared.py": "l1\nl2\nl3"},
             }
 
 
-async def test_editar_otra_linea_si_se_aplica(server_port: int) -> None:
-    await _archivo_sin_dueno(server_port)
-    async with connect(f"ws://localhost:{server_port}") as b, connect(
-        f"ws://localhost:{server_port}"
+async def test_editar_otra_linea_si_se_aplica(servidor) -> None:
+    srv, port = servidor
+    srv.workspace.update("shared.py", "l1\nl2\nl3")
+    async with connect(f"ws://localhost:{port}") as b, connect(
+        f"ws://localhost:{port}"
     ) as c:
         await handshake(b)
         await handshake(c)
