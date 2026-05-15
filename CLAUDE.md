@@ -24,10 +24,14 @@ Fase muy temprana. La idea completa vive en `README.md`. Existe ya la **capa 1**
 - `laidea/state/` — `Document` (un archivo, todavía un string), `Workspace` (mapa de path → Document).
 - `laidea/server/` — `SyncServer` aplica updates al workspace y retransmite a otros clientes (no eco al emisor).
 - `web/index.html` — cliente con sidebar de archivos + botón "+ nuevo" + textarea.
-- `tests/` — 13 tests con `pytest` y `pytest-asyncio`. Validan protocolo, workspace e integración multi-archivo.
+- `tests/` — 14 tests con `pytest` y `pytest-asyncio`. Validan protocolo, workspace e integración multi-archivo. Incluye contrato de que el servidor SIEMPRE incluye `path` en broadcasts.
 - `pyproject.toml` — `pip install -e ".[dev]"`. Server: `python -m laidea.server` o `laidea-server`.
 
-Capas pendientes (en orden): presencia (cursores de otros), persistencia, CRDT real, ownership, análisis semántico, integración Git.
+Capas pendientes (en orden): **presencia (cursores de otros) es la siguiente**, después persistencia, CRDT real, ownership, análisis semántico, integración Git.
+
+## Trampas operativas ya vistas
+
+- **Servidor zombi en puerto 8765.** Al cambiar el protocolo, si un servidor de versión anterior sigue corriendo, los clientes nuevos hablan con él y aparecen archivos fantasma llamados "undefined" en la UI. Antes de debuggear lógica, verificar siempre: `ps aux | grep python | grep -v grep` y `lsof -i:8765`. El comando correcto para arrancar el server actual es `python -m laidea.server`, no `python server.py` (ese archivo ya no existe).
 
 ## Principios para colaborar en este proyecto
 
@@ -49,11 +53,11 @@ Capas pendientes (en orden): presencia (cursores de otros), persistencia, CRDT r
 
 ## Qué falta definir (no decidir todavía sin que el usuario lo pida)
 
-- Stack técnico.
-- Solución para el estado compartido en tiempo real (investigar CRDTs, OT, Yjs, ShareDB cuando toque).
-- Primer lenguaje a soportar para análisis semántico (probablemente TypeScript).
+- Solución de CRDT (probable: `y-py`, los bindings de Python a Yrs). Se decide cuando lleguemos a la capa de CRDT real, no antes.
+- Primer lenguaje a soportar para análisis semántico (probable: TypeScript).
 - Modelo de negocio y pricing.
 - Nombre real del producto.
+- Cómo manejar autenticación / identidad de usuarios (necesario antes de presencia con nombre real, no antes de presencia anónima).
 
 ## Cómo se debe sentir el producto
 
