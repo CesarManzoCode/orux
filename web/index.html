@@ -1095,16 +1095,23 @@
     function pintarResaltado() {
       const txt = editor.value;
       const lang = langDe(currentPath);
-      if (window.Prism && lang && Prism.languages[lang]) {
-        // Prism solo tokeniza; los colores los pone nuestro CSS .token.*
-        resaltadoCode.innerHTML = Prism.highlight(txt, Prism.languages[lang], lang);
-      } else if (currentPath && currentPath.endsWith(".py")) {
-        // Sin Prism (no subido aún / lenguaje sin gramática): fallback al
-        // resaltador vanilla de antes. Degradación elegante, no se rompe.
-        resaltadoCode.innerHTML = resaltarPy(txt);
-      } else {
-        resaltadoCode.innerHTML = escHtml(txt);
+      // try/catch BLINDADO: un highlighter roto (gramática incompleta, bug de
+      // Prism, lo que sea) NUNCA puede tirar una excepción que aborte
+      // seleccionar() y deje el editor/sidebar/gutter desincronizados (era
+      // EXACTAMENTE el bug del .ts). Si algo falla -> texto plano escapado.
+      let html;
+      try {
+        if (window.Prism && lang && Prism.languages[lang]) {
+          html = Prism.highlight(txt, Prism.languages[lang], lang);
+        } else if (currentPath && currentPath.endsWith(".py")) {
+          html = resaltarPy(txt);   // fallback vanilla si no hay Prism
+        } else {
+          html = escHtml(txt);
+        }
+      } catch (e) {
+        html = escHtml(txt);        // degradación: plano, pero NO se rompe
       }
+      resaltadoCode.innerHTML = html;
       // Gutter: un número por línea (mismo line-height → alineado).
       const n = txt.split("\n").length;
       let g = "";
