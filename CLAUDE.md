@@ -18,18 +18,18 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 ## Estado actual
 
-Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 1 y 2** implementadas como paquete Python instalable:
+Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 1, 2 y 3** implementadas como paquete Python instalable:
 
 - `laidea/protocol/` — capa 1: `InitMessage(files)`, `UpdateMessage(path, content)`. Capa 2: `WelcomeMessage(you, peers)`, `PresenceMessage(client_id, name, color, path, line)`, `LeaveMessage(client_id)`, más el tipo de estado `PresenceState`. Encode/decode con `asdict`.
-- `laidea/state/` — `Document` (un archivo, todavía un string), `Workspace` (mapa path → Document), `Roster` (presencia: client_id → PresenceState; el server asigna identidad anónima, el cliente no la elige).
-- `laidea/server/` — `SyncServer` aplica updates al workspace y retransmite (no eco al emisor). Al conectar manda `init` y luego `welcome`. Retransmite presencia fusionando la identidad confiable; avisa con `leave` al desconectar (solo si el cliente llegó a estar presente en algún archivo).
+- `laidea/state/` — `Document` (un archivo, todavía un string), `Workspace` (mapa path → Document; acepta storage opcional), `Roster` (presencia: client_id → PresenceState; el server asigna identidad anónima, el cliente no la elige), `DiskStorage` (capa 3: carga/guarda el workspace en un directorio; valida paths contra traversal).
+- `laidea/server/` — `SyncServer(storage=None)` aplica updates al workspace y retransmite (no eco al emisor). Al conectar manda `init` y luego `welcome`. Retransmite presencia fusionando la identidad confiable; avisa con `leave` al desconectar (solo si el cliente llegó a estar presente en algún archivo). `__main__` cablea un `DiskStorage` real (`workspace_data/` o env `LAIDEA_DATA`); los tests pasan `storage=None` y arrancan en memoria, aislados.
 - `web/index.html` — cliente con sidebar (badges de color por archivo), cabecera "quién está aquí", y marcas de línea de cada peer sobre el textarea. El textarea usa `white-space: pre` y `line-height` en px fijos (22) para alinear línea↔pixel; `LINE_H`/`PAD_TOP` en el JS deben coincidir con el CSS.
-- `tests/` — 26 tests con `pytest` y `pytest-asyncio`. Contratos clave intactos: `init` sigue siendo el primer mensaje, broadcasts de update SIEMPRE incluyen `path`. El helper `handshake()` en `test_sync.py` consume `init`+`welcome`.
+- `tests/` — 42 tests con `pytest` y `pytest-asyncio`. Contratos clave intactos: `init` sigue siendo el primer mensaje, broadcasts de update SIEMPRE incluyen `path`. El helper `handshake()` en `test_sync.py` consume `init`+`welcome`. Storage usa `tmp_path` para aislamiento.
 - `pyproject.toml` — `pip install -e ".[dev]"`. Server: `python -m laidea.server` o `laidea-server`.
 
-Presencia es por archivo + número de línea (decisión deliberada, no posición de caracter). Estar conectado ≠ estar presente: un cliente sin archivo abierto no se difunde ni aparece en ningún roster.
+Presencia es por archivo + número de línea (decisión deliberada, no posición de caracter). Estar conectado ≠ estar presente: un cliente sin archivo abierto no se difunde ni aparece en ningún roster. Persistencia: memoria primero, disco después; persistir nunca propaga excepción (un path inseguro se loguea y el tiempo real sigue). El cliente web NO cambió en capa 3 (el protocolo es el mismo).
 
-Capas pendientes (en orden): **persistencia es la siguiente**, después CRDT real, ownership, análisis semántico, notificaciones a owners, integración Git.
+Capas pendientes (en orden): **CRDT real es la siguiente** (probablemente `y-py`; reemplaza last-write-wins y necesita persistir su propio estado, por eso fue después de capa 3), después ownership, análisis semántico, notificaciones a owners, integración Git.
 
 ## Trampas operativas ya vistas
 

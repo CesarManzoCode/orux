@@ -41,16 +41,22 @@ from ..protocol import (
     decode,
     encode,
 )
-from ..state import Roster, Workspace
+from ..state import DiskStorage, Roster, Workspace
 
 logger = logging.getLogger(__name__)
 
 
 class SyncServer:
-    def __init__(self) -> None:
+    def __init__(self, storage: DiskStorage | None = None) -> None:
         # El workspace es el estado central. Todo lo demás (clientes, retransmisión)
         # gira alrededor de mantenerlo coherente entre todos los conectados.
-        self.workspace = Workspace()
+        #
+        # `storage` es inyectado (capa 3): el server real (__main__) pasa un
+        # DiskStorage y el workspace se hidrata desde disco; los tests no pasan
+        # nada y arrancan en memoria, vacíos y aislados entre sí — ese
+        # aislamiento es un contrato que la suite necesita para no contaminarse.
+        self.workspace = Workspace(storage=storage)
+        self.workspace.cargar_de_disco()
         # Set de conexiones activas. Lo usamos para difundir cambios a todos
         # menos al emisor original.
         self.clients: set[ServerConnection] = set()

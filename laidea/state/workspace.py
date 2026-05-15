@@ -14,14 +14,26 @@ de coordinación.
 
 from __future__ import annotations
 
+import logging
+
 from .document import Document
+from .storage import DiskStorage
+
+logger = logging.getLogger(__name__)
 
 
 class Workspace:
-    def __init__(self) -> None:
+    def __init__(self, storage: DiskStorage | None = None) -> None:
         # Diccionario interno: path (string) -> Document. Es la fuente de verdad
         # del servidor sobre qué archivos existen y qué contienen.
         self._documents: dict[str, Document] = {}
+        # Persistencia opcional (capa 3). Si es None, el workspace es puramente
+        # en memoria — exactamente el comportamiento de capas 1 y 2, y lo que
+        # usan los tests para arrancar siempre desde cero. Si hay storage, cada
+        # update se escribe a disco y el estado sobrevive a reiniciar el server.
+        # La memoria sigue siendo la fuente de verdad en caliente; el disco es
+        # su respaldo, no un intermediario en el hot path de retransmisión.
+        self._storage = storage
 
     def snapshot(self) -> dict[str, str]:
         """Foto del workspace completo: path -> contenido.
@@ -52,5 +64,28 @@ class Workspace:
         Crea el archivo si no existía. Cuando llegue el CRDT real, este método
         es donde la operación se aplicará al estado del archivo (no como
         sobrescritura completa sino como una operación incremental).
+
+        Orden importante: PRIMERO memoria, DESPUÉS disco. Si persistir falla
+        (path inseguro mandado por un cliente, disco lleno, permisos), la
+        memoria ya quedó coherente y la retransmisión a los demás clientes
+        sigue funcionando. Persistir nunca debe poder tumbar el tiempo real:
+        por eso atrapamos y logueamos en vez de propagar.
         """
         self.get_or_create(path).update(content)
+        if self._storage is not None:
+            try:
+                self._storage.guardar(path, content)
+            except Exception:
+                logger.exception("no se pudo persistir %r (sigo en memoria)", path)
+
+    def cargar_de_disco(self) -> None:
+        """Reconstruye el workspace desde el storage. Se llama una vez, al arrancar.
+
+        No re-persiste lo que lee (sería redundante: ya está en disco). Sin
+        storage configurado no hace nada, así un `Workspace()` en memoria
+        —el de los tests— se comporta igual que siempre.
+        """
+        if self._storage is None:
+            return
+        for path, content in self._storage.cargar().items():
+            self._documents[path] = Document(content)

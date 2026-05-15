@@ -2,9 +2,13 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 2 — presencia
+## Estado actual: capa 3 — persistencia
 
-Sobre la sincronización de capa 1, ahora cada quien ve **dónde está trabajando el resto**. Al conectar, el servidor asigna una identidad anónima (color + nombre tipo `anónimo-3`; sin login todavía). El sidebar muestra con puntos de color quién tiene abierto cada archivo, y dentro del archivo abierto se ve, sobre la línea exacta, en qué línea está escribiendo cada persona. Cuando alguien se desconecta, su marcador desaparece.
+El workspace ya **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`workspace_data/` por defecto, o `LAIDEA_DATA`); cada edición se escribe ahí. Antes, reiniciar el proceso borraba todo. Sin historial ni versiones todavía (eso es capa futura). Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
+
+### Capa 2 — presencia
+
+Cada quien ve **dónde está trabajando el resto**. Al conectar, el servidor asigna una identidad anónima (color + nombre tipo `anónimo-3`; sin login todavía). El sidebar muestra con puntos de color quién tiene abierto cada archivo, y dentro del archivo abierto se ve, sobre la línea exacta, en qué línea está escribiendo cada persona. Cuando alguien se desconecta, su marcador desaparece.
 
 Presencia por archivo + número de línea (no posición de caracter): es lo que responde "¿alguien ya está tocando esto?" sin la fragilidad de superponer cursores sobre un `<textarea>`.
 
@@ -30,7 +34,7 @@ pytest
 ### Estructura
 
 - `laidea/protocol/` — mensajes que viajan por WebSocket (InitMessage, UpdateMessage, WelcomeMessage, PresenceMessage, LeaveMessage).
-- `laidea/state/` — modelo del estado: `Document` (un archivo), `Workspace` (muchos archivos) y `Roster` (quién está y dónde).
+- `laidea/state/` — modelo del estado: `Document` (un archivo), `Workspace` (muchos archivos), `Roster` (quién está y dónde) y `DiskStorage` (persistencia en disco).
 - `laidea/server/` — servidor WebSocket de sincronización.
 - `web/` — cliente HTML con árbol de archivos + textarea.
 - `tests/` — tests de protocolo, estado e integración.

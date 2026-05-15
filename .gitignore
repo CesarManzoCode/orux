@@ -10,3 +10,6 @@ venv/
 .vscode/
 *.swp
 .DS_Store
+
+# Estado de ejecución del workspace persistido (capa 3). Es datos, no código.
+workspace_data/

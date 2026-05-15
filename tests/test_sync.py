@@ -24,6 +24,7 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
 from laidea.server.sync import SyncServer
+from laidea.state import DiskStorage
 
 
 @pytest_asyncio.fixture
@@ -247,6 +248,41 @@ async def test_leave_broadcast_on_disconnect(server_port: int) -> None:
         msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
         assert msg == {"type": "leave", "client_id": wa["you"]["client_id"]}
         assert wb  # (b siguió conectado todo el tiempo)
+
+
+# --- Capa 3: persistencia end-to-end ---
+
+
+async def test_server_reiniciado_sirve_lo_persistido(tmp_path) -> None:
+    # El ciclo completo que justifica la capa 3: un server con storage recibe
+    # una edición, "se reinicia" (server nuevo sobre la misma carpeta) y un
+    # cliente que conecta ve el archivo ya en su init, sin que nadie lo reenvíe.
+    storage_a = DiskStorage(tmp_path)
+    srv_a = SyncServer(storage=storage_a)
+    ws_a = await serve(srv_a.handle, "localhost", 0)
+    port_a = ws_a.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port_a}") as c:
+            await handshake(c)
+            await c.send(
+                json.dumps({"type": "update", "path": "main.py", "content": "x = 1"})
+            )
+            await asyncio.sleep(0.05)  # dar tiempo a persistir
+    finally:
+        ws_a.close()
+        await ws_a.wait_closed()
+
+    # Server nuevo, mismo directorio: simula reinicio del proceso.
+    srv_b = SyncServer(storage=DiskStorage(tmp_path))
+    ws_b = await serve(srv_b.handle, "localhost", 0)
+    port_b = ws_b.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port_b}") as c:
+            init = json.loads(await c.recv())
+            assert init == {"type": "init", "files": {"main.py": "x = 1"}}
+    finally:
+        ws_b.close()
+        await ws_b.wait_closed()
 
 
 async def test_no_leave_if_never_present(server_port: int) -> None:
