@@ -268,6 +268,42 @@
     .tk-bi  { color: #6cb6ff; }      /* builtins */
     .tk-dec { color: #56d98a; }      /* decoradores */
 
+    /* Colores para los tokens de Prism (capa 11). NO usamos el theme de
+       Prism: solo sus clases .token.*, con NUESTRA paleta. El <pre>#resaltado
+       conserva su font/line-height/padding (contrato con presencia). */
+    #resaltado .token.comment,
+    #resaltado .token.prolog,
+    #resaltado .token.doctype,
+    #resaltado .token.cdata { color: var(--faint); font-style: italic; }
+    #resaltado .token.punctuation { color: var(--muted); }
+    #resaltado .token.keyword,
+    #resaltado .token.boolean,
+    #resaltado .token.important,
+    #resaltado .token.atrule { color: #c98bdb; }
+    #resaltado .token.string,
+    #resaltado .token.char,
+    #resaltado .token.attr-value,
+    #resaltado .token.regex { color: #e3b341; }
+    #resaltado .token.number,
+    #resaltado .token.unit { color: #e0905f; }
+    #resaltado .token.function,
+    #resaltado .token.class-name,
+    #resaltado .token.maybe-class-name { color: #4cc38a; }
+    #resaltado .token.builtin,
+    #resaltado .token.tag,
+    #resaltado .token.selector,
+    #resaltado .token.attr-name,
+    #resaltado .token.property,
+    #resaltado .token.constant,
+    #resaltado .token.symbol { color: #6cb6ff; }
+    #resaltado .token.operator,
+    #resaltado .token.entity,
+    #resaltado .token.url { color: var(--text); }
+    #resaltado .token.decorator,
+    #resaltado .token.namespace { color: #56d98a; }
+    #resaltado .token.deleted { color: var(--bad); }
+    #resaltado .token.inserted { color: var(--ok); }
+
     /* Gutter de números de línea: columna fija a la izquierda, misma métrica
        que el textarea (PAD_TOP=20, LINE_H=22) para que el número N quede
        frente a la línea N. z-index 3 = tapa limpio el tinte de presencia en
@@ -496,6 +532,17 @@
     #git .remacc .no { color: var(--bad); }
     #git .remacc .no:hover { background: var(--bad-bg); }
   </style>
+  <!--
+    Capa 11: primera dependencia real (Prism.js), por el gatillo acordado: un
+    usuario real (devs de TypeScript) chocó con el resaltado mono-lenguaje.
+    Se vendoriza en web/vendor/prism.js (lo sirve Caddy). Si el archivo no
+    está, window.Prism queda undefined y el cliente cae al resaltador vanilla
+    de antes (degradación elegante: NO se rompe nada sin el archivo). NO se
+    carga el theme de Prism a propósito: los colores los pone NUESTRO CSS
+    sobre las clases .token.* — así Prism solo tokeniza y la métrica del
+    editor (line-height/padding, contrato de presencia) queda intacta.
+  -->
+  <script src="vendor/prism.js"></script>
 </head>
 <body>
   <div id="login">
@@ -1029,12 +1076,35 @@
       out += escHtml(src.slice(last));
       return out;
     }
+    // Extensión -> lenguaje de Prism. Lo común en los stacks reales.
+    const _LANG = {
+      ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
+      mjs: "javascript", cjs: "javascript", py: "python", json: "json",
+      css: "css", scss: "css", html: "markup", htm: "markup", xml: "markup",
+      svg: "markup", vue: "markup", md: "markdown", markdown: "markdown",
+      sh: "bash", bash: "bash", yml: "yaml", yaml: "yaml", toml: "yaml",
+      sql: "sql", java: "java", go: "go", rs: "rust", rb: "ruby",
+      c: "c", h: "c", cpp: "cpp", cc: "cpp", hpp: "cpp", cs: "csharp",
+      php: "php", kt: "kotlin", swift: "swift",
+    };
+    function langDe(path) {
+      const i = path && path.lastIndexOf(".");
+      if (!path || i < 0) return null;
+      return _LANG[path.slice(i + 1).toLowerCase()] || null;
+    }
     function pintarResaltado() {
       const txt = editor.value;
-      resaltadoCode.innerHTML =
-        currentPath && currentPath.endsWith(".py")
-          ? resaltarPy(txt)
-          : escHtml(txt);
+      const lang = langDe(currentPath);
+      if (window.Prism && lang && Prism.languages[lang]) {
+        // Prism solo tokeniza; los colores los pone nuestro CSS .token.*
+        resaltadoCode.innerHTML = Prism.highlight(txt, Prism.languages[lang], lang);
+      } else if (currentPath && currentPath.endsWith(".py")) {
+        // Sin Prism (no subido aún / lenguaje sin gramática): fallback al
+        // resaltador vanilla de antes. Degradación elegante, no se rompe.
+        resaltadoCode.innerHTML = resaltarPy(txt);
+      } else {
+        resaltadoCode.innerHTML = escHtml(txt);
+      }
       // Gutter: un número por línea (mismo line-height → alineado).
       const n = txt.split("\n").length;
       let g = "";
