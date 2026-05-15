@@ -134,6 +134,17 @@
       background: var(--accent-weak); color: var(--text);
       box-shadow: inset 2px 0 0 var(--accent);
     }
+    /* Árbol de carpetas (capa de pulido). dir = carpeta colapsable. */
+    #lista li.dir { justify-content: flex-start; gap: 0.3rem; color: var(--text); }
+    #lista li.dir .car {
+      width: 0.8em; flex-shrink: 0; color: var(--faint); font-size: 10px;
+    }
+    #lista li.dir .dnombre { font-weight: 600; }
+    #lista li.file .fnombre,
+    #lista li.dir .dnombre {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #lista li.file .fnombre { flex: 1; }
     #lista li.vacio { color: var(--faint); cursor: default; font-style: italic; }
     #lista li.vacio:hover { background: transparent; color: var(--faint); }
     .badges { display: flex; gap: 3px; flex-shrink: 0; }
@@ -848,6 +859,69 @@
     });
 
     /*
+     * Ergonomía de editor de verdad (pulido, sin dependencias): cerrar pares,
+     * sobre-escribir el cierre, borrar el par vacío, Tab = 4 espacios, y Enter
+     * que conserva la sangría (y agrega una más tras `:` o un `(` abierto).
+     * Tras mutar el textarea a mano disparamos `input`: así corren los mismos
+     * listeners de siempre (mandar update, presencia, resaltado) sin duplicar
+     * lógica ni romper nada.
+     */
+    const PARES = { "(": ")", "[": "]", "{": "}", '"': '"', "'": "'", "`": "`" };
+    const CIERRES = new Set([")", "]", "}", '"', "'", "`"]);
+
+    function _muta(nuevo, caret) {
+      editor.value = nuevo;
+      editor.selectionStart = editor.selectionEnd = caret;
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    editor.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const v = editor.value;
+      const a = editor.selectionStart, b = editor.selectionEnd;
+      const k = e.key;
+
+      if (k in PARES) {
+        e.preventDefault();
+        const cierre = PARES[k];
+        if (a !== b) {                       // hay selección -> envolverla
+          _muta(v.slice(0, a) + k + v.slice(a, b) + cierre + v.slice(b), b + 2);
+        } else {
+          _muta(v.slice(0, a) + k + cierre + v.slice(a), a + 1);
+        }
+        return;
+      }
+      if (CIERRES.has(k) && a === b && v[a] === k) {
+        // Ya hay un cierre ahí (lo puso el auto-par): pasar por encima.
+        e.preventDefault();
+        editor.selectionStart = editor.selectionEnd = a + 1;
+        return;
+      }
+      if (k === "Backspace" && a === b && a > 0 &&
+          PARES[v[a - 1]] === v[a]) {
+        e.preventDefault();
+        _muta(v.slice(0, a - 1) + v.slice(a + 1), a - 1);
+        return;
+      }
+      if (k === "Tab") {
+        e.preventDefault();
+        _muta(v.slice(0, a) + "    " + v.slice(b), a + 4);
+        return;
+      }
+      if (k === "Enter") {
+        e.preventDefault();
+        const iniLinea = v.lastIndexOf("\n", a - 1) + 1;
+        const sangria = (v.slice(iniLinea, a).match(/^[ \t]*/) || [""])[0];
+        const previo = v[a - 1];
+        const extra = (previo === ":" || previo === "(" ||
+                       previo === "[" || previo === "{") ? "    " : "";
+        _muta(v.slice(0, a) + "\n" + sangria + extra + v.slice(b),
+              a + 1 + sangria.length + extra.length);
+        return;
+      }
+    });
+
+    /*
      * Cuando el usuario edita el textarea, mandamos un UpdateMessage al servidor.
      * La bandera `applyingRemote` evita el caso: servidor manda update -> nosotros
      * cambiamos `editor.value` -> dispara evento `input` -> mandaríamos de vuelta
@@ -1076,9 +1150,28 @@
       return m ? m[1] : name.slice(0, 2);
     }
 
+    // Carpetas expandidas (se recuerda entre re-renders). Además, los
+    // ancestros del archivo abierto se expanden solos para que se vea.
+    const carpetasAbiertas = new Set();
+
+    function _arbol(paths) {
+      // Convierte ["a/b.py","a/c.py","x.py"] en un árbol anidado.
+      const raiz = { dirs: {}, files: [] };
+      for (const p of paths) {
+        const partes = p.split("/");
+        let nodo = raiz;
+        for (let i = 0; i < partes.length - 1; i++) {
+          nodo.dirs[partes[i]] = nodo.dirs[partes[i]] || { dirs: {}, files: [] };
+          nodo = nodo.dirs[partes[i]];
+        }
+        nodo.files.push({ nombre: partes[partes.length - 1], path: p });
+      }
+      return raiz;
+    }
+
     function renderLista() {
       lista.innerHTML = "";
-      const paths = Object.keys(files).sort();
+      const paths = Object.keys(files);
       if (paths.length === 0) {
         const vacio = document.createElement("li");
         vacio.textContent = "— sin archivos —";
@@ -1086,49 +1179,84 @@
         lista.appendChild(vacio);
         return;
       }
-      for (const path of paths) {
-        const li = document.createElement("li");
-        if (path === currentPath) li.className = "activo";
-
-        const nombre = document.createElement("span");
-        nombre.textContent = path;
-        li.appendChild(nombre);
-
-        // Puntos de los peers que tienen ESTE archivo abierto. Es la señal
-        // directa al dolor "no sabía que alguien ya estaba tocando eso".
-        const badges = document.createElement("span");
-        badges.className = "badges";
-        for (const p of Object.values(peers)) {
-          if (p.path !== path) continue;
-          const b = document.createElement("span");
-          b.className = "badge";
-          b.style.background = p.color;
-          b.textContent = inicial(p.name);
-          b.title = p.name + " · línea " + p.line;
-          badges.appendChild(b);
+      // El archivo abierto siempre visible: abrimos sus carpetas padre.
+      const ancestros = new Set();
+      if (currentPath) {
+        const partes = currentPath.split("/");
+        for (let i = 1; i < partes.length; i++) {
+          ancestros.add(partes.slice(0, i).join("/"));
         }
-        const der = document.createElement("span");
-        der.className = "der";
-        der.appendChild(badges);
-        // Eliminar archivo (capa 9). El server decide si te deja (dueño, o
-        // cualquiera si no tiene dueño); acá solo pedimos confirmación.
-        const x = document.createElement("button");
-        x.className = "del-x";
-        x.textContent = "✕";
-        x.title = "eliminar " + path;
-        x.addEventListener("click", (e) => {
-          e.stopPropagation();  // no seleccionar el archivo al borrarlo
-          if (ws.readyState !== WebSocket.OPEN) return;
-          if (confirm("¿Eliminar " + path + "? No se puede deshacer.")) {
-            ws.send(JSON.stringify({ type: "delete", path }));
-          }
-        });
-        der.appendChild(x);
-        li.appendChild(der);
-
-        li.addEventListener("click", () => seleccionar(path));
-        lista.appendChild(li);
       }
+
+      const pintar = (nodo, prefijo, depth) => {
+        for (const nombre of Object.keys(nodo.dirs).sort()) {
+          const ruta = prefijo ? prefijo + "/" + nombre : nombre;
+          const abierta = carpetasAbiertas.has(ruta) || ancestros.has(ruta);
+          const li = document.createElement("li");
+          li.className = "dir";
+          li.style.paddingLeft = (depth * 14 + 8) + "px";
+          const car = document.createElement("span");
+          car.className = "car";
+          car.textContent = abierta ? "▾" : "▸";
+          const nm = document.createElement("span");
+          nm.className = "dnombre";
+          nm.textContent = nombre;
+          li.appendChild(car);
+          li.appendChild(nm);
+          li.addEventListener("click", () => {
+            if (carpetasAbiertas.has(ruta) || ancestros.has(ruta)) {
+              carpetasAbiertas.delete(ruta);
+            } else {
+              carpetasAbiertas.add(ruta);
+            }
+            renderLista();
+          });
+          lista.appendChild(li);
+          if (abierta) pintar(nodo.dirs[nombre], ruta, depth + 1);
+        }
+        for (const f of nodo.files.sort((a, b) => a.nombre.localeCompare(b.nombre))) {
+          const li = document.createElement("li");
+          li.className = "file";
+          if (f.path === currentPath) li.classList.add("activo");
+          li.style.paddingLeft = (depth * 14 + 22) + "px";
+
+          const nombre = document.createElement("span");
+          nombre.className = "fnombre";
+          nombre.textContent = f.nombre;
+          li.appendChild(nombre);
+
+          const badges = document.createElement("span");
+          badges.className = "badges";
+          for (const p of Object.values(peers)) {
+            if (p.path !== f.path) continue;
+            const b = document.createElement("span");
+            b.className = "badge";
+            b.style.background = p.color;
+            b.textContent = inicial(p.name);
+            b.title = p.name + " · línea " + p.line;
+            badges.appendChild(b);
+          }
+          const der = document.createElement("span");
+          der.className = "der";
+          der.appendChild(badges);
+          const x = document.createElement("button");
+          x.className = "del-x";
+          x.textContent = "✕";
+          x.title = "eliminar " + f.path;
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (ws.readyState !== WebSocket.OPEN) return;
+            if (confirm("¿Eliminar " + f.path + "? No se puede deshacer.")) {
+              ws.send(JSON.stringify({ type: "delete", path: f.path }));
+            }
+          });
+          der.appendChild(x);
+          li.appendChild(der);
+          li.addEventListener("click", () => seleccionar(f.path));
+          lista.appendChild(li);
+        }
+      };
+      pintar(_arbol(paths), "", 0);
     }
 
     /*
