@@ -761,6 +761,39 @@ async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
         }
 
 
+async def test_impacto_tambien_en_typescript(server_port: int) -> None:
+    # Capa 11: el mismo flujo de impacto, ahora para TS. Sin cambios de
+    # server (impacto despacha por extensión): es el diferenciador
+    # funcionando para devs de TypeScript, que era el choque real.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        wa = await handshake(a)
+        await handshake(b)
+        await a.send(json.dumps({"type": "update", "path": "models.ts",
+                                 "content": "export class Usuario {}\n"}))
+        await recv_tipo(b, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+        await b.send(json.dumps({"type": "update", "path": "auth.ts",
+                                 "content": "import { Usuario } from './models'\n"
+                                            "const u = new Usuario()\n"}))
+        await recv_tipo(a, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+
+        await a.send(json.dumps({"type": "update", "path": "models.ts",
+                                 "content": "export class Usuario { activo = true }\n"}))
+        aviso = await recv_tipo(b, "impact")
+        assert aviso == {
+            "type": "impact",
+            "source_path": "models.ts",
+            "author_name": wa["you"]["name"],
+            "affected_path": "auth.ts",
+            "symbols": ["Usuario"],
+        }
+
+
 async def test_no_avisa_si_el_codigo_no_parsea(server_port: int) -> None:
     async with connect(f"ws://localhost:{server_port}") as a, connect(
         f"ws://localhost:{server_port}"
