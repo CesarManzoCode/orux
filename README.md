@@ -2,9 +2,13 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 5 — prevención de colisiones
+## Estado actual: capa 6 — análisis semántico de impacto
 
-Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, el servidor mira (vía presencia) si alguna línea que tocas la está ocupando otro presente. Si sí, **rechaza tu cambio y te devuelve el contenido real** — "nunca dos personas a la vez en la misma línea, el que la tocó primero escribe". El **dueño tiene preferencia**: a él el lock no le aplica. Cero CRDT: se previene, no se fusiona. (Para no bloquear de más, el servidor distingue una línea *modificada* de una que solo *se desplazó* por una inserción.)
+El feature estrella del onboarding, en su forma mínima: cambias una clase o función de nivel módulo en un `.py` y el sistema, **sin que clickees nada**, detecta qué otros archivos la usan y le avisa al **dueño de cada uno**: "anónimo-2 cambió `Usuario` en `models.py` — afecta tu `auth.py`". Análisis con `ast` de la stdlib (Python primero, decisión tomada). Solo símbolos de nivel módulo y referencias por nombre (hint "míralo", no verdad de compilador); si el código está a medio escribir no avisa nada (cero falsos positivos). El panel solo entera —no pide aprobar/rechazar, eso es ownership—; "visto" lo descarta, "ver" salta al archivo.
+
+### Capa 5 — prevención de colisiones
+
+Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, el servidor mira (vía presencia) si alguna línea que tocas la está ocupando otro presente. Si sí, **rechaza tu cambio y te devuelve el contenido real** — "nunca dos personas a la vez en la misma línea, el que la tocó primero escribe". El **dueño tiene preferencia**: a él el lock no le aplica. Cero CRDT: se previene, no se fusiona.
 
 ### Capa 4 — ownership
 

@@ -205,11 +205,35 @@
     .diff .add { background: #11331f; color: #8de0a8; }
     .diff .del { background: #3a1414; color: #f08c8c; }
     .diff .eq { color: #777; }
+
+    /* Capa 6: avisos de impacto. "Cambiaron algo que tu archivo usa." Mismo
+       patrón visual que la bandeja de propuestas, en azul para distinguir
+       (esto NO pide acción de aprobar/rechazar, solo te entera). */
+    #impactos { display: none; border-bottom: 1px solid #2a2a2e; background: #14181f; }
+    #impactos.on { display: block; }
+    #impactos h3 {
+      margin: 0; padding: 0.5rem 1.5rem; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #7fa8c9; background: #161b22;
+    }
+    .imp { padding: 0.6rem 1.5rem; border-top: 1px solid #2a2a2e; display: flex;
+      align-items: center; gap: 0.75rem; font-size: 12px; color: #cdd9e5; }
+    .imp b { color: #5fa8e0; }
+    .imp code {
+      background: #0e0e10; color: #8de0a8; padding: 0 4px; border-radius: 3px;
+      font-family: inherit;
+    }
+    .imp .acc { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
+    .imp button {
+      border: none; border-radius: 4px; padding: 0.25rem 0.7rem;
+      font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+      background: #1f2a36; color: #9fc4e4;
+    }
+    .imp button:hover { background: #2a3a4a; }
   </style>
 </head>
 <body>
   <header>
-    <h1>laidea — capa 4: ownership</h1>
+    <h1>laidea — capa 6: análisis de impacto</h1>
     <span id="status">conectando...</span>
     <span id="yo" style="font-size:11px;color:#888;"></span>
   </header>
@@ -228,6 +252,7 @@
         <button id="reclamar" style="display:none;">reclamar este archivo</button>
       </div>
       <div id="propuestas"></div>
+      <div id="impactos"></div>
       <div id="aviso"></div>
       <div class="editor-wrap off" id="wrap">
         <div id="capa-presencia"><div id="capa-scroll"></div></div>
@@ -261,6 +286,7 @@
     const ownerEl = document.getElementById("owner");
     const reclamarBtn = document.getElementById("reclamar");
     const propuestasEl = document.getElementById("propuestas");
+    const impactosEl = document.getElementById("impactos");
     const avisoEl = document.getElementById("aviso");
 
     // Estas dos constantes DEBEN coincidir con el CSS del textarea
@@ -293,6 +319,15 @@
      */
     const owners = {};
     const propuestas = {};
+
+    /*
+     * Estado de impacto (capa 6). impactos: clave -> aviso. La clave es
+     * `source_path::affected_path`: si el autor sigue tecleando, el aviso
+     * nuevo reemplaza al viejo en vez de acumular (mismo criterio que las
+     * propuestas con su id determinista). Cada aviso: el server me dice que
+     * un cambio ajeno toca un archivo MÍO.
+     */
+    const impactos = {};
 
     // Nombre legible de un client_id. Si está presente lo sacamos del roster;
     // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
@@ -410,6 +445,13 @@
         const p = msg.proposal;
         propuestas[p.id] = p;
         renderPropuestas();
+      }
+
+      if (msg.type === "impact") {
+        // Cambiaron algo que un archivo MÍO usa. Solo entera, no pide acción.
+        // Clave determinista source::affected: tecleo del autor -> reemplaza.
+        impactos[msg.source_path + "::" + msg.affected_path] = msg;
+        renderImpactos();
       }
     };
 
@@ -621,6 +663,52 @@
       delete propuestas[id];
       renderPropuestas();
       ws.send(JSON.stringify({ type: "resolve", proposal_id: id, accept: aceptar }));
+    }
+
+    /*
+     * Panel de impacto (capa 6). Le dice al dueño, sin que pregunte, qué
+     * cambios ajenos tocan archivos suyos. NO pide aprobar/rechazar (eso es
+     * ownership); solo entera y deja saltar al archivo afectado. "Antes tenías
+     * que recordar dónde se usaba esa función; ahora se hace solo."
+     */
+    function renderImpactos() {
+      const lista = Object.entries(impactos);
+      impactosEl.innerHTML = "";
+      if (lista.length === 0) { impactosEl.className = ""; return; }
+      impactosEl.className = "on";
+
+      const h = document.createElement("h3");
+      h.textContent = "impacto en tus archivos (" + lista.length + ")";
+      impactosEl.appendChild(h);
+
+      for (const [clave, m] of lista) {
+        const fila = document.createElement("div");
+        fila.className = "imp";
+
+        const txt = document.createElement("span");
+        const syms = m.symbols.map((s) => "<code>" + s + "</code>").join(", ");
+        txt.innerHTML =
+          "<b>" + m.author_name + "</b> cambió " + syms +
+          " en <b>" + m.source_path + "</b> — afecta tu <b>" + m.affected_path + "</b>";
+        fila.appendChild(txt);
+
+        const acc = document.createElement("div");
+        acc.className = "acc";
+        const ver = document.createElement("button");
+        ver.textContent = "ver " + m.affected_path;
+        ver.addEventListener("click", () => {
+          if (m.affected_path in files) seleccionar(m.affected_path);
+        });
+        const ok = document.createElement("button");
+        ok.textContent = "visto";
+        ok.addEventListener("click", () => {
+          delete impactos[clave];
+          renderImpactos();
+        });
+        acc.appendChild(ver); acc.appendChild(ok);
+        fila.appendChild(acc);
+        impactosEl.appendChild(fila);
+      }
     }
 
     // Iniciales para los puntos del sidebar: el número de "anónimo-3" -> "3".

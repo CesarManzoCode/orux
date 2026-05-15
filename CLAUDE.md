@@ -30,7 +30,7 @@ Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 
 
 Presencia por archivo + línea (no caracter). Estar conectado ≠ estar presente. Persistir nunca propaga excepción. Identidad estable mínima por token (no auth): reconectar = mismo client_id; el ownership sobrevive reload y por eso NO se libera al desconectar (dueño que se va retiene hasta reiniciar; lo arregla la futura capa de auth). Capa 5: el lock es por presencia — si no anunciaste presencia en una línea, no la reservas; el rechazo es del update entero (sin CRDT no hay merge robusto; en práctica el update es por pulsación). Cliente NO cambió en capa 5 (server-driven; el rebote se ve como revert silencioso — pulir el aviso es follow-up).
 
-Capa 6 (análisis de impacto, Python) en progreso, gradual: 1/3 núcleo puro ✅, 2/3 cableado al server (ImpactMessage al dueño del archivo afectado, en edición directa y en propuesta aprobada; no avisa si el código no parsea ni al propio autor) ✅, 3/3 panel en el cliente ⏭. Después: notificaciones a owners (más allá de impacto), integración Git. CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
+Capa 6 (análisis de impacto, Python) COMPLETA: 1/3 núcleo puro ✅, 2/3 cableado al server ✅, 3/3 panel en el cliente ✅ (`#impactos`: avisa al dueño, dedupe por `source::affected`, botón "visto" descarta, "ver" salta al archivo; no pide aprobar, solo entera). Capa pendiente: **integración con Git** (commits/push/pull/branches/PRs desde la herramienta; `git clone` debe bastar). CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
 
 ## Trampas operativas ya vistas
 
