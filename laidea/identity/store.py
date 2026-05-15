@@ -1,0 +1,76 @@
+"""Registro de usuarios persistido. Núcleo de la capa 7.
+
+Es a la identidad lo que `DiskStorage` es al workspace: el estado autoritativo
+de "quién existe", guardado en disco para que sobreviva a reiniciar el server.
+Mismo patrón de inyección de dependencias: recibe la ruta del archivo; el
+server real la cablea, los tests usan `tmp_path`.
+
+Decisiones de prototipo, documentadas porque no son obvias:
+
+- **Un solo archivo JSON** `usuario -> registro de contraseña`. Suficiente
+  para 2-50 personas (el público objetivo). Nada de base de datos todavía.
+- **El usuario se normaliza** (trim + minúsculas): "Joaquin" y "joaquin" son
+  el mismo, para que el ownership no se parta por mayúsculas.
+- La contraseña nunca se guarda ni pasa por aquí en claro más de lo
+  imprescindible: se delega de inmediato en `passwords` (PBKDF2 + sal).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from .passwords import hash_password, verificar_password
+
+
+def normalizar(username: str) -> str:
+    """Forma canónica del usuario. Misma entrada -> mismo dueño siempre."""
+    return username.strip().lower()
+
+
+class UserStore:
+    def __init__(self, path: Path | str) -> None:
+        self._path = Path(path)
+        # usuario_normalizado -> registro de contraseña (string autodescriptivo).
+        self._usuarios: dict[str, str] = {}
+        if self._path.exists():
+            try:
+                self._usuarios = json.loads(
+                    self._path.read_text(encoding="utf-8")
+                )
+            except (ValueError, OSError):
+                # Archivo corrupto: arrancamos vacío en vez de tumbar el server.
+                # En un prototipo es preferible "nadie registrado" a no arrancar.
+                self._usuarios = {}
+
+    def _guardar(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(
+            json.dumps(self._usuarios), encoding="utf-8"
+        )
+
+    def existe(self, username: str) -> bool:
+        return normalizar(username) in self._usuarios
+
+    def registrar(self, username: str, password: str) -> str:
+        """Crea un usuario. Devuelve su forma canónica. Persiste.
+
+        Levanta `ValueError` si el usuario está vacío o ya existe: el llamador
+        (server) traduce eso a un error de registro para el cliente, no a una
+        caída.
+        """
+        u = normalizar(username)
+        if not u:
+            raise ValueError("usuario inválido")
+        if u in self._usuarios:
+            raise ValueError("ese usuario ya existe")
+        self._usuarios[u] = hash_password(password)  # valida password vacía
+        self._guardar()
+        return u
+
+    def verificar(self, username: str, password: str) -> bool:
+        """¿Usuario existe y la contraseña coincide? False si cualquiera falla."""
+        registro = self._usuarios.get(normalizar(username))
+        if registro is None:
+            return False
+        return verificar_password(password, registro)
