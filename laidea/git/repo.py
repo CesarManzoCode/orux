@@ -25,9 +25,25 @@ Decisiones:
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Script `GIT_ASKPASS`: git lo llama cuando un remoto pide credenciales. NO
+# contiene el secreto — lo lee del entorno del subproceso (que vive solo
+# durante esa llamada). Según qué pregunte git ("Username"/"Password") devuelve
+# el usuario o el token. Así el token NUNCA va en argv, ni en la URL, ni en
+# `.git/config`, ni queda cacheado.
+_ASKPASS = (
+    "#!/bin/sh\n"
+    'case "$1" in\n'
+    '  *[Uu]sername*) printf "%s" "$LAIDEA_GIT_USER" ;;\n'
+    '  *) printf "%s" "$LAIDEA_GIT_TOKEN" ;;\n'
+    "esac\n"
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +92,60 @@ class GitRepo:
         self._root.mkdir(parents=True, exist_ok=True)
         if not (self._root / ".git").is_dir():
             self._run("init", "-q")
+
+    def _git_cred(
+        self,
+        args: list[str],
+        usuario: str,
+        token: str,
+        cwd: Path | None = None,
+    ) -> tuple[int, str]:
+        """Corre git con credenciales EFÍMERAS y sin filtrarlas a ningún lado.
+
+        Garantías de no-fuga (esta es la parte sensible de la capa 10):
+        - el token va SOLO en el entorno del subproceso (no en argv → no se ve
+          en `ps`; no en la URL → no queda en `.git/config`);
+        - `GIT_ASKPASS` apunta a un script temporal 0700 que NO contiene el
+          token (lo lee del env); se borra al terminar;
+        - `credential.helper=` vacío → git no cachea nada;
+        - `GIT_TERMINAL_PROMPT=0` → si las credenciales fallan, error, nunca
+          se queda colgado pidiendo por consola;
+        - la salida se *scrubea*: si git llegara a eco el token, se reemplaza
+          por `***` antes de devolverlo (no se loguea crudo nunca).
+        """
+        askpass = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".sh", delete=False
+        )
+        try:
+            askpass.write(_ASKPASS)
+            askpass.close()
+            os.chmod(askpass.name, 0o700)
+            env = {
+                **os.environ,
+                "GIT_ASKPASS": askpass.name,
+                "GIT_TERMINAL_PROMPT": "0",
+                "LAIDEA_GIT_USER": usuario,
+                "LAIDEA_GIT_TOKEN": token,
+            }
+            try:
+                p = subprocess.run(
+                    ["git", "-c", "credential.helper=", *args],
+                    cwd=cwd if cwd is not None else self._root,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+                salida = (p.stdout + p.stderr).strip()
+                rc = p.returncode
+            except (FileNotFoundError, OSError):
+                return 1, "git no disponible"
+        finally:
+            os.unlink(askpass.name)
+        # Defensa en profundidad: aunque el token no debería aparecer, si
+        # aparece NO sale de aquí en claro.
+        if token:
+            salida = salida.replace(token, "***")
+        return rc, salida
 
     def estado(self) -> EstadoGit:
         """Rama actual, nº de cambios sin commitear y últimos commits.
@@ -136,3 +206,85 @@ class GitRepo:
         if rc == 0:
             return (True, "commit creado")
         return (False, out.splitlines()[-1] if out else "no se pudo commitear")
+
+    def clonar(
+        self, url: str, usuario: str, token: str
+    ) -> tuple[bool, str]:
+        """Trae `url` y REEMPLAZA el workspace con ese repo. Destructivo.
+
+        Seguro-primero: clona a un temporal y solo si SALE BIEN reemplaza el
+        workspace. Si el clone falla (URL mala, credenciales mal), el
+        workspace actual queda intacto. La URL que se guarda como `origin`
+        viene de git (limpia, sin credenciales — las pasamos por askpass).
+        El que confirma que esto es destructivo es el cliente; acá ya se
+        asume confirmado. Las credenciales son efímeras: no se guardan.
+        """
+        if self._root is None:
+            return (False, "git no disponible")
+        tmp = Path(tempfile.mkdtemp(prefix="laidea-clone-"))
+        destino = tmp / "repo"
+        try:
+            rc, out = self._git_cred(
+                ["clone", url, str(destino)], usuario, token, cwd=tmp
+            )
+            if rc != 0:
+                return (False, _detalle_remoto(out))
+            # Éxito: ahora sí reemplazamos. Vaciamos el contenido del
+            # workspace (NO el directorio en sí: puede ser un mount) y movemos
+            # el repo clonado adentro, con su `.git` (origin limpio incluido).
+            self._root.mkdir(parents=True, exist_ok=True)
+            for hijo in self._root.iterdir():
+                if hijo.is_dir() and not hijo.is_symlink():
+                    shutil.rmtree(hijo)
+                else:
+                    hijo.unlink()
+            for hijo in destino.iterdir():
+                shutil.move(str(hijo), str(self._root / hijo.name))
+            return (True, "repo clonado: reemplazó el workspace")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def push(
+        self, usuario: str, token: str, url: str | None = None
+    ) -> tuple[bool, str]:
+        """Empuja el workspace a su remoto. `url` opcional re-apunta `origin`.
+
+        No fusiona: si el remoto avanzó (non-fast-forward) el push se rechaza
+        y lo decimos claro — traer/mergear es la parte difícil diferida, no se
+        finge que anda. `origin` se setea SIN credenciales (van por askpass).
+        """
+        if self._root is None:
+            return (False, "git no disponible")
+        self.asegurar()
+        if url:
+            self._run("remote", "remove", "origin")
+            self._run("remote", "add", "origin", url)
+        rc_url, actual = self._run("remote", "get-url", "origin")
+        if rc_url != 0 or not actual:
+            return (False, "no hay remoto configurado (falta la URL)")
+        rc, out = self._git_cred(["push", "origin", "HEAD"], usuario, token)
+        if rc == 0:
+            return (True, "push hecho")
+        bajo = out.lower()
+        if "non-fast-forward" in bajo or "rejected" in bajo or "fetch first" in bajo:
+            return (
+                False,
+                "el remoto cambió: hay que traer cambios (pull) antes de "
+                "pushear — no implementado aún",
+            )
+        return (False, _detalle_remoto(out))
+
+
+def _detalle_remoto(salida: str) -> str:
+    """Última línea útil de un error de git remoto, ya scrubeada por
+    `_git_cred`. Mensajes típicos hechos legibles para el usuario."""
+    if not salida:
+        return "no se pudo (sin detalle)"
+    bajo = salida.lower()
+    if "authentication failed" in bajo or "invalid username or password" in bajo:
+        return "usuario o token incorrectos"
+    if "could not resolve host" in bajo or "couldn't resolve" in bajo:
+        return "no se pudo resolver el host (¿URL bien?)"
+    if "repository not found" in bajo or "not found" in bajo:
+        return "repo no encontrado (¿URL/permisos?)"
+    return salida.splitlines()[-1]

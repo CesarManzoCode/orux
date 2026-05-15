@@ -92,3 +92,80 @@ def test_commitear_sin_cambios(tmp_path) -> None:
 def test_commitear_git_deshabilitado() -> None:
     ok, detalle = GitRepo(None).commitear("x", "a", "a@b")
     assert ok is False and "no disponible" in detalle
+
+
+def _remoto_local(tmp_path):
+    """Un repo bare con un commit, hace de 'el repo del equipo' (sin red)."""
+    remoto = tmp_path / "remoto.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(remoto)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(remoto), str(seed)], check=True)
+    (seed / "hola.py").write_text("print('del remoto')\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(seed), "-c", "user.email=a@b",
+                    "-c", "user.name=a", "commit", "-q", "-m", "inicial"], check=True)
+    subprocess.run(["git", "-C", str(seed), "push", "-q", "origin", "HEAD"], check=True)
+    return remoto
+
+
+def test_clonar_reemplaza_el_workspace(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    r.asegurar()
+    (ws / "viejo.py").write_text("basura anterior\n", encoding="utf-8")
+    ok, detalle = r.clonar(str(_remoto_local(tmp_path)), "user", "token")
+    assert ok is True, detalle
+    assert (ws / "hola.py").read_text() == "print('del remoto')\n"
+    assert not (ws / "viejo.py").exists()           # reemplazó, no fusionó
+    assert "inicial" in r.estado().commits[0]
+
+
+def test_clone_que_falla_no_destruye_el_workspace(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    r.asegurar()
+    (ws / "importante.py").write_text("no me borres\n", encoding="utf-8")
+    ok, _ = r.clonar(str(tmp_path / "no-existe.git"), "user", "token")
+    assert ok is False
+    assert (ws / "importante.py").read_text() == "no me borres\n"
+
+
+def test_el_token_no_queda_en_git_config(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    ok, detalle = r.clonar(str(_remoto_local(tmp_path)), "user", "SECRETO-NO-FILTRAR")
+    assert ok is True, detalle
+    cfg = (ws / ".git" / "config").read_text()
+    assert "SECRETO-NO-FILTRAR" not in cfg          # nunca en disco
+    assert "remoto.git" in cfg                        # origin limpio sí
+
+
+def test_token_no_aparece_en_el_detalle_de_error(tmp_path) -> None:
+    ok, detalle = GitRepo(tmp_path / "ws").clonar(
+        "https://host.invalido.laidea/x.git", "user", "TOKEN-XYZ-123"
+    )
+    assert ok is False
+    assert "TOKEN-XYZ-123" not in detalle             # scrub / no-fuga
+
+
+def test_push_lleva_el_commit_al_remoto(tmp_path) -> None:
+    remoto = _remoto_local(tmp_path)
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    assert r.clonar(str(remoto), "u", "t")[0] is True
+    (ws / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+    assert r.commitear("agrega nuevo", "ana", "ana@laidea.local")[0] is True
+    ok, detalle = r.push("u", "t")
+    assert ok is True, detalle
+    # Clonar el remoto de nuevo, fresco: el commit llegó.
+    verif = tmp_path / "verif"
+    subprocess.run(["git", "clone", "-q", str(remoto), str(verif)], check=True)
+    assert (verif / "nuevo.py").exists()
+
+
+def test_push_sin_remoto_falla(tmp_path) -> None:
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    r.asegurar()
+    ok, detalle = r.push("u", "t")
+    assert ok is False and "remoto" in detalle
