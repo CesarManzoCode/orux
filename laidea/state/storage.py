@@ -12,10 +12,12 @@ Decisiones de esta capa:
   guardar su propio estado interno). Aquí solo: `path -> archivo en disco`,
   last-write-wins, igual que la semántica que ya tenía el `Workspace`.
 
-- **El directorio es plano respecto a Git.** Un `path` como `src/auth.py` se
-  guarda como `src/auth.py` dentro del directorio raíz, con sus subcarpetas
-  reales. Así, cuando llegue la integración con Git (capa final), ese
-  directorio ya es algo que `git add` entiende sin traducción.
+- **El directorio refleja el árbol real.** Un `path` como `src/auth.py` se
+  guarda como `src/auth.py` con sus subcarpetas reales. Hoy ese directorio
+  vive fuera del repo por una razón operativa (ver `server/__main__.py`: los
+  watchers que recargan el navegador). Dónde debe vivir para que `git add`
+  lo entienda es decisión de la futura capa de integración con Git, no de
+  esta capa.
 
 - **Los paths vienen del cliente, así que no son de confiar.** Un cliente
   (malicioso o con un bug) podría mandar `../../etc/passwd` o `/etc/shadow`.

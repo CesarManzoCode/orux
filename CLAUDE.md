@@ -29,11 +29,13 @@ Fase muy temprana. La idea completa vive en `README.md`. Existen ya las **capas 
 
 Presencia por archivo + línea (no caracter). Estar conectado ≠ estar presente. Persistir nunca propaga excepción. Ownership: andamiaje de prototipo (anónimo por sesión, se libera al desconectar; en el producto se asigna/infiere y persiste). Capa 5: el lock es por presencia — si no anunciaste presencia en una línea, no la reservas; el rechazo es del update entero (sin CRDT no hay merge robusto; en práctica el update es por pulsación). Cliente NO cambió en capa 5 (server-driven; el rebote se ve como un revert silencioso — pulir el aviso es follow-up).
 
-Capas pendientes (en orden): **análisis semántico de impacto** (probable: TypeScript primero), después notificaciones a owners, integración Git. CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
+Capas pendientes (en orden): **análisis semántico de impacto — primer lenguaje: Python** (decisión del usuario; usar `ast` de la stdlib, sin toolchain extra; dogfooding sobre el propio laidea), después notificaciones a owners, integración Git. CRDT real solo si un perfilador/uso lo justifica — la tesis es prevenir, no fusionar.
 
 ## Trampas operativas ya vistas
 
 - **Servidor zombi en puerto 8765.** Al cambiar el protocolo, si un servidor de versión anterior sigue corriendo, los clientes nuevos hablan con él y aparecen archivos fantasma llamados "undefined" en la UI. Antes de debuggear lógica, verificar siempre: `ps aux | grep python | grep -v grep` y `lsof -i:8765`. El comando correcto para arrancar el server actual es `python -m laidea.server`, no `python server.py` (ese archivo ya no existe).
+
+- **Auto-reload del servidor estático borra el ownership.** Síntoma: al crear un archivo o aprobar un cambio, "se pierden todos los dueños". Causa: el cliente se sirve con un static server que vigila la carpeta y recarga el navegador ante cambios (Live Server). Si la persistencia (capa 3) escribe dentro del árbol vigilado, persistir → recarga → cae el WebSocket → el cliente vuelve con identidad nueva → su ownership desaparece. En los logs se ve como pares de clientes desconectándose y reconectándose juntos sin que nadie recargue. Mitigado: el directorio por defecto de persistencia es `~/.laidea/workspace` (FUERA del repo). Si se pone `LAIDEA_DATA` dentro del repo, hay que excluirlo del watcher. Gap real aún abierto: la identidad es efímera por conexión, así que CUALQUIER reload (real) sigue perdiendo el ownership — la solución de fondo es identidad estable que sobreviva la reconexión (futura capa de identidad/auth).
 
 ## Principios para colaborar en este proyecto
 
@@ -55,8 +57,8 @@ Capas pendientes (en orden): **análisis semántico de impacto** (probable: Type
 
 ## Qué falta definir (no decidir todavía sin que el usuario lo pida)
 
-- Solución de CRDT (probable: `y-py`, los bindings de Python a Yrs). Se decide cuando lleguemos a la capa de CRDT real, no antes.
-- Primer lenguaje a soportar para análisis semántico (probable: TypeScript).
+- Solución de CRDT: descartado por defecto. La tesis es prevenir, no fusionar (ver capa 5). Solo si un perfilador/uso real lo justifica.
+- Primer lenguaje para análisis semántico: **decidido — Python** (el README sugería TypeScript, pero se eligió Python: es el stack del proyecto, `ast` está en la stdlib sin toolchain externo, y permite dogfooding sobre el propio laidea). El README todavía dice "probable TypeScript" en su texto narrativo; esta línea es la que manda.
 - Modelo de negocio y pricing.
 - Nombre real del producto.
 - Cómo manejar autenticación / identidad de usuarios (necesario antes de presencia con nombre real, no antes de presencia anónima).

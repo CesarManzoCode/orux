@@ -14,7 +14,7 @@ Andamiaje del prototipo: identidad anónima por sesión, el ownership se libera 
 
 ### Capa 3 — persistencia
 
-El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`workspace_data/` por defecto, o `LAIDEA_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
+El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`~/.laidea/workspace` por defecto —fuera del repo a propósito, para no disparar el auto-reload de servidores estáticos que vigilan la carpeta—, o `LAIDEA_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
 
 ### Capa 2 — presencia
 
