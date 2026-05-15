@@ -113,27 +113,36 @@
      */
     .editor-wrap { flex: 1; position: relative; display: flex; min-height: 0; background: #18181b; }
     .editor-wrap.off { background: #131316; }
+    /* La capa de presencia va ENCIMA del textarea (z-index 2) con
+       pointer-events:none: se ve clarísima sin estorbar al teclear. Antes
+       estaba detrás y a 13% de opacidad — invisible sobre fondo oscuro. */
     #capa-presencia {
       position: absolute; inset: 0;
-      overflow: hidden; pointer-events: none;
+      overflow: hidden; pointer-events: none; z-index: 2;
     }
-    /* Se desplaza junto con el scroll del textarea vía translateY. */
+    /* Se desplaza verticalmente junto con el scroll del textarea (translateY).
+       Horizontal no hace falta: las marcas son de ancho completo y la etiqueta
+       va anclada al borde derecho visible. */
     #capa-scroll { position: absolute; left: 0; right: 0; top: 0; }
-    .marca {
-      position: absolute; left: 0; right: 0; height: 22px;
-      display: flex; align-items: center;
+    .marca { position: absolute; left: 0; right: 0; height: 22px; }
+    /* Tinte tenue de toda la fila: da el "alguien está en esta línea" sin
+       tapar el texto. */
+    .marca .tinte { position: absolute; inset: 0; opacity: 0.16; }
+    /* Línea nítida de 2px centrada en la fila: el marcador real, legible. */
+    .marca .raya {
+      position: absolute; left: 0; right: 0; top: 50%;
+      height: 2px; transform: translateY(-50%);
     }
-    .marca .raya { position: absolute; inset: 0; opacity: 0.13; }
+    /* Nombre anclado a la derecha: nunca choca con el código y siempre se lee. */
     .marca .etiqueta {
-      position: relative;
-      font-size: 10px; padding: 0 5px; border-radius: 0 3px 3px 0;
-      color: #0e0e10; font-weight: 700;
-      max-width: 120px; overflow: hidden; white-space: nowrap;
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      font-size: 10px; padding: 1px 6px; border-radius: 3px;
+      color: #0e0e10; font-weight: 700; white-space: nowrap;
     }
     textarea {
       flex: 1;
-      position: relative;
-      background: transparent;            /* deja ver las marcas que van detrás */
+      position: relative; z-index: 1;
+      background: transparent;            /* el fondo lo pone .editor-wrap */
       color: #e6e6e6;
       border: none;
       font-family: inherit;
@@ -442,6 +451,11 @@
         const marca = document.createElement("div");
         marca.className = "marca";
         marca.style.top = (PAD_TOP + (p.line - 1) * LINE_H) + "px";
+
+        const tinte = document.createElement("div");
+        tinte.className = "tinte";
+        tinte.style.background = p.color;
+        marca.appendChild(tinte);
 
         const raya = document.createElement("div");
         raya.className = "raya";
