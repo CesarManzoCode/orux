@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 from typing import Protocol
 
+from .modelo import Simbolo
+
 
 class Transporte(Protocol):
     """Stream bidireccional de bytes. Real = stdio del subproceso pyright;
@@ -204,3 +206,134 @@ class ClienteLSP:
         except ErrorLSP:
             pass  # ya estaba muerto: no es error que importe
         self._vivo = False
+
+
+# --- Mapeo pyright -> modelo común (puro, 100% sandbox-testeable) ----------
+#
+# pyright responde en términos de LSP (DocumentSymbol, Location). Acá se
+# traduce a lo que la jerarquía ya entiende: el `Simbolo` de capa 16 y, lo
+# nuevo y central, el conjunto REAL de archivos que usan un símbolo (no "los
+# que tienen el token" — pyright resolvió imports de verdad). El modelo y
+# `cambios_que_importan_modelo` NO cambian: solo se rellenan mejor.
+
+# LSP SymbolKind (los que nos importan para Python).
+_K_CLASS = 5
+_K_METHOD = 6
+_K_PROPERTY = 7
+_K_FIELD = 8
+_K_CONSTRUCTOR = 9
+_K_ENUM = 10
+_K_INTERFACE = 11
+_K_FUNCTION = 12
+_K_VARIABLE = 13
+
+
+def path_a_uri(raiz: str, path: str) -> str:
+    """`models.py` -> `file:///<raiz>/models.py`. Esquema único y estable
+    para que `references` (que vuelve en URIs) se mapee de vuelta a paths
+    del workspace."""
+    return "file://" + raiz.rstrip("/") + "/" + path.lstrip("/")
+
+
+def uri_a_path(raiz: str, uri: str) -> str | None:
+    """Inverso. None si el URI cae fuera del workspace (dependencia de libs,
+    stdlib: no es un archivo de equipo, no se avisa de él)."""
+    pref = "file://" + raiz.rstrip("/") + "/"
+    return uri[len(pref):] if uri.startswith(pref) else None
+
+
+def _rebanar(texto: str, rango: dict) -> str:
+    """Subcadena del fuente según un `range` LSP (líneas/cols 0-based). Es el
+    `fuente` del Simbolo: si cambia ALGO del símbolo, cambia => sirve de
+    early-out; no decide QUÉ cambió (eso lo dan firma/superficie)."""
+    lineas = texto.splitlines(keepends=True)
+    a, b = rango["start"], rango["end"]
+    if a["line"] >= len(lineas):
+        return ""
+    if a["line"] == b["line"]:
+        return lineas[a["line"]][a["character"]:b["character"]]
+    trozo = [lineas[a["line"]][a["character"]:]]
+    trozo += lineas[a["line"] + 1:b["line"]]
+    if b["line"] < len(lineas):
+        trozo.append(lineas[b["line"]][:b["character"]])
+    return "".join(trozo)
+
+
+def _superficie(hijos: list[dict]) -> tuple[str, frozenset[str]]:
+    """(firma de __init__, {miembros públicos}) desde los children de una
+    clase. Mismo criterio que `_superficie_clase` de python.py para que el
+    mensaje del modelo sea consistente: público = no empieza con `_`."""
+    init = ""
+    pub: set[str] = set()
+    for h in hijos:
+        nom = h.get("name", "")
+        k = h.get("kind")
+        if nom == "__init__" or k == _K_CONSTRUCTOR:
+            init = h.get("detail") or "()"
+            continue
+        if nom.startswith("_"):
+            continue
+        if k == _K_METHOD:
+            pub.add(nom + "()")
+        elif k in (_K_PROPERTY, _K_FIELD, _K_VARIABLE):
+            pub.add(nom)
+    return init, frozenset(pub)
+
+
+def simbolos_de_pyright(
+    doc_symbols: object, fuente: str
+) -> dict[str, Simbolo]:
+    """`textDocument/documentSymbol` (jerárquico) -> {nombre: Simbolo}.
+
+    Solo nivel módulo (igual que toda la capa 6+): funciones, clases y
+    enum/interface. detallado=True — pyright es type-aware, da el aviso fino
+    sin la coletilla "sin parser". `detail` de pyright es la firma
+    normalizada (independiente del cuerpo): justo lo que queremos comparar.
+    """
+    if not isinstance(doc_symbols, list):
+        return {}
+    out: dict[str, Simbolo] = {}
+    for s in doc_symbols:
+        if not isinstance(s, dict):
+            continue
+        nom = s.get("name", "")
+        k = s.get("kind")
+        if not nom:
+            continue
+        rng = s.get("range", {})
+        fte = _rebanar(fuente, rng) if rng else nom
+        if k == _K_FUNCTION:
+            out[nom] = Simbolo(
+                nombre=nom, tipo="funcion", fuente=fte,
+                firma=s.get("detail") or "()", detallado=True,
+            )
+        elif k == _K_CLASS:
+            init, sup = _superficie(s.get("children") or [])
+            out[nom] = Simbolo(
+                nombre=nom, tipo="clase", fuente=fte,
+                init=init, superficie=sup, detallado=True,
+            )
+        elif k in (_K_ENUM, _K_INTERFACE):
+            out[nom] = Simbolo(
+                nombre=nom, tipo="tipo", fuente=fte, detallado=True,
+            )
+    return out
+
+
+def paths_que_referencian(
+    refs: object, raiz: str, path_propio: str
+) -> set[str]:
+    """`textDocument/references` -> set de OTROS paths del workspace que usan
+    el símbolo. ESTE es el salto: resolución real de pyright, no "archivos
+    con el token". Se excluye el propio archivo y lo que cae fuera del
+    workspace (stdlib/deps: no hay dueño a quién avisar)."""
+    if not isinstance(refs, list):
+        return set()
+    out: set[str] = set()
+    for loc in refs:
+        if not isinstance(loc, dict):
+            continue
+        p = uri_a_path(raiz, loc.get("uri", ""))
+        if p is not None and p != path_propio:
+            out.add(p)
+    return out
