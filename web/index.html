@@ -11,12 +11,13 @@
      * Sin frameworks ni dependencias: es CSS, no basura.
      */
     :root {
-      --bg: #0d0e11;          /* fondo de la app */
-      --surface: #161718;     /* paneles, sidebar, editor */
+      --bg-deep: #08090b;     /* lienzo detrás de las islas (lo más oscuro) */
+      --bg: #0d0e11;          /* fondo dentro de un panel */
+      --surface: #141518;     /* islas: header, rail, sidebar, main */
       --surface-2: #1c1d21;   /* inputs, hover, chips */
       --elevated: #212227;    /* lo que flota encima */
       --border: #2b2c33;      /* bordes visibles */
-      --border-soft: #212228; /* divisores tenues */
+      --border-soft: #202127; /* divisores tenues */
       --text: #e9e9ec;        /* texto principal */
       --muted: #8b8d96;       /* secundario */
       --faint: #5a5c64;       /* terciario / hints */
@@ -26,7 +27,7 @@
       --warn: #e3b341; --warn-bg: #3a2e14;
       --bad: #f0707a; --bad-bg: #3d1a1f;
       --info: #6cb6ff; --info-bg: #16202b;
-      --r: 7px; --r-sm: 5px;
+      --r: 7px; --r-sm: 5px; --r-isla: 10px;
       --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         Inter, system-ui, sans-serif;
       --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo,
@@ -34,17 +35,30 @@
       --t: 120ms ease;
     }
     * { box-sizing: border-box; }
+    /*
+     * Lienzo "Islands": el fondo es lo más oscuro y cada región (topbar,
+     * layout, statusbar) flota como una isla redondeada con un hueco entre
+     * medio. Es lo que hace que se lea como IDE moderno y no como prototipo.
+     * El padding/gap del body crea esos huecos sin tocar nada interno.
+     */
     body {
       font-family: var(--font-ui);
       margin: 0;
-      padding: 0;
-      background: var(--bg);
+      padding: 6px;
+      gap: 6px;
+      background: var(--bg-deep);
       color: var(--text);
       height: 100vh;
       display: flex;
       flex-direction: column;
       font-size: 13px;
       -webkit-font-smoothing: antialiased;
+    }
+    /* Toda isla comparte el mismo lenguaje: superficie, radio, borde tenue. */
+    .isla {
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--r-isla);
     }
     /* Scrollbars discretas, coherentes con el tema. */
     *::-webkit-scrollbar { width: 9px; height: 9px; }
@@ -57,18 +71,30 @@
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     button { transition: background var(--t), border-color var(--t), color var(--t); }
     header {
-      padding: 0.75rem 1.25rem;
-      border-bottom: 1px solid var(--border-soft);
-      background: var(--surface);
+      padding: 0.5rem 0.85rem;
       display: flex;
       align-items: center;
-      gap: 0.85rem;
+      gap: 0.7rem;
+      flex-shrink: 0;
+    }
+    /* Marca cuadrada tipo "logo de IDE" (▣). Pequeña, deliberada. */
+    header .mark {
+      width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+      background: var(--accent); color: #06120c;
+      display: grid; place-items: center;
+      font-size: 13px; font-weight: 900;
     }
     header h1 {
-      margin: 0; font-size: 14px; font-weight: 650;
+      margin: 0; font-size: 13.5px; font-weight: 650;
       letter-spacing: -0.01em; color: var(--text);
     }
     header h1 b { color: var(--accent); font-weight: 700; }
+    /* Breadcrumb "laidea › proyecto", como la barra de título de un IDE. */
+    header .chev { color: var(--faint); font-size: 12px; }
+    header .proy {
+      color: var(--muted); font-size: 12.5px; font-weight: 600;
+      font-family: var(--font-mono);
+    }
     #status {
       padding: 0.2rem 0.55rem;
       border-radius: 999px;
@@ -86,17 +112,43 @@
     #yo { color: var(--muted); }
     #yo b { color: var(--text); }
     header .sep { flex: 1; }
-    .layout { flex: 1; display: flex; min-height: 0; }
+    .layout { flex: 1; display: flex; min-height: 0; gap: 6px; }
+
+    /* Barra de actividad (rail): tira vertical de íconos, como en todo IDE.
+       Cambia qué panel muestra el sidebar (archivos / git / admin). Es
+       navegación, no una feature: no agrega capacidades, organiza las que
+       ya hay. El de admin solo aparece si sos admin (capa 12). */
+    #rail {
+      width: 44px; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 4px; padding: 6px 0;
+    }
+    #rail button {
+      width: 32px; height: 32px; border: none; border-radius: 8px;
+      background: transparent; color: var(--faint);
+      cursor: pointer; font-size: 15px; line-height: 1;
+      display: grid; place-items: center;
+      position: relative;
+    }
+    #rail button:hover { background: var(--surface-2); color: var(--muted); }
+    #rail button.activo { background: var(--accent-weak); color: var(--accent); }
+    #rail button.activo::before {
+      content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px;
+      width: 2px; border-radius: 2px; background: var(--accent);
+    }
+    #rail .esp { flex: 1; }
+
     aside {
-      width: 256px;
-      border-right: 1px solid var(--border-soft);
-      background: var(--surface);
-      padding: 0.9rem;
+      width: 248px; flex-shrink: 0;
+      padding: 0.85rem;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 0.6rem;
     }
+    /* Solo se muestra el panel de la vista activa (lo decide el rail). */
+    aside > .vista { display: none; flex-direction: column; gap: 0.6rem; }
+    aside > .vista.on { display: flex; }
     aside h2 {
       margin: 0.15rem 0.1rem;
       font-size: 10px;
@@ -163,19 +215,89 @@
     }
     #lista li:hover .del-x { opacity: 1; }
     .del-x:hover { color: var(--bad); background: var(--bad-bg); }
-    main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    main {
+      flex: 1; display: flex; flex-direction: column; min-width: 0;
+      overflow: hidden;   /* las esquinas redondeadas de la isla recortan */
+    }
+
+    /* Chip de tipo de archivo (py / ts / go …): señal de IDE barata y de
+       alto impacto visual. Se usa en la lista y en la pestaña. El color lo
+       pone una clase t-xxx; los desconocidos caen al gris neutro. */
+    .ti {
+      flex-shrink: 0; font-family: var(--font-mono);
+      font-size: 9.5px; font-weight: 800; line-height: 1;
+      padding: 3px 4px; border-radius: 4px; min-width: 20px;
+      text-align: center; text-transform: lowercase;
+      background: var(--surface-2); color: var(--muted);
+    }
+    .ti.t-py  { background: #1d2b1f; color: #6cd08a; }
+    .ti.t-js  { background: #2e2a14; color: #e3c14a; }
+    .ti.t-ts  { background: #142436; color: #5aa6ef; }
+    .ti.t-go  { background: #112b30; color: #56cfd9; }
+    .ti.t-rs  { background: #2e1d14; color: #e0905f; }
+    .ti.t-java{ background: #2e1a14; color: #e08a5f; }
+    .ti.t-cpp { background: #1a2336; color: #7aa6f0; }
+    .ti.t-md  { background: #1f2026; color: #9aa0ad; }
+    .ti.t-cfg { background: #251f2e; color: #b58bd0; }
+
+    /* Pestañas de archivo. Minimal: la del archivo abierto (con ícono de
+       tipo y ✕). Es chrome, no gestión multi-pestaña (eso era otro nivel). */
+    #tabs {
+      display: flex; align-items: stretch; gap: 4px;
+      padding: 6px 6px 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-soft);
+      min-height: 36px;
+    }
+    #tabs .vacio {
+      color: var(--faint); font-size: 12px; padding: 0.5rem 0.6rem;
+    }
+    .tab {
+      display: flex; align-items: center; gap: 0.45rem;
+      padding: 0.4rem 0.5rem 0.4rem 0.6rem;
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border-soft); border-bottom: none;
+      border-radius: 7px 7px 0 0; font-size: 12.5px;
+      font-family: var(--font-mono); max-width: 240px;
+    }
+    .tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tab .tabx {
+      border: none; background: transparent; color: var(--faint);
+      cursor: pointer; font-size: 12px; line-height: 1;
+      padding: 2px 3px; border-radius: 4px; flex-shrink: 0;
+    }
+    .tab .tabx:hover { color: var(--bad); background: var(--bad-bg); }
+
+    /* Barra de contexto del archivo (dueño / presencia / reclamar). Antes
+       mostraba el nombre; ahora la pestaña lo dice, así que esto queda fino
+       y solo con el estado de coordinación. */
     #cabecera {
-      padding: 0.6rem 1.25rem;
+      padding: 0.45rem 1rem;
       border-bottom: 1px solid var(--border-soft);
       background: var(--surface);
       font-size: 12px;
       color: var(--muted);
-      display: flex; align-items: center; gap: 0.85rem;
+      display: flex; align-items: center; gap: 0.8rem;
+      min-height: 34px;
     }
     #cabecera #actual {
       color: var(--text); font-weight: 600;
       font-family: var(--font-mono); font-size: 12.5px;
     }
+
+    /* Barra de estado (isla inferior): rama · cambios · lenguaje · identidad.
+       Otra señal fuerte de "herramienta real". Solo lee estado que ya existe
+       (git, archivo abierto, usuario). */
+    #statusbar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.3rem 0.85rem; font-size: 11px; color: var(--muted);
+      min-height: 26px;
+    }
+    #statusbar .sb { display: inline-flex; align-items: center; gap: 0.35rem; }
+    #statusbar .sep { color: var(--faint); }
+    #statusbar .pt { width: 7px; height: 7px; border-radius: 50%; }
+    #statusbar b { color: var(--text); font-weight: 600; }
+    #statusbar .esp { flex: 1; }
     /* Quién más está en ESTE archivo, con su línea. Redundante con los
        marcadores del editor a propósito: si su línea está fuera de pantalla,
        igual sabés que está acá. */
@@ -461,10 +583,7 @@
     /* Capa 8: panel Git de SOLO LECTURA, al fondo del sidebar (es info
        global del repo, como la lista de archivos). El commit se hace en la
        terminal del dev — la tool no se interpone. */
-    #git {
-      margin-top: auto; border-top: 1px solid var(--border-soft);
-      padding-top: 0.8rem;
-    }
+    #git { display: flex; flex-direction: column; }
     #git .cab {
       display: flex; align-items: center; justify-content: space-between;
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -537,10 +656,7 @@
        auto-reclamado no organiza nada: alguien con autoridad reparte las
        zonas. A un no-admin ni se le pinta. Va sobre el panel git, debajo
        de la lista de archivos. */
-    #adminp {
-      margin-top: 0.8rem; border-top: 1px solid var(--border-soft);
-      padding-top: 0.8rem;
-    }
+    #adminp { display: flex; flex-direction: column; }
     #adminp .cab {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
       font-weight: 700; color: var(--faint); margin-bottom: 0.5rem;
@@ -593,25 +709,43 @@
     </div>
   </div>
 
-  <header>
+  <header class="isla">
+    <div class="mark">▣</div>
     <h1>la<b>idea</b></h1>
-    <span id="status">conectando...</span>
+    <span class="chev">›</span>
+    <span class="proy" id="proy">workspace</span>
     <span class="sep"></span>
+    <span id="status">conectando...</span>
     <span id="yo"></span>
     <span id="salir" style="display:none;">salir</span>
   </header>
 
   <div class="layout">
-    <aside>
-      <h2>archivos</h2>
-      <button id="nuevo">+ nuevo archivo</button>
-      <ul id="lista"></ul>
-      <div id="adminp"></div>
-      <div id="git"></div>
+    <nav id="rail" class="isla">
+      <button data-vista="archivos" class="activo" title="archivos">🗂</button>
+      <button data-vista="git" title="git">⎇</button>
+      <button data-vista="admin" title="admin" style="display:none;">🛡</button>
+      <span class="esp"></span>
+    </nav>
+    <aside class="isla">
+      <div class="vista on" data-vista="archivos">
+        <h2>archivos</h2>
+        <button id="nuevo">+ nuevo archivo</button>
+        <ul id="lista"></ul>
+      </div>
+      <div class="vista" data-vista="git">
+        <h2>control de versiones</h2>
+        <div id="git"></div>
+      </div>
+      <div class="vista" data-vista="admin">
+        <h2>administración</h2>
+        <div id="adminp"></div>
+      </div>
     </aside>
-    <main>
+    <main class="isla">
+      <div id="tabs"><span class="vacio">sin archivo abierto</span></div>
       <div id="cabecera">
-        <span>archivo: <span id="actual">—</span></span>
+        <span id="actual" hidden></span>
         <span id="aqui"></span>
         <span id="owner"></span>
         <button id="reclamar" style="display:none;">reclamar este archivo</button>
@@ -628,6 +762,14 @@
       </div>
     </main>
   </div>
+
+  <footer id="statusbar" class="isla">
+    <span class="sb" id="sb-git"></span>
+    <span class="esp"></span>
+    <span class="sb" id="sb-lang"></span>
+    <span class="sep">·</span>
+    <span class="sb" id="sb-yo"></span>
+  </footer>
 
   <script>
     /*
@@ -668,6 +810,15 @@
     const salirEl = document.getElementById("salir");
     const gitEl = document.getElementById("git");
     const adminEl = document.getElementById("adminp");
+    // Chrome IDE (capa de UX): rail de actividad, pestaña, barra de estado.
+    const railBtns = document.querySelectorAll("#rail button[data-vista]");
+    const railAdminBtn = document.querySelector('#rail button[data-vista="admin"]');
+    const vistaPanels = document.querySelectorAll('aside .vista');
+    const tabsEl = document.getElementById("tabs");
+    const proyEl = document.getElementById("proy");
+    const sbGit = document.getElementById("sb-git");
+    const sbLang = document.getElementById("sb-lang");
+    const sbYo = document.getElementById("sb-yo");
 
     function mostrarLogin(err) {
       loginEl.classList.add("on");
@@ -797,6 +948,14 @@
     })();
     const ws = new WebSocket(WS_URL);
 
+    // Nombre del "proyecto" en el breadcrumb del topbar: el host en deploy,
+    // "local" en dev. Es presentación; el workspace sigue siendo uno solo.
+    proyEl.textContent =
+      (location.hostname && location.hostname !== "localhost")
+        ? location.hostname : "local";
+    renderTabs();
+    renderEstado();
+
     ws.onopen = () => {
       statusEl.textContent = "conectado"; statusEl.className = "ok";
       const sess = localStorage.getItem("laidea_session");
@@ -845,16 +1004,8 @@
         if (primero) {
           seleccionar(primero);
         } else {
-          // Repo vacío: sin archivo abierto.
-          currentPath = null;
-          actual.textContent = "—";
-          applyingRemote = true;
-          editor.value = "";
-          applyingRemote = false;
-          pintarResaltado();
-          editor.disabled = true;
-          wrap.classList.add("off");
-          renderLista();
+          // Repo vacío: sin archivo abierto (mismo estado que cerrar uno).
+          cerrarArchivo();
         }
       }
 
@@ -898,13 +1049,7 @@
           if (otro) {
             seleccionar(otro);
           } else {
-            actual.textContent = "—";
-            applyingRemote = true;
-            editor.value = "";
-            applyingRemote = false;
-            pintarResaltado();
-            editor.disabled = true;
-            wrap.classList.add("off");
+            cerrarArchivo();  // nada que abrir: editor sin archivo
           }
         }
         renderLista();
@@ -918,6 +1063,7 @@
         for (const p of msg.peers) peers[p.client_id] = p;
         renderLista();
         renderPresencia();
+        renderEstado();  // ya sé quién soy: pintar identidad en la barra
       }
 
       if (msg.type === "presence") {
@@ -970,6 +1116,10 @@
         // tras el handshake; si entra gente nueva después, recargá.
         esAdmin = !!msg.is_admin;
         usuariosLista = msg.users || [];
+        // El ícono de admin del rail solo existe si sos admin. Si estabas
+        // en esa vista y dejaste de serlo (re-init), volvé a archivos.
+        railAdminBtn.style.display = esAdmin ? "" : "none";
+        if (!esAdmin && vistaActiva === "admin") setVista("archivos");
         renderAdmin();
       }
 
@@ -978,6 +1128,7 @@
         // y tras un commit (de cualquiera: el repo es compartido).
         gitEstado = msg;
         renderGit();
+        renderEstado();  // rama/cambios en la barra de estado inferior
       }
 
       if (msg.type === "git_result") {
@@ -1158,6 +1309,140 @@
       if (i < 0) return null;
       return _LANG[base.slice(i + 1)] || null;
     }
+
+    /*
+     * Chrome de IDE (capa de UX, no de features): que se vea como una
+     * herramienta real, porque con un equipo SIN amistad de por medio un
+     * aspecto de prototipo es un "no" antes de evaluar el core. Nada de esto
+     * toca el protocolo, el ownership/locks ni la métrica del overlay: es
+     * navegación y presentación sobre el estado que ya existe.
+     */
+
+    // Lenguaje -> chip de tipo (texto corto + clase de color) y nombre
+    // legible para la barra de estado. Derivado de langDe (Prism), así un
+    // solo mapa manda. Desconocido -> chip neutro con la extensión.
+    const _CHIP = {
+      python: ["py", "t-py", "Python"],
+      typescript: ["ts", "t-ts", "TypeScript"], tsx: ["tsx", "t-ts", "TSX"],
+      javascript: ["js", "t-js", "JavaScript"], jsx: ["jsx", "t-js", "JSX"],
+      go: ["go", "t-go", "Go"], rust: ["rs", "t-rs", "Rust"],
+      java: ["java", "t-java", "Java"], kotlin: ["kt", "t-java", "Kotlin"],
+      cpp: ["cpp", "t-cpp", "C++"], c: ["c", "t-cpp", "C"],
+      csharp: ["c#", "t-cpp", "C#"],
+      markdown: ["md", "t-md", "Markdown"],
+      json: ["json", "t-cfg", "JSON"], yaml: ["yml", "t-cfg", "YAML"],
+      docker: ["dok", "t-cfg", "Dockerfile"], makefile: ["mk", "t-cfg", "Makefile"],
+      bash: ["sh", "t-cfg", "Shell"], sql: ["sql", "t-cfg", "SQL"],
+      markup: ["<>", "t-cfg", "Markup"], css: ["css", "t-cfg", "CSS"],
+      ruby: ["rb", "t-rs", "Ruby"], php: ["php", "t-cfg", "PHP"],
+      swift: ["sw", "t-rs", "Swift"],
+    };
+    function chipDe(path) {
+      const lang = langDe(path);
+      if (lang && _CHIP[lang]) {
+        const [txt, cls, nom] = _CHIP[lang];
+        return { txt, cls, nom };
+      }
+      const base = (path || "").split("/").pop();
+      const ext = base.includes(".") ? base.split(".").pop().toLowerCase() : "";
+      return { txt: (ext || "·").slice(0, 4), cls: "", nom: ext || "texto" };
+    }
+    // <span class="ti t-xx">py</span> para lista y pestaña.
+    function chipEl(path) {
+      const { txt, cls } = chipDe(path);
+      const s = document.createElement("span");
+      s.className = "ti" + (cls ? " " + cls : "");
+      s.textContent = txt;
+      return s;
+    }
+
+    // Rail de actividad: cambia qué panel muestra el sidebar. Pura
+    // navegación entre lo que ya existe (archivos / git / admin).
+    let vistaActiva = "archivos";
+    function setVista(v) {
+      vistaActiva = v;
+      railBtns.forEach((b) => b.classList.toggle("activo", b.dataset.vista === v));
+      vistaPanels.forEach((p) => p.classList.toggle("on", p.dataset.vista === v));
+    }
+    railBtns.forEach((b) =>
+      b.addEventListener("click", () => setVista(b.dataset.vista))
+    );
+
+    // Pestaña del archivo abierto (minimal: solo la actual). Cerrarla deja
+    // el editor sin archivo, mismo estado que arrancar sin nada.
+    function renderTabs() {
+      tabsEl.innerHTML = "";
+      if (!currentPath) {
+        const v = document.createElement("span");
+        v.className = "vacio";
+        v.textContent = "sin archivo abierto";
+        tabsEl.appendChild(v);
+        return;
+      }
+      const tab = document.createElement("div");
+      tab.className = "tab";
+      tab.appendChild(chipEl(currentPath));
+      const nom = document.createElement("span");
+      nom.className = "nom";
+      nom.textContent = currentPath.split("/").pop();
+      nom.title = currentPath;
+      tab.appendChild(nom);
+      const x = document.createElement("button");
+      x.className = "tabx";
+      x.textContent = "✕";
+      x.title = "cerrar";
+      x.addEventListener("click", cerrarArchivo);
+      tab.appendChild(x);
+      tabsEl.appendChild(tab);
+    }
+    // Cerrar = sin archivo abierto (NO borra: solo cierra la pestaña).
+    function cerrarArchivo() {
+      currentPath = null;
+      actual.textContent = "";
+      applyingRemote = true;
+      editor.value = "";
+      applyingRemote = false;
+      pintarResaltado();
+      editor.disabled = true;
+      wrap.classList.add("off");
+      renderLista();
+      renderOwnership();
+      renderAdmin();
+      renderTabs();
+      renderEstado();
+    }
+
+    // Barra de estado inferior: rama · cambios · lenguaje · identidad.
+    // Solo lee estado existente (git, archivo abierto, usuario).
+    function renderEstado() {
+      sbGit.innerHTML = "";
+      if (gitEstado && gitEstado.available) {
+        const r = document.createElement("span");
+        r.innerHTML = "⎇ <b></b>";
+        r.querySelector("b").textContent = gitEstado.branch || "—";
+        sbGit.appendChild(r);
+        const n = gitEstado.changes || 0;
+        const c = document.createElement("span");
+        c.className = "sep";
+        c.textContent = "·";
+        const cc = document.createElement("span");
+        cc.textContent = n === 0 ? "limpio"
+          : n + (n === 1 ? " cambio" : " cambios");
+        sbGit.appendChild(c); sbGit.appendChild(cc);
+      } else {
+        sbGit.textContent = "sin git";
+      }
+      sbLang.textContent = currentPath ? chipDe(currentPath).nom : "—";
+      sbYo.innerHTML = "";
+      if (yo) {
+        const d = document.createElement("span");
+        d.className = "pt";
+        d.style.background = yo.color;
+        const t = document.createElement("span");
+        t.textContent = yo.name;
+        sbYo.appendChild(d); sbYo.appendChild(t);
+      }
+    }
     function pintarResaltado() {
       const txt = editor.value;
       const lang = langDe(currentPath);
@@ -1251,6 +1536,8 @@
       renderPresencia();
       renderOwnership();
       renderAdmin();  // el panel admin actúa sobre el archivo abierto
+      renderTabs();   // pestaña del archivo abierto
+      renderEstado(); // barra de estado (lenguaje del archivo)
       // Abrir un archivo ya es "estar presente ahí": anúncialo.
       enviarPresencia();
     }
@@ -1580,6 +1867,7 @@
           if (f.path === currentPath) li.classList.add("activo");
           li.style.paddingLeft = (depth * 14 + 22) + "px";
 
+          li.appendChild(chipEl(f.path));  // ícono de tipo (py/ts/go…)
           const nombre = document.createElement("span");
           nombre.className = "fnombre";
           nombre.textContent = f.nombre;
