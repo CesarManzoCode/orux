@@ -1,0 +1,127 @@
+"""Almacén de equipos, membresía e invitaciones — implementación en memoria.
+
+Reglas del dominio (decididas con el usuario):
+
+- El que **crea** un equipo es su `admin`. El admin invita; los demás se
+  unen redimiendo un código de un solo uso.
+- Cualquiera puede tener cuenta, pero sin pertenecer a un equipo NO ve nada
+  (eso lo hace cumplir el server: este store sólo dice de qué equipos es y
+  con qué rol).
+- Un equipo podrá tener varios workspaces más adelante; por ahora 1.
+
+`MemTeamStore` es la verdad para los tests y para este sandbox. El
+adaptador Postgres implementará la MISMA superficie pública (mismos
+nombres, mismos contratos, mismas excepciones).
+"""
+
+from __future__ import annotations
+
+import secrets
+
+from ..identity.store import normalizar
+
+
+class TeamError(ValueError):
+    """Error de dominio (nombre vacío, no-admin invitando, etc.). El server
+    lo traduce a un mensaje para el cliente, no a una caída."""
+
+
+def _id_equipo() -> str:
+    # Id corto y estable, independiente del nombre (el nombre puede repetir
+    # o cambiar; el id no). 8 hex = colisión despreciable a esta escala.
+    return secrets.token_hex(4)
+
+
+def _codigo() -> str:
+    return secrets.token_urlsafe(9)
+
+
+class MemTeamStore:
+    def __init__(self, backend: object | None = None) -> None:
+        # `backend=None` = en memoria (tests / sandbox), igual criterio que
+        # UserStore(path=None). El adaptador Postgres es otra clase con la
+        # misma API; este NO importa nada de Postgres a propósito.
+        self._equipos: dict[str, dict] = {}            # id -> {id, nombre, creador}
+        self._miembros: dict[str, dict[str, str]] = {} # team_id -> {usuario: rol}
+        self._invites: dict[str, dict] = {}            # code -> {team_id, creado_por, usado_por}
+
+    # --- Equipos ---
+
+    def crear_equipo(self, nombre: str, creador: str) -> dict:
+        """Crea un equipo; `creador` queda como admin. Devuelve {id, nombre}."""
+        nombre = (nombre or "").strip()
+        if not nombre:
+            raise TeamError("el nombre del equipo no puede estar vacío")
+        creador = normalizar(creador)
+        tid = _id_equipo()
+        while tid in self._equipos:  # paranoia: regenerar ante colisión
+            tid = _id_equipo()
+        self._equipos[tid] = {"id": tid, "nombre": nombre, "creador": creador}
+        self._miembros[tid] = {creador: "admin"}
+        return {"id": tid, "nombre": nombre}
+
+    def equipo(self, team_id: str) -> dict | None:
+        e = self._equipos.get(team_id)
+        return {"id": e["id"], "nombre": e["nombre"]} if e else None
+
+    def equipos_de(self, usuario: str) -> list[dict]:
+        """Equipos del usuario, con su rol. Vacío = todavía no ve nada."""
+        u = normalizar(usuario)
+        out = []
+        for tid, miembros in self._miembros.items():
+            if u in miembros:
+                e = self._equipos[tid]
+                out.append({"id": tid, "nombre": e["nombre"], "rol": miembros[u]})
+        out.sort(key=lambda x: x["nombre"])
+        return out
+
+    # --- Membresía ---
+
+    def es_miembro(self, team_id: str, usuario: str) -> bool:
+        return normalizar(usuario) in self._miembros.get(team_id, {})
+
+    def rol(self, team_id: str, usuario: str) -> str | None:
+        """'admin' | 'member' | None (no es miembro)."""
+        return self._miembros.get(team_id, {}).get(normalizar(usuario))
+
+    def miembros(self, team_id: str) -> list[dict]:
+        return sorted(
+            ({"usuario": u, "rol": r} for u, r in self._miembros.get(team_id, {}).items()),
+            key=lambda x: x["usuario"],
+        )
+
+    # --- Invitaciones (de un solo uso) ---
+
+    def crear_invitacion(self, team_id: str, por_usuario: str) -> str:
+        """Sólo el admin del equipo invita. Devuelve el código a compartir."""
+        if team_id not in self._equipos:
+            raise TeamError("ese equipo no existe")
+        if self.rol(team_id, por_usuario) != "admin":
+            # Defensa en profundidad: el server ya lo gatea, pero el dominio
+            # no deja crear invitaciones a quien no es admin del equipo.
+            raise TeamError("solo el admin del equipo puede invitar")
+        code = _codigo()
+        while code in self._invites:
+            code = _codigo()
+        self._invites[code] = {
+            "team_id": team_id,
+            "creado_por": normalizar(por_usuario),
+            "usado_por": None,
+        }
+        return code
+
+    def redimir(self, code: str, usuario: str) -> dict | None:
+        """Une a `usuario` al equipo del código. Devuelve {id, nombre} o None
+        si el código no existe o ya se usó. Idempotente si ya era miembro
+        (igual consume el código: un código = una persona)."""
+        inv = self._invites.get(code)
+        if inv is None or inv["usado_por"] is not None:
+            return None
+        u = normalizar(usuario)
+        tid = inv["team_id"]
+        if tid not in self._equipos:  # equipo borrado entre medio
+            return None
+        inv["usado_por"] = u
+        self._miembros.setdefault(tid, {}).setdefault(u, "member")
+        e = self._equipos[tid]
+        return {"id": tid, "nombre": e["nombre"]}
