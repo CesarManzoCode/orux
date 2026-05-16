@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from laidea.analysis import javascript, python, tiers
+from laidea.analysis.modelo import Simbolo, cambios_que_importan_modelo
 
 # (viejo, nuevo) que ejercitan cada rama: eliminado, firma cambiada,
 # construcción de clase, miembro público quitado, def↔class, cuerpo-solo
@@ -77,3 +78,57 @@ def test_tier_py_es_detallado_y_jsts_cae_a_regex_sin_treesitter() -> None:
     assert tiers.tier_para("a.py").nivel == 1
     t = tiers.tier_para("a.ts")
     assert t.nivel in (2, 3)  # 2 si hay tree-sitter (VPS), 3 si no (sandbox)
+
+
+# --- El VALOR de la capa: el camino fino JS/TS que tree-sitter habilita.
+# tree-sitter es el único I/O no testeable acá (sin internet); pero lo que
+# va a EMITIR son estos `Simbolo` detallados, y la regla sobre ellos sí se
+# prueba sin parser. Esto fija el contrato que el VPS debe cumplir.
+
+
+def _fn(nombre: str, firma: str, cuerpo: str = "x") -> Simbolo:
+    return Simbolo(nombre, "funcion", f"{nombre}{firma}{{{cuerpo}}}",
+                    firma=firma, detallado=True)
+
+
+def _cls(nombre: str, init: str, sup: set[str], cuerpo: str = "x") -> Simbolo:
+    # fuente refleja init+superficie+cuerpo (como el texto real de la clase
+    # que emitirá tree-sitter): si cambia cualquiera, `fuente` cambia.
+    cuerpo_real = init + "".join(sorted(sup)) + cuerpo
+    return Simbolo(nombre, "clase", f"class {nombre}{{{cuerpo_real}}}",
+                   init=init, superficie=frozenset(sup), detallado=True)
+
+
+def test_jsts_fino_firma_cambiada() -> None:
+    a = {"f": _fn("f", "(a)")}
+    d = {"f": _fn("f", "(a, b)")}
+    assert cambios_que_importan_modelo(a, d) == {
+        "f": "cambió la firma de «f»: (a) → (a, b) — revisá las llamadas"
+    }
+
+
+def test_jsts_fino_cuerpo_solo_es_silencio() -> None:
+    # La promesa central: con parser, cambiar solo el cuerpo NO avisa.
+    a = {"f": _fn("f", "(a)", cuerpo="return 1")}
+    d = {"f": _fn("f", "(a)", cuerpo="return 2")}
+    assert cambios_que_importan_modelo(a, d) == {}
+
+
+def test_jsts_fino_clase_construccion_y_superficie() -> None:
+    a = {"C": _cls("C", "(x)", {"m()", "v"})}
+    assert cambios_que_importan_modelo(a, {"C": _cls("C", "(x, y)", {"m()", "v"})}) == {
+        "C": "cambió cómo se construye «C»: __init__(x) → __init__(x, y)"
+    }
+    assert cambios_que_importan_modelo(a, {"C": _cls("C", "(x)", {"m()"})}) == {
+        "C": "«C» ya no expone: v — quien lo usaba va a romper"
+    }
+
+
+def test_jsts_fino_type_interface_enum() -> None:
+    a = {"T": Simbolo("T", "tipo", "type T = number", detallado=True)}
+    d = {"T": Simbolo("T", "tipo", "type T = string", detallado=True)}
+    assert cambios_que_importan_modelo(a, d) == {
+        "T": "cambió «T» — su definición es su interfaz; revisá los usos"
+    }
+    # Sin la coletilla "sin parser de TS": tree-sitter SÍ tiene parser.
+    assert "sin parser" not in cambios_que_importan_modelo(a, d)["T"]

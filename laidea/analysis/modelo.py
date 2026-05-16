@@ -109,6 +109,14 @@ def cambios_que_importan_modelo(
                     f"revisá las llamadas"
                 )
             # firma igual, solo cambió el cuerpo => silencio (a propósito)
+        elif a.tipo == "tipo":
+            # type/interface/enum (TS): no hay "cuerpo" separable de la
+            # interfaz — su definición ES su contrato. Un tier detallado
+            # (tree-sitter) puede afirmarlo sin la coletilla "sin parser".
+            motivos[nombre] = (
+                f"cambió «{nombre}» — su definición es su interfaz; "
+                f"revisá los usos"
+            )
         elif a.tipo == "clase":
             if a.init != d.init:
                 motivos[nombre] = (
