@@ -475,6 +475,26 @@ class AdminAssignMessage:
     type: Literal["admin_assign"] = "admin_assign"
 
 
+@dataclass(frozen=True)
+class AdminAssignManyMessage:
+    """Cliente (admin) -> servidor: asigná/quitá el dueño de MUCHOS paths a la
+    vez. Misma semántica que `AdminAssignMessage` (admin-only, `username`
+    vacío = revocar, solo usuarios que existen) pero en lote.
+
+    Por qué existe: la primera queja de uso real — repartir el ownership de
+    un proyecto de 100 archivos uno por uno es inusable. Con esto el panel
+    selecciona archivos/carpetas, elige un dueño UNA vez y manda todo junto;
+    el server aplica el lote y difunde UN solo `OwnershipMessage` (no 100).
+    Carpeta = sus archivos: el cliente expande la selección a paths
+    concretos (el ownership sigue siendo por archivo; ownership por prefijo
+    es un cambio de modelo deliberadamente diferido).
+    """
+
+    paths: list[str] = field(default_factory=list)
+    username: str = ""
+    type: Literal["admin_assign_many"] = "admin_assign_many"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -502,6 +522,7 @@ Message = Union[
     PushMessage,
     AdminInfoMessage,
     AdminAssignMessage,
+    AdminAssignManyMessage,
 ]
 
 
@@ -609,5 +630,10 @@ def decode(raw: str) -> Message:
     if kind == "admin_assign":
         return AdminAssignMessage(
             path=data["path"], username=data.get("username", "")
+        )
+    if kind == "admin_assign_many":
+        return AdminAssignManyMessage(
+            paths=list(data.get("paths", [])),
+            username=data.get("username", ""),
         )
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

@@ -73,6 +73,7 @@ from ..identity import (
     usuario_de_token,
 )
 from ..protocol import (
+    AdminAssignManyMessage,
     AdminAssignMessage,
     AdminInfoMessage,
     AuthErrorMessage,
@@ -595,6 +596,43 @@ class SyncServer:
                         if aplicado:
                             # Mismo patrón que claim/delete: mapa entero a
                             # todos (incluido el admin: su panel confirma).
+                            await self._broadcast_todos(
+                                encode(
+                                    OwnershipMessage(
+                                        owners=self.ownership.snapshot()
+                                    )
+                                )
+                            )
+                elif isinstance(message, AdminAssignManyMessage):
+                    # Capa 13: reparto MASIVO (primera queja real: 100
+                    # archivos uno por uno es inusable). Misma compuerta y
+                    # reglas que admin_assign, pero en lote y con UN solo
+                    # broadcast (no 100). Carpeta = el cliente ya expandió
+                    # la selección a paths concretos.
+                    if self.users.admin() == yo.client_id:
+                        destino = (
+                            normalizar(message.username)
+                            if message.username else ""
+                        )
+                        # Asignar a un fantasma dejaría zonas de nadie: si el
+                        # usuario no existe, no se aplica NADA (ni parcial:
+                        # mejor un no-op claro que un estado a medias).
+                        valido = (
+                            not destino or self.users.existe(destino)
+                        )
+                        aplicado = False
+                        if valido:
+                            for p in message.paths:
+                                if not isinstance(p, str) or not p:
+                                    continue
+                                if destino:
+                                    self.ownership.asignar(p, destino)
+                                    aplicado = True
+                                else:
+                                    if self.ownership.liberar(p):
+                                        aplicado = True
+                        if aplicado:
+                            # UN broadcast para todo el lote (el punto).
                             await self._broadcast_todos(
                                 encode(
                                     OwnershipMessage(

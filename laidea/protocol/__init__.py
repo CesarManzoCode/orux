@@ -1,4 +1,5 @@
 from .messages import (
+    AdminAssignManyMessage,
     AdminAssignMessage,
     AdminInfoMessage,
     AuthErrorMessage,
@@ -31,6 +32,7 @@ from .messages import (
 )
 
 __all__ = [
+    "AdminAssignManyMessage",
     "AdminAssignMessage",
     "AdminInfoMessage",
     "AuthErrorMessage",

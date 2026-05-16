@@ -1197,3 +1197,71 @@ async def test_admin_no_asigna_a_usuario_inexistente(server_port: int) -> None:
             "type": "admin_assign", "path": "w.py", "username": "no-existe"}))
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(a.recv(), timeout=0.3)
+
+
+# --- Capa 13: reparto MASIVO de ownership (primera queja real) ---
+#
+# Asignar 100 archivos uno por uno era inusable. El panel manda un lote y
+# el server lo aplica con UN solo broadcast.
+
+
+async def test_admin_asigna_muchos_un_solo_broadcast(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a, user="lider")   # admin
+        await handshake(b, user="dev")
+        await a.send(json.dumps({
+            "type": "admin_assign_many",
+            "paths": ["src/a.py", "src/b.py", "src/c.py"],
+            "username": "dev",
+        }))
+        esperado = {"type": "ownership", "owners": {
+            "src/a.py": "dev", "src/b.py": "dev", "src/c.py": "dev"}}
+        # UN solo ownership con TODO el lote (no tres mensajes).
+        assert await recv_tipo(a, "ownership") == esperado
+        assert await recv_tipo(b, "ownership") == esperado
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(a.recv(), timeout=0.3)  # no hay un 2º
+
+
+async def test_admin_revoca_muchos(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await handshake(a, user="lider")
+        await a.send(json.dumps({
+            "type": "admin_assign_many",
+            "paths": ["x.py", "y.py"], "username": "lider"}))
+        await recv_tipo(a, "ownership")
+        # username vacío = revocar el lote entero.
+        await a.send(json.dumps({
+            "type": "admin_assign_many",
+            "paths": ["x.py", "y.py"], "username": ""}))
+        assert await recv_tipo(a, "ownership") == {
+            "type": "ownership", "owners": {}}
+
+
+async def test_bulk_usuario_inexistente_no_aplica_nada(server_port: int) -> None:
+    # Mejor no-op claro que un estado a medias: si el destino no existe,
+    # NO se asigna ninguno del lote.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await handshake(a, user="lider")
+        await a.send(json.dumps({
+            "type": "admin_assign_many",
+            "paths": ["a.py", "b.py"], "username": "fantasma"}))
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(a.recv(), timeout=0.3)
+
+
+async def test_no_admin_no_puede_bulk(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a, user="lider")     # admin
+        await handshake(b, user="colado")    # NO admin
+        await b.send(json.dumps({
+            "type": "admin_assign_many",
+            "paths": ["z.py"], "username": "colado"}))
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(a.recv(), timeout=0.3)
