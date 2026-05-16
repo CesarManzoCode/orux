@@ -260,7 +260,16 @@ export function pushear(username: string, token: string, url: string) {
   send({ type: "push", username, token, url });
 }
 export function nuevoArchivo(path: string) {
+  // El server NO hace eco del update al emisor (capa 1, sin loop): si no
+  // reflejamos el archivo local, el creador no lo ve hasta recargar
+  // (mientras los demás sí, vía broadcast). Espejo local optimista —mismo
+  // criterio que `editar`— + abrirlo (paridad con lo que ve el otro). El
+  // server, en el 1er update de un path sin dueño, hace dueño al creador y
+  // difunde `ownership` a TODOS (incluido el emisor): eso llega solo.
+  if (path in state.files) return;  // ya existe: no pisarlo
+  set({ files: { ...state.files, [path]: "" }, currentPath: path });
   send({ type: "update", path, content: "" });
+  presence(path, 1);
 }
 export function adminAsignarVarios(paths: string[], username: string) {
   send({ type: "admin_assign_many", paths, username });
