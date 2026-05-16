@@ -291,12 +291,20 @@ class SyncServer:
         se le avisa (evita auto-ruido); si no parsea, `impacto` da {} y no
         manda nada. Todo scopeado al workspace/ownership de ESTE equipo.
         """
-        afectados = impacto(rt.workspace.snapshot(), path, viejo, nuevo)
+        # Capa 16: el análisis corre casi por tecla y antes era SÍNCRONO en
+        # el event loop — bloqueaba presencia/locks/broadcasts de TODO el
+        # equipo mientras parseaba. Ahora va a un hilo (igual que git, ver
+        # `_git_status_encoded`), imprescindible al meter un parser C
+        # (tree-sitter) en este hot path. Seguro: `snapshot()` es una copia
+        # y `motivos` solo recibe strings -> cero mutación compartida.
+        afectados = await asyncio.to_thread(
+            impacto, rt.workspace.snapshot(), path, viejo, nuevo
+        )
         if not afectados:
             return
         # El POR QUÉ de cada símbolo (mismo cálculo que decidió avisar). Sin
         # esto el aviso es adorno: "cambió X" y el dueño piensa "¿y a mí qué?".
-        razones = motivos_de(path, viejo, nuevo)
+        razones = await asyncio.to_thread(motivos_de, path, viejo, nuevo)
         # Reagrupamos símbolo->archivos ==> archivo_afectado->símbolos.
         por_archivo: dict[str, list[str]] = {}
         for simbolo, archivos in afectados.items():

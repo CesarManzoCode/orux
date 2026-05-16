@@ -10,6 +10,14 @@ dependencies = [
     # como wheel (sin compilador). NO se importa salvo que haya DSN: sin
     # `LAIDEA_DB_DSN` el server sigue en JSON/memoria y los tests no lo tocan.
     "asyncpg>=0.29",
+    # Capa 16: tree-sitter = Tier 2 del análisis (piso universal, parser C
+    # real para JS/TS — el heurístico regex no podía aislar firma de cuerpo).
+    # Traen wheels manylinux (sin compilador en python:3.12-slim), igual que
+    # asyncpg. NO son obligatorias en runtime: si faltan, la jerarquía cae
+    # sola al Tier 3 regex (por eso el sandbox sin internet sigue verde). La
+    # grammar TSX cubre JS/TS/JSX/TSX. Verificación real del parser: VPS.
+    "tree-sitter>=0.22",
+    "tree-sitter-typescript>=0.23",
 ]
 
 [project.optional-dependencies]
