@@ -9,10 +9,35 @@ services:
   laidea:
     build: .
     restart: unless-stopped
+    depends_on:
+      - postgres
     expose:
       - "8765"          # solo dentro de la red de compose, no al host
+    environment:
+      # Capa 15: DSN de Postgres. Mientras el server no esté cableado a la
+      # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
+      # adaptador sólo se usa cuando el server lo adopte. Vacío = JSON/memoria.
+      - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
     volumes:
       - laidea-data:/data
+
+  postgres:
+    # Capa 15: la DB de metadatos (users/teams/members/invites/ownership).
+    # No publica puertos: sólo alcanzable dentro de la red de compose, como
+    # el server. El estado vive en su propio volumen (durabilidad real).
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=laidea
+      - POSTGRES_PASSWORD=laidea
+      - POSTGRES_DB=laidea
+    volumes:
+      - laidea-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laidea -d laidea"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   caddy:
     # Antes: image caddy:2 + bind-mount de web/ (cliente vanilla crudo).
@@ -39,5 +64,6 @@ services:
 
 volumes:
   laidea-data:
+  laidea-pg:
   caddy-data:
   caddy-config:

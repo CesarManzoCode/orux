@@ -5,6 +5,11 @@ description = "Editor colaborativo en tiempo real sobre Git"
 requires-python = ">=3.11"
 dependencies = [
     "websockets>=13.0",
+    # Capa 15: Postgres (decisión del usuario). Driver async nativo, coherente
+    # con el server asyncio. Trae wheels manylinux: en python:3.12-slim entra
+    # como wheel (sin compilador). NO se importa salvo que haya DSN: sin
+    # `LAIDEA_DB_DSN` el server sigue en JSON/memoria y los tests no lo tocan.
+    "asyncpg>=0.29",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +27,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["laidea*"]
+
+[tool.setuptools.package-data]
+# schema.sql NO es .py: sin esto, pip install no lo copia y el server no
+# podría aplicar el esquema en el VPS.
+laidea = ["db/*.sql"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

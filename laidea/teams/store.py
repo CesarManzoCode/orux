@@ -9,9 +9,10 @@ Reglas del dominio (decididas con el usuario):
   con qué rol).
 - Un equipo podrá tener varios workspaces más adelante; por ahora 1.
 
-`MemTeamStore` es la verdad para los tests y para este sandbox. El
-adaptador Postgres implementará la MISMA superficie pública (mismos
-nombres, mismos contratos, mismas excepciones).
+La interfaz es **async**: el server es asyncio y el adaptador Postgres
+(`PgTeamStore`) es async nativo. `MemTeamStore` también es async (devuelve
+al instante) para que server y tests usen UNA sola superficie. Es la verdad
+para los tests y para este sandbox sin internet/DB.
 """
 
 from __future__ import annotations
@@ -38,16 +39,15 @@ def _codigo() -> str:
 
 class MemTeamStore:
     def __init__(self, backend: object | None = None) -> None:
-        # `backend=None` = en memoria (tests / sandbox), igual criterio que
-        # UserStore(path=None). El adaptador Postgres es otra clase con la
-        # misma API; este NO importa nada de Postgres a propósito.
+        # `backend=None` = en memoria. El adaptador Postgres es otra clase
+        # con la MISMA API async; este NO importa nada de Postgres.
         self._equipos: dict[str, dict] = {}            # id -> {id, nombre, creador}
         self._miembros: dict[str, dict[str, str]] = {} # team_id -> {usuario: rol}
         self._invites: dict[str, dict] = {}            # code -> {team_id, creado_por, usado_por}
 
     # --- Equipos ---
 
-    def crear_equipo(self, nombre: str, creador: str) -> dict:
+    async def crear_equipo(self, nombre: str, creador: str) -> dict:
         """Crea un equipo; `creador` queda como admin. Devuelve {id, nombre}."""
         nombre = (nombre or "").strip()
         if not nombre:
@@ -60,11 +60,11 @@ class MemTeamStore:
         self._miembros[tid] = {creador: "admin"}
         return {"id": tid, "nombre": nombre}
 
-    def equipo(self, team_id: str) -> dict | None:
+    async def equipo(self, team_id: str) -> dict | None:
         e = self._equipos.get(team_id)
         return {"id": e["id"], "nombre": e["nombre"]} if e else None
 
-    def equipos_de(self, usuario: str) -> list[dict]:
+    async def equipos_de(self, usuario: str) -> list[dict]:
         """Equipos del usuario, con su rol. Vacío = todavía no ve nada."""
         u = normalizar(usuario)
         out = []
@@ -77,14 +77,14 @@ class MemTeamStore:
 
     # --- Membresía ---
 
-    def es_miembro(self, team_id: str, usuario: str) -> bool:
+    async def es_miembro(self, team_id: str, usuario: str) -> bool:
         return normalizar(usuario) in self._miembros.get(team_id, {})
 
-    def rol(self, team_id: str, usuario: str) -> str | None:
+    async def rol(self, team_id: str, usuario: str) -> str | None:
         """'admin' | 'member' | None (no es miembro)."""
         return self._miembros.get(team_id, {}).get(normalizar(usuario))
 
-    def miembros(self, team_id: str) -> list[dict]:
+    async def miembros(self, team_id: str) -> list[dict]:
         return sorted(
             ({"usuario": u, "rol": r} for u, r in self._miembros.get(team_id, {}).items()),
             key=lambda x: x["usuario"],
@@ -92,11 +92,11 @@ class MemTeamStore:
 
     # --- Invitaciones (de un solo uso) ---
 
-    def crear_invitacion(self, team_id: str, por_usuario: str) -> str:
+    async def crear_invitacion(self, team_id: str, por_usuario: str) -> str:
         """Sólo el admin del equipo invita. Devuelve el código a compartir."""
         if team_id not in self._equipos:
             raise TeamError("ese equipo no existe")
-        if self.rol(team_id, por_usuario) != "admin":
+        if await self.rol(team_id, por_usuario) != "admin":
             # Defensa en profundidad: el server ya lo gatea, pero el dominio
             # no deja crear invitaciones a quien no es admin del equipo.
             raise TeamError("solo el admin del equipo puede invitar")
@@ -110,7 +110,7 @@ class MemTeamStore:
         }
         return code
 
-    def redimir(self, code: str, usuario: str) -> dict | None:
+    async def redimir(self, code: str, usuario: str) -> dict | None:
         """Une a `usuario` al equipo del código. Devuelve {id, nombre} o None
         si el código no existe o ya se usó. Idempotente si ya era miembro
         (igual consume el código: un código = una persona)."""

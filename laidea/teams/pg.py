@@ -1,0 +1,114 @@
+"""Adaptador Postgres del store de equipos. MISMA superficie async que
+`MemTeamStore` (mismos nombres, contratos y excepciones): el server no sabe
+con cuál habla. NO verificable en el sandbox (sin internet/DB); se ejercita
+en el VPS cuando el server lo adopte (paso 3). SQL estándar, parametrizado
+($1…), transacciones para lo que debe ser atómico.
+"""
+
+from __future__ import annotations
+
+from ..identity.store import normalizar
+from .store import TeamError, _codigo, _id_equipo
+
+
+class PgTeamStore:
+    def __init__(self, db) -> None:
+        self._db = db  # laidea.db.Database
+
+    async def crear_equipo(self, nombre: str, creador: str) -> dict:
+        nombre = (nombre or "").strip()
+        if not nombre:
+            raise TeamError("el nombre del equipo no puede estar vacío")
+        creador = normalizar(creador)
+        async with self._db.tx() as con:
+            tid = _id_equipo()
+            # Reintenta ante el caso (improbable) de id repetido.
+            while await con.fetchval("SELECT 1 FROM teams WHERE id=$1", tid):
+                tid = _id_equipo()
+            await con.execute(
+                "INSERT INTO teams (id, nombre, creador) VALUES ($1,$2,$3)",
+                tid, nombre, creador,
+            )
+            await con.execute(
+                "INSERT INTO team_members (team_id, username, rol) "
+                "VALUES ($1,$2,'admin')",
+                tid, creador,
+            )
+        return {"id": tid, "nombre": nombre}
+
+    async def equipo(self, team_id: str) -> dict | None:
+        r = await self._db.fetchrow(
+            "SELECT id, nombre FROM teams WHERE id=$1", team_id
+        )
+        return {"id": r["id"], "nombre": r["nombre"]} if r else None
+
+    async def equipos_de(self, usuario: str) -> list[dict]:
+        rows = await self._db.fetch(
+            "SELECT t.id, t.nombre, m.rol FROM team_members m "
+            "JOIN teams t ON t.id = m.team_id "
+            "WHERE m.username=$1 ORDER BY t.nombre",
+            normalizar(usuario),
+        )
+        return [{"id": r["id"], "nombre": r["nombre"], "rol": r["rol"]} for r in rows]
+
+    async def es_miembro(self, team_id: str, usuario: str) -> bool:
+        return bool(await self._db.fetchval(
+            "SELECT 1 FROM team_members WHERE team_id=$1 AND username=$2",
+            team_id, normalizar(usuario),
+        ))
+
+    async def rol(self, team_id: str, usuario: str) -> str | None:
+        return await self._db.fetchval(
+            "SELECT rol FROM team_members WHERE team_id=$1 AND username=$2",
+            team_id, normalizar(usuario),
+        )
+
+    async def miembros(self, team_id: str) -> list[dict]:
+        rows = await self._db.fetch(
+            "SELECT username, rol FROM team_members "
+            "WHERE team_id=$1 ORDER BY username",
+            team_id,
+        )
+        return [{"usuario": r["username"], "rol": r["rol"]} for r in rows]
+
+    async def crear_invitacion(self, team_id: str, por_usuario: str) -> str:
+        if not await self._db.fetchval("SELECT 1 FROM teams WHERE id=$1", team_id):
+            raise TeamError("ese equipo no existe")
+        if await self.rol(team_id, por_usuario) != "admin":
+            raise TeamError("solo el admin del equipo puede invitar")
+        async with self._db.tx() as con:
+            code = _codigo()
+            while await con.fetchval("SELECT 1 FROM invites WHERE code=$1", code):
+                code = _codigo()
+            await con.execute(
+                "INSERT INTO invites (code, team_id, creado_por) "
+                "VALUES ($1,$2,$3)",
+                code, team_id, normalizar(por_usuario),
+            )
+        return code
+
+    async def redimir(self, code: str, usuario: str) -> dict | None:
+        u = normalizar(usuario)
+        async with self._db.tx() as con:
+            inv = await con.fetchrow(
+                # FOR UPDATE: dos personas no pueden quemar el mismo código
+                # a la vez (un código = una persona).
+                "SELECT team_id, usado_por FROM invites WHERE code=$1 FOR UPDATE",
+                code,
+            )
+            if inv is None or inv["usado_por"] is not None:
+                return None
+            tid = inv["team_id"]
+            t = await con.fetchrow("SELECT id, nombre FROM teams WHERE id=$1", tid)
+            if t is None:  # equipo borrado entre medio
+                return None
+            await con.execute(
+                "UPDATE invites SET usado_por=$1, usado_at=now() WHERE code=$2",
+                u, code,
+            )
+            await con.execute(
+                "INSERT INTO team_members (team_id, username, rol) "
+                "VALUES ($1,$2,'member') ON CONFLICT DO NOTHING",
+                tid, u,
+            )
+            return {"id": t["id"], "nombre": t["nombre"]}

@@ -12,6 +12,7 @@ superficie, así la lógica multi-tenant se prueba 100% acá y lo único no
 verificable localmente es el I/O real de Postgres.
 """
 
+from .pg import PgTeamStore
 from .store import MemTeamStore, TeamError
 
-__all__ = ["MemTeamStore", "TeamError"]
+__all__ = ["MemTeamStore", "PgTeamStore", "TeamError"]
