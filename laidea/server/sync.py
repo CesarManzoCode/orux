@@ -109,6 +109,7 @@ from ..state import (
     Workspace,
     lineas_tocadas,
 )
+from ..teams import MemTeamStore
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,37 @@ def _autor_git(usuario: str) -> tuple[str, str]:
     return usuario, f"{usuario}@laidea.local"
 
 
+class TeamRuntime:
+    """Todo el estado vivo de UN equipo: su workspace, presencia, ownership,
+    propuestas, repo git y conexiones. Antes esto vivía suelto en
+    `SyncServer` (mono-tenant). Capa 15: se encapsula acá para que el server
+    pueda tener uno POR equipo y un equipo no vea al otro.
+
+    Paso 3a-i (este commit): cambio que PRESERVA el comportamiento — el
+    server crea UN runtime y delega; la suite entera pasa sin tocarse, lo
+    que prueba que no se rompió nada. El paso 3a-ii lo vuelve por-equipo.
+    """
+
+    def __init__(
+        self,
+        storage: DiskStorage | None = None,
+        ownership: Ownership | None = None,
+        git: GitRepo | None = None,
+    ) -> None:
+        self.workspace = Workspace(storage=storage)
+        self.workspace.cargar_de_disco()
+        self.clients: set[ServerConnection] = set()
+        self.roster = Roster()
+        self._ids: dict[ServerConnection, str] = {}
+        self._conns: dict[str, ServerConnection] = {}
+        self.ownership = ownership if ownership is not None else Ownership()
+        self.proposals = Proposals()
+        self.git = git
+        # Serializa commit/clone/push de ESTE equipo (subprocess+fs sobre su
+        # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
+        self._git_lock = asyncio.Lock()
+
+
 class SyncServer:
     def __init__(
         self,
@@ -134,49 +166,45 @@ class SyncServer:
         ownership: Ownership | None = None,
         secret: str | None = None,
         git: GitRepo | None = None,
+        teams: object | None = None,
     ) -> None:
-        # El workspace es el estado central. Todo lo demás (clientes, retransmisión)
-        # gira alrededor de mantenerlo coherente entre todos los conectados.
-        #
-        # `storage` es inyectado (capa 3): el server real (__main__) pasa un
-        # DiskStorage y el workspace se hidrata desde disco; los tests no pasan
-        # nada y arrancan en memoria, vacíos y aislados entre sí — ese
-        # aislamiento es un contrato que la suite necesita para no contaminarse.
-        self.workspace = Workspace(storage=storage)
-        self.workspace.cargar_de_disco()
-        # Set de conexiones activas. Lo usamos para difundir cambios a todos
-        # menos al emisor original.
-        self.clients: set[ServerConnection] = set()
-        # Estado de presencia: quién está y dónde. Efímero, paralelo al
-        # workspace (que es persistente). Ver state/presence.py.
-        self.roster = Roster()
-        # Puente entre las dos vistas de un mismo cliente: la conexión física
-        # (ServerConnection) y su identidad lógica (client_id). Lo necesitamos
-        # porque los updates llegan por la conexión pero la presencia se
-        # razona por identidad.
-        self._ids: dict[ServerConnection, str] = {}
-        # Mapa inverso: client_id -> conexión. Capa 4 lo necesita para mandar
-        # un mensaje dirigido a UN cliente concreto (al dueño de un archivo, al
-        # autor de una propuesta), no un broadcast.
-        self._conns: dict[str, ServerConnection] = {}
-        # Capa 4/7: ownership ahora por usuario y persistido (inyectado).
-        # Sin argumento = en memoria (tests). Las propuestas siguen efímeras.
-        self.ownership = ownership if ownership is not None else Ownership()
-        self.proposals = Proposals()
-        # Capa 7: identidad real. `users` inyectado (en memoria si None, como
-        # el resto del stack en tests). `secret` firma los tokens de sesión;
-        # efímero por instancia si no se pasa (tests se loguean dentro de la
-        # misma instancia, no dependen de cross-restart).
+        # Capa 15 paso 3a-i: el estado del workspace se encapsuló en
+        # `TeamRuntime`. Hoy hay UNO solo (comportamiento idéntico al
+        # mono-tenant); las propiedades de abajo delegan en él para no tocar
+        # los ~700 renglones de handlers. El paso 3a-ii crea uno por equipo.
+        self._rt = TeamRuntime(storage=storage, ownership=ownership, git=git)
+        # Capa 7: identidad real. `users` inyectado (en memoria si None).
         self.users = users if users is not None else UserStore()
         self._secret = secret if secret is not None else token_hex(32)
-        # Capa 8: el workspace como repo git (solo lectura). None = sin git
-        # (tests): no se manda ningún `git_status`, así el handshake de los
-        # tests previos (init/welcome/ownership) no cambia.
-        self.git = git
-        # Serializa las operaciones que mutan el repo (commit/clone/push):
-        # son subprocess + filesystem sobre el MISMO workspace compartido;
-        # dos a la vez lo corromperían. El clone además es destructivo.
-        self._git_lock = asyncio.Lock()
+        # Capa 15: store de equipos/membresía/invitaciones. Inyectado igual
+        # que el resto (None = en memoria). Aún NO lo usa `handle()` — eso es
+        # el paso 3a-ii (gate "sin equipo" + runtime por equipo). Se cablea
+        # ahora para fijar la costura sin cambiar comportamiento.
+        self.teams = teams if teams is not None else MemTeamStore()
+
+    # --- Delegación al runtime (paso 3a-i) ---
+    # Mantienen `self.workspace`/`self.clients`/... funcionando sin reescribir
+    # los handlers. En 3a-ii estos accesos pasarán a resolverse por equipo.
+    @property
+    def workspace(self): return self._rt.workspace
+    @property
+    def clients(self): return self._rt.clients
+    @property
+    def roster(self): return self._rt.roster
+    @property
+    def _ids(self): return self._rt._ids
+    @property
+    def _conns(self): return self._rt._conns
+    @property
+    def ownership(self): return self._rt.ownership
+    @property
+    def git(self): return self._rt.git
+    @property
+    def _git_lock(self): return self._rt._git_lock
+    @property
+    def proposals(self): return self._rt.proposals
+    @proposals.setter
+    def proposals(self, v): self._rt.proposals = v
 
     async def _enviar_a(self, client_id: str, payload: str) -> None:
         """Manda `payload` a un único cliente por su identidad. Silencioso si no está.
