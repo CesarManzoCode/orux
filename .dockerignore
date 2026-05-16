@@ -12,6 +12,8 @@ venv/
 .vscode/
 tests/
 web/
+client/node_modules/
+client/dist/
 workspace_data/
 .laidea/
 Dockerfile

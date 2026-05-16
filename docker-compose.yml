@@ -15,7 +15,13 @@ services:
       - laidea-data:/data
 
   caddy:
-    image: caddy:2
+    # Antes: image caddy:2 + bind-mount de web/ (cliente vanilla crudo).
+    # Ahora el cliente es React con build: imagen multi-stage (Node compila
+    # -> Caddy sirve dist/). El Caddyfile sigue por bind-mount (edición +
+    # sustitución de la variable de dominio).
+    build:
+      context: .
+      dockerfile: Dockerfile.web
     restart: unless-stopped
     depends_on:
       - laidea
@@ -28,7 +34,6 @@ services:
       - LAIDEA_SITE_ADDRESS=${LAIDEA_SITE_ADDRESS:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./web:/srv:ro
       - caddy-data:/data       # certificados
       - caddy-config:/config
 

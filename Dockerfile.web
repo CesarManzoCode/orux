@@ -1,0 +1,18 @@
+# Cliente React: build en Node, servido por Caddy. Multi-stage para que la
+# imagen final NO lleve Node ni node_modules — solo Caddy + los estáticos
+# ya compilados. El build corre acá (en el VPS hay internet); el resultado
+# es estático, fiel a "git clone basta": el adoptante hace `make up` y listo.
+
+FROM node:20-alpine AS build
+WORKDIR /client
+# Cacheamos la capa de dependencias: solo el manifiesto primero.
+COPY client/package.json client/package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY client/ ./
+RUN npm run build
+
+# Caddy sirve el dist/. El Caddyfile sigue viniendo por bind-mount en
+# docker-compose (para editarlo y para la sustitución de la variable de
+# dominio); acá solo entran los estáticos compilados.
+FROM caddy:2
+COPY --from=build /client/dist /srv

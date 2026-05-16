@@ -11,9 +11,13 @@
 		reverse_proxy laidea:8765
 	}
 
-	# Todo lo demás: el cliente estático (web/index.html montado en /srv).
+	# Todo lo demás: el cliente React ya compilado (dist/ copiado a /srv
+	# por Dockerfile.web). try_files -> index.html: una SPA sirve la misma
+	# página para cualquier ruta (hoy no hay router, pero es lo correcto y
+	# evita 404 si algún día se agrega navegación).
 	handle {
 		root * /srv
+		try_files {path} /index.html
 		file_server
 	}
 }
