@@ -28,6 +28,7 @@ runtime del equipo en vez de sobre un estado global.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from secrets import token_hex
 
@@ -103,6 +104,33 @@ def _autor_git(usuario: str) -> tuple[str, str]:
     return usuario, f"{usuario}@laidea.local"
 
 
+class _UsuariosAsync:
+    """Envuelve un `UserStore` síncrono (en memoria/JSON, tests) en una
+    superficie async, para que el server haga SIEMPRE `await self.users.X()`
+    sin importar si detrás hay JSON (tests) o Postgres (deploy). Si ya es
+    async (PgUserStore) el server lo usa tal cual, sin envolver."""
+
+    def __init__(self, base) -> None:
+        self._b = base
+
+    async def existe(self, u: str) -> bool:
+        return self._b.existe(u)
+
+    async def registrar(self, u: str, p: str) -> str:
+        return self._b.registrar(u, p)
+
+    async def verificar(self, u: str, p: str) -> bool:
+        return self._b.verificar(u, p)
+
+
+def _wrap_users(users):
+    base = users if users is not None else UserStore()
+    # PgUserStore ya es async (existe es coroutine): usar tal cual.
+    if inspect.iscoroutinefunction(getattr(base, "existe", None)):
+        return base
+    return _UsuariosAsync(base)
+
+
 class TeamRuntime:
     """Todo el estado vivo de UN equipo: su workspace, presencia, ownership,
     propuestas, repo git y conexiones. Un equipo no ve al otro porque cada
@@ -111,10 +139,12 @@ class TeamRuntime:
 
     def __init__(
         self,
+        team_id: str = "",
         storage: DiskStorage | None = None,
         ownership: Ownership | None = None,
         git: GitRepo | None = None,
     ) -> None:
+        self.team_id = team_id
         self.workspace = Workspace(storage=storage)
         self.workspace.cargar_de_disco()
         self.clients: set[ServerConnection] = set()
@@ -138,36 +168,66 @@ class SyncServer:
         secret: str | None = None,
         git: GitRepo | None = None,
         teams: object | None = None,
+        runtime_factory=None,
+        ownership_store: object | None = None,
     ) -> None:
         # Compat con la firma previa: si pasan storage/ownership/git
-        # concretos (tests de git, y el __main__ mono-tenant de hoy), ese
-        # mismo trío se usa para el equipo que se cree. Los tests tienen UN
-        # equipo, así que compartir es indistinguible de "por equipo". El
-        # paso 3b reemplaza esta fábrica por una que enraíza disco/Postgres
-        # por team_id (/data/ws/<team_id>).
+        # concretos (tests de git), ese trío se usa para el equipo que se
+        # cree. Los tests tienen UN equipo, así que compartir es
+        # indistinguible de "por equipo".
         self._base_storage = storage
         self._base_ownership = ownership
         self._base_git = git
         self._runtimes: dict[str, TeamRuntime] = {}
-        # Capa 7: identidad real. `users` inyectado (en memoria si None).
-        self.users = users if users is not None else UserStore()
+        # 3b: fábrica de runtime POR equipo (deploy: disco en
+        # /data/ws/<team_id> + git ahí). None = comportamiento base de los
+        # tests. `ownership_store` (PgOwnershipStore|None) persiste el mapa
+        # de ownership por equipo: se CARGA al abrir el equipo y se GUARDA
+        # tras cada cambio (el hot path sigue siendo el mapa en memoria).
+        self._runtime_factory = runtime_factory
+        self._ownership_store = ownership_store
+        # Capa 7/15: usuarios SIEMPRE async para el server (envuelve el
+        # sync de tests; PgUserStore pasa tal cual).
+        self.users = _wrap_users(users)
         self._secret = secret if secret is not None else token_hex(32)
         # Capa 15: equipos/membresía/invitaciones (async; None = memoria).
         self.teams = teams if teams is not None else MemTeamStore()
 
-    def _runtime_para(self, team_id: str) -> TeamRuntime:
-        """Runtime del equipo, creado perezosamente. Con storage/ownership/git
-        a None (tests) cada equipo obtiene su propio estado en memoria
-        independiente -> aislamiento real."""
+    async def _runtime_para(self, team_id: str) -> TeamRuntime:
+        """Runtime del equipo, creado perezosamente. En deploy lo arma la
+        `runtime_factory` (disco en /data/ws/<team_id> + git ahí); en tests
+        (sin factory) usa el trío base/None -> cada equipo, estado propio en
+        memoria = aislamiento. Si hay `ownership_store` (Postgres), el mapa
+        del equipo se HIDRATA al abrirlo."""
         rt = self._runtimes.get(team_id)
         if rt is None:
-            rt = TeamRuntime(
-                storage=self._base_storage,
-                ownership=self._base_ownership,
-                git=self._base_git,
-            )
+            if self._runtime_factory is not None:
+                rt = self._runtime_factory(team_id)
+                if inspect.isawaitable(rt):
+                    rt = await rt
+            else:
+                rt = TeamRuntime(
+                    team_id=team_id,
+                    storage=self._base_storage,
+                    ownership=self._base_ownership,
+                    git=self._base_git,
+                )
+            rt.team_id = team_id
+            if self._ownership_store is not None:
+                guardados = await self._ownership_store.cargar(team_id)
+                for path, dueño in guardados.items():
+                    rt.ownership.asignar(path, dueño)
             self._runtimes[team_id] = rt
         return rt
+
+    async def _persistir_own(self, rt: TeamRuntime) -> None:
+        """Escribe-a-través el ownership del equipo a Postgres (si hay
+        store). El mapa en memoria es la verdad; esto sólo lo durabiliza
+        tras un cambio. Sin store (tests): no-op."""
+        if self._ownership_store is not None:
+            await self._ownership_store.guardar(
+                rt.team_id, rt.ownership.snapshot()
+            )
 
     # --- Envío scopeado al equipo (rt) ---
 
@@ -297,6 +357,7 @@ class SyncServer:
         sus clientes. La presencia (Roster) NO se toca."""
         rt.workspace.recargar()
         rt.ownership.reset()
+        await self._persistir_own(rt)  # el ownership viejo ya no aplica
         rt.proposals = Proposals()
         init = encode(InitMessage(files=rt.workspace.snapshot()))
         own = encode(OwnershipMessage(owners=rt.ownership.snapshot()))
@@ -335,13 +396,13 @@ class SyncServer:
                 continue
             if isinstance(msg, RegisterMessage):
                 try:
-                    return self.users.registrar(msg.username, msg.password)
+                    return await self.users.registrar(msg.username, msg.password)
                 except ValueError as e:
                     await websocket.send(
                         encode(AuthErrorMessage(reason=str(e)))
                     )
             elif isinstance(msg, LoginMessage):
-                if self.users.verificar(msg.username, msg.password):
+                if await self.users.verificar(msg.username, msg.password):
                     return normalizar(msg.username)
                 await websocket.send(
                     encode(
@@ -352,7 +413,7 @@ class SyncServer:
                 )
             elif isinstance(msg, SessionMessage):
                 user = usuario_de_token(msg.token, self._secret)
-                if user is not None and self.users.existe(user):
+                if user is not None and await self.users.existe(user):
                     return user
                 await websocket.send(
                     encode(
@@ -436,7 +497,7 @@ class SyncServer:
         """Sesión dentro de UN equipo. Todo (handshake + bucle) opera sobre
         el runtime de ese equipo: otro equipo no existe para esta conexión.
         """
-        rt = self._runtime_para(team_id)
+        rt = await self._runtime_para(team_id)
         rt.clients.add(websocket)
         yo = rt.roster.asignar(usuario)
         rt._ids[websocket] = yo.client_id
@@ -531,6 +592,7 @@ class SyncServer:
                         )
                         if es_nuevo and dueño is None:
                             rt.ownership.claim(message.path, yo.client_id)
+                            await self._persistir_own(rt)
                             await self._broadcast_todos(
                                 rt,
                                 encode(
@@ -550,6 +612,8 @@ class SyncServer:
                         if rt.workspace.delete(message.path):
                             rt.proposals.drop_path(message.path)
                             cambio_owner = rt.ownership.liberar(message.path)
+                            if cambio_owner:
+                                await self._persistir_own(rt)
                             await self._broadcast_todos(
                                 rt, encode(DeleteMessage(path=message.path))
                             )
@@ -564,6 +628,7 @@ class SyncServer:
                                 )
                 elif isinstance(message, ClaimMessage):
                     rt.ownership.claim(message.path, yo.client_id)
+                    await self._persistir_own(rt)
                     await self._broadcast_todos(
                         rt,
                         encode(OwnershipMessage(owners=rt.ownership.snapshot())),
@@ -584,6 +649,7 @@ class SyncServer:
                         else:
                             aplicado = rt.ownership.liberar(message.path)
                         if aplicado:
+                            await self._persistir_own(rt)
                             await self._broadcast_todos(
                                 rt,
                                 encode(
@@ -615,6 +681,7 @@ class SyncServer:
                                 elif rt.ownership.liberar(p):
                                     aplicado = True
                         if aplicado:
+                            await self._persistir_own(rt)
                             await self._broadcast_todos(
                                 rt,
                                 encode(

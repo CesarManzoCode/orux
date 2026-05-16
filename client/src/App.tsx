@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./useStore";
 import { Login } from "./components/Login";
+import { Lobby } from "./components/Lobby";
 import { TopBar } from "./components/TopBar";
 import { Rail } from "./components/Rail";
 import { Sidebar } from "./components/Sidebar";
@@ -19,8 +20,11 @@ export function App() {
   // Si dejás de ser admin (re-init tras un clone), el modal se cierra solo.
   useEffect(() => { if (!s.esAdmin && adminOpen) setAdminOpen(false); }, [s.esAdmin, adminOpen]);
 
-  // La app está cerrada: sin autenticar, sólo el login (igual que siempre).
+  // La app está cerrada por dos compuertas: sin autenticar -> login;
+  // autenticado pero sin equipo -> lobby (capa 15). Sólo dentro de un
+  // equipo se ve el IDE, y es el de ESE equipo y de ningún otro.
   if (!s.authed) return <Login />;
+  if (s.fase !== "team") return <Lobby />;
 
   return (
     <div className="app">

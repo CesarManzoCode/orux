@@ -35,6 +35,13 @@ export interface State {
   esAdmin: boolean;
   usuarios: string[];
   proyecto: string;
+  // Capa 15: gate de equipo. "auth" = sin loguear; "lobby" = logueado pero
+  // sin equipo (elegir/crear/unirse); "team" = dentro de un equipo (IDE).
+  fase: "auth" | "lobby" | "team";
+  equipos: { id: string; nombre: string; rol: string }[];
+  equipoError: string;
+  equipo: { id: string; nombre: string; rol: string } | null;
+  inviteCode: string;  // último código emitido por el admin (para compartir)
 }
 
 const inicial: State = {
@@ -44,6 +51,7 @@ const inicial: State = {
   proyecto:
     location.hostname && location.hostname !== "localhost"
       ? location.hostname : "local",
+  fase: "auth", equipos: [], equipoError: "", equipo: null, inviteCode: "",
 };
 
 let state: State = inicial;
@@ -84,11 +92,30 @@ function onMessage(raw: string) {
     case "auth_ok":
       localStorage.setItem("laidea_session", m.token);
       localStorage.setItem("laidea_user", m.username);
-      set({ authed: true, loginError: null });
+      // Autenticado pero todavía sin equipo: el server manda `lobby` a
+      // continuación. La app sigue cerrada un escalón más.
+      set({ authed: true, loginError: null, fase: "lobby" });
       break;
     case "auth_error":
       localStorage.removeItem("laidea_session");
-      set({ authed: false, loginError: m.reason });
+      set({ authed: false, loginError: m.reason, fase: "auth" });
+      break;
+    case "lobby":
+      set({ fase: "lobby", equipos: m.teams || [], equipoError: m.error || "" });
+      break;
+    case "team_ready":
+      // Entramos a un equipo: lo que sigue (init/welcome/...) es de ÉL.
+      set({
+        fase: "team",
+        equipo: { id: m.team_id, nombre: m.nombre, rol: m.rol },
+        equipoError: "",
+        // estado de equipo anterior, limpio (por si se cambió de equipo).
+        files: {}, owners: {}, peers: {}, proposals: {}, impacts: {},
+        currentPath: null, inviteCode: "",
+      });
+      break;
+    case "invite_created":
+      set({ inviteCode: m.code });
       break;
     case "init": {
       const files: Record<string, string> = { ...m.files };
@@ -184,6 +211,19 @@ export function salir() {
   localStorage.removeItem("laidea_session");
   localStorage.removeItem("laidea_user");
   location.reload();
+}
+// --- Capa 15: gate de equipo ---
+export function crearEquipo(nombre: string) {
+  send({ type: "create_team", nombre });
+}
+export function redimirInvite(code: string) {
+  send({ type: "redeem_invite", code });
+}
+export function seleccionarEquipo(team_id: string) {
+  send({ type: "select_team", team_id });
+}
+export function crearInvite() {
+  send({ type: "create_invite" });
 }
 export function seleccionar(path: string) {
   set({ currentPath: path });

@@ -33,7 +33,7 @@ from secrets import token_hex
 from ..git import GitRepo
 from ..identity import UserStore
 from ..state import DiskStorage, Ownership
-from .sync import SyncServer
+from .sync import SyncServer, TeamRuntime
 
 # Todo el estado de ejecución vive bajo ~/.laidea, FUERA del árbol del
 # proyecto a propósito (ver más abajo). El workspace en un subdir; usuarios,
@@ -58,33 +58,73 @@ def _secreto(base: Path) -> str:
     return s
 
 
+async def _amain() -> None:
+    log = logging.getLogger(__name__)
+    env = os.environ.get("LAIDEA_DATA")
+    base = Path(env) if env else BASE_POR_DEFECTO
+    base.mkdir(parents=True, exist_ok=True)
+    secret = _secreto(base)
+    host = os.environ.get("LAIDEA_HOST", "localhost")
+    port = int(os.environ.get("LAIDEA_PORT", "8765"))
+    dsn = os.environ.get("LAIDEA_DB_DSN", "").strip()
+
+    if dsn:
+        # Capa 15 (sistema real): metadatos en Postgres; el workspace de
+        # CADA equipo es su propio repo git en disco, en /data/ws/<team_id>.
+        # Así un equipo no ve al otro ni en la DB ni en el filesystem, y
+        # sigue valiendo "git clone basta" (cada carpeta es un repo de
+        # verdad). Los equipos/usuarios sobreviven a reiniciar (Postgres).
+        from ..db import Database
+        from ..db.stores import PgOwnershipStore, PgUserStore
+        from ..teams import PgTeamStore
+
+        db = await Database.conectar(dsn)
+        log.info("Postgres conectado; esquema aplicado")
+        ws_root = base / "ws"
+        ws_root.mkdir(parents=True, exist_ok=True)
+
+        def _runtime(team_id: str) -> TeamRuntime:
+            d = ws_root / team_id
+            return TeamRuntime(
+                team_id=team_id,
+                storage=DiskStorage(d),
+                git=GitRepo(d),
+            )
+
+        server = SyncServer(
+            users=PgUserStore(db),
+            teams=PgTeamStore(db),
+            ownership_store=PgOwnershipStore(db),
+            runtime_factory=_runtime,
+            secret=secret,
+        )
+        log.info("estado: Postgres (users/teams/ownership) + ws por equipo en %s", ws_root)
+    else:
+        # Sin DSN: modo en memoria/JSON de un solo equipo implícito (dev /
+        # arranque sin DB). Los equipos NO sobreviven a reiniciar — por eso
+        # producción DEBE setear LAIDEA_DB_DSN (docker-compose ya lo hace).
+        ws = base / "workspace"
+        server = SyncServer(
+            storage=DiskStorage(ws),
+            users=UserStore(base / "users.json"),
+            ownership=Ownership(base / "ownership.json"),
+            secret=secret,
+            git=GitRepo(ws),
+        )
+        log.warning(
+            "sin LAIDEA_DB_DSN: equipos EFÍMEROS (memoria). Sólo dev. "
+            "estado en %s", base,
+        )
+
+    await server.run(host=host, port=port)
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
-    env = os.environ.get("LAIDEA_DATA")
-    base = Path(env) if env else BASE_POR_DEFECTO
-    # El MISMO directorio es el workspace persistido (capa 3) y el repo git
-    # (capa 8): así "vive sobre Git" literalmente — `git clone` de esa carpeta
-    # te da el código, sin formato propietario.
-    ws = base / "workspace"
-    server = SyncServer(
-        storage=DiskStorage(ws),
-        users=UserStore(base / "users.json"),
-        ownership=Ownership(base / "ownership.json"),
-        secret=_secreto(base),
-        git=GitRepo(ws),
-    )
-    # Host/puerto por entorno. Default `localhost` para que en una máquina de
-    # dev NO se exponga sola; el contenedor pone LAIDEA_HOST=0.0.0.0 para
-    # escuchar en todas las interfaces (Caddy/Docker lo necesitan).
-    host = os.environ.get("LAIDEA_HOST", "localhost")
-    port = int(os.environ.get("LAIDEA_PORT", "8765"))
-    logging.getLogger(__name__).info(
-        "estado en %s (workspace=repo git, users, ownership, secret)", base
-    )
-    asyncio.run(server.run(host=host, port=port))
+    asyncio.run(_amain())
 
 
 if __name__ == "__main__":
