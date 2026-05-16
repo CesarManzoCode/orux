@@ -146,15 +146,39 @@ def lenguaje_de(path: str) -> str | None:
     return par[0] if par else None
 
 
-def cambios(path: str, viejo: str, nuevo: str) -> dict[str, str]:
-    """Símbolo cambiado en `path` -> por qué importa, vía el tier elegido.
+# pyright (capa 17) hoy solo Python. El cliente LSP es universal; sumar un
+# server de otro lenguaje es enchufar acá, sin re-arquitecturar.
+_LSP_LANGS = {"py"}
 
-    Punto único que el dispatcher usará en lugar de la vieja
-    `mod.cambios_que_importan`. Conserva el contrato de capa 6: si el tier no
-    puede analizar el `nuevo` (código a medio escribir, `simbolos` => None)
-    no se opina nada (`{}`); si el `viejo` no era analizable se trata como
-    vacío (nada que romper aún). Lenguaje sin tier => `{}`.
+
+def _usar_lsp(sesion, path: str) -> bool:
+    """¿Hay sesión LSP viva y aplica a este lenguaje? Es el Tier 0 (el más
+    profundo). Si no, se cae a la jerarquía de capa 16 (ast/tree-sitter/
+    regex) — la red de seguridad que hace seguro adoptar LSP."""
+    return (
+        sesion is not None
+        and lenguaje_de(path) in _LSP_LANGS
+        and sesion.disponible()
+    )
+
+
+def cambios(
+    path: str, viejo: str, nuevo: str, sesion=None
+) -> dict[str, str]:
+    """Símbolo cambiado en `path` -> por qué importa.
+
+    Con sesión LSP viva (Tier 0): resolución type-aware de pyright. Si el
+    server falla (`simbolos` => None) se DEGRADA al tier de capa 16 (no es
+    "código roto", es "server caído": ast aplicará su propia regla). Sin
+    sesión: exactamente el camino de capa 16 (contrato byte-idéntico, los
+    226 tests que llaman sin sesión no cambian).
     """
+    if _usar_lsp(sesion, path):
+        despues = sesion.simbolos(path, nuevo)
+        if despues is not None:
+            antes = sesion.simbolos(path, viejo) or {}
+            return cambios_que_importan_modelo(antes, despues)
+        # server LSP falló -> degradar a la jerarquía de capa 16
     tier = tier_para(path)
     if tier is None:
         return {}
@@ -163,6 +187,38 @@ def cambios(path: str, viejo: str, nuevo: str) -> dict[str, str]:
         return {}  # no opinamos sobre código roto (idéntico a capa 6)
     antes = tier.simbolos(viejo) or {}
     return cambios_que_importan_modelo(antes, despues)
+
+
+def archivos_afectados(
+    path: str, workspace: dict[str, str], nuevo: str,
+    syms: list[str], lang: str, tier, sesion=None,
+) -> dict[str, list[str]]:
+    """{símbolo: [otros archivos que lo usan]}.
+
+    Con sesión LSP viva: fan-out REAL (pyright resolvió imports — quién usa
+    de verdad el símbolo, no quién tiene el token). Ése es el salto que mata
+    los falsos positivos. Si falla, o sin sesión: el token-scan de capa 16,
+    byte-idéntico (este es el punto que conserva su comportamiento).
+    """
+    if _usar_lsp(sesion, path):
+        real = sesion.fan_out(workspace, path, nuevo, syms)
+        if real is not None:
+            return {
+                s: sorted(real[s]) for s in syms if real.get(s)
+            }
+        # fan-out LSP falló -> degradar al token-scan
+    out: dict[str, list[str]] = {}
+    for s in syms:
+        af = sorted(
+            o
+            for o, c in workspace.items()
+            if o != path
+            and lenguaje_de(o) == lang
+            and s in tier.referencias(c)
+        )
+        if af:
+            out[s] = af
+    return out
 
 
 def tier_para(path: str) -> Tier | None:

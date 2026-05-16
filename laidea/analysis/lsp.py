@@ -320,6 +320,82 @@ def simbolos_de_pyright(
     return out
 
 
+def _posicion_nombre(doc_symbols: object, nombre: str) -> tuple[int, int] | None:
+    """Posición (línea, col) del NOMBRE de un símbolo top, para preguntarle a
+    pyright `references` ahí. Prefiere `selectionRange` (el rango del
+    identificador) sobre `range` (todo el símbolo)."""
+    if not isinstance(doc_symbols, list):
+        return None
+    for s in doc_symbols:
+        if isinstance(s, dict) and s.get("name") == nombre:
+            r = s.get("selectionRange") or s.get("range") or {}
+            ini = r.get("start")
+            if ini:
+                return ini["line"], ini["character"]
+    return None
+
+
+class SesionLSP:
+    """Una sesión de análisis contra UN workspace, vía un `ClienteLSP` ya
+    conectado. Encapsula sincronizar documentos y traducir a modelo/fan-out.
+
+    El subproceso pyright real (spawn + tibio por equipo + reciclado) es el
+    paso siguiente; ESTA clase es pura lógica de protocolo y se prueba 100%
+    con el server falso. Cualquier `ErrorLSP` (server muerto/lento/roto) se
+    traga y devuelve None: el tier degrada solo a tree-sitter/ast.
+    """
+
+    def __init__(self, cliente: ClienteLSP, raiz: str) -> None:
+        self._c = cliente
+        self._raiz = raiz
+        self._ver: dict[str, int] = {}
+
+    def disponible(self) -> bool:
+        return self._c._vivo
+
+    def _sync(self, uri: str, texto: str) -> None:
+        if uri not in self._ver:
+            self._c.abrir(uri, texto)
+            self._ver[uri] = 1
+        else:
+            self._ver[uri] += 1
+            self._c.cambiar(uri, texto, self._ver[uri])
+
+    def simbolos(self, path: str, fuente: str) -> dict[str, Simbolo] | None:
+        uri = path_a_uri(self._raiz, path)
+        try:
+            self._sync(uri, fuente)
+            ds = self._c.document_symbol(uri)
+        except ErrorLSP:
+            return None
+        return simbolos_de_pyright(ds, fuente)
+
+    def fan_out(
+        self, workspace: dict[str, str], path: str, nuevo: str,
+        syms: list[str],
+    ) -> dict[str, set[str]] | None:
+        """{símbolo: set de OTROS paths que lo usan de verdad} o None si el
+        server falló (=> degradar). Sincroniza TODO el workspace para que
+        pyright resuelva imports cross-módulo (ése es el salto)."""
+        try:
+            for p, txt in workspace.items():
+                self._sync(path_a_uri(self._raiz, p), txt)
+            uri = path_a_uri(self._raiz, path)
+            self._sync(uri, nuevo)
+            ds = self._c.document_symbol(uri)
+            out: dict[str, set[str]] = {}
+            for s in syms:
+                pos = _posicion_nombre(ds, s)
+                if pos is None:
+                    out[s] = set()
+                    continue
+                refs = self._c.referencias(uri, pos[0], pos[1])
+                out[s] = paths_que_referencian(refs, self._raiz, path)
+            return out
+        except ErrorLSP:
+            return None
+
+
 def paths_que_referencian(
     refs: object, raiz: str, path_propio: str
 ) -> set[str]:

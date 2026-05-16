@@ -13,10 +13,14 @@ import json
 
 import pytest
 
+import re
+
+from laidea.analysis import impacto, motivos
 from laidea.analysis.modelo import cambios_que_importan_modelo
 from laidea.analysis.lsp import (
     ClienteLSP,
     ErrorLSP,
+    SesionLSP,
     _leer_mensaje,
     enmarcar,
     path_a_uri,
@@ -232,3 +236,125 @@ def test_paths_que_referencian_resolucion_real() -> None:
         "auth.py", "billing.py"
     }
     assert paths_que_referencian(None, raiz, "models.py") == set()
+
+
+# --- Integración end-to-end con un pyright FALSO (sesión + dispatcher) ----
+
+
+class _PyrightFalso:
+    """Server LSP falso con estado: recuerda el texto de cada uri (didOpen/
+    didChange) y, en documentSymbol, lo "parsea" (mínimo: `def f(sig):`)
+    como lo haría pyright. references devuelve un set fijo de ubicaciones =
+    resolución cross-módulo simulada. Sirve para probar TODA la cadena
+    sesión->dispatcher sin un pyright real."""
+
+    _DEF = re.compile(r"^def ([A-Za-z_]\w*)\(([^)]*)\):", re.M)
+
+    def __init__(self, refs_uris: list[str]) -> None:
+        self._refs = refs_uris
+        self._txt: dict[str, str] = {}
+        self._in = b""
+        self._out = b""
+        self.cerrado = False
+
+    def escribir(self, datos: bytes) -> None:
+        self._in += datos
+        while b"\r\n\r\n" in self._in:
+            cab, _, resto = self._in.partition(b"\r\n\r\n")
+            n = 0
+            for ln in cab.split(b"\r\n"):
+                if ln.lower().startswith(b"content-length:"):
+                    n = int(ln.split(b":", 1)[1].strip())
+            if len(resto) < n:
+                break
+            cuerpo, self._in = resto[:n], resto[n:]
+            self._despachar(json.loads(cuerpo.decode()))
+
+    def _responder(self, mid, result) -> None:
+        self._out += enmarcar({"jsonrpc": "2.0", "id": mid,
+                               "result": result})
+
+    def _despachar(self, msg: dict) -> None:
+        m = msg.get("method")
+        p = msg.get("params", {})
+        if m == "initialize":
+            self._responder(msg["id"], {"capabilities": {}})
+        elif m == "textDocument/didOpen":
+            td = p["textDocument"]
+            self._txt[td["uri"]] = td["text"]
+        elif m == "textDocument/didChange":
+            self._txt[p["textDocument"]["uri"]] = p["contentChanges"][0]["text"]
+        elif m == "textDocument/documentSymbol":
+            uri = p["textDocument"]["uri"]
+            texto = self._txt.get(uri, "")
+            syms = []
+            for mm in self._DEF.finditer(texto):
+                nom, sig = mm.group(1), mm.group(2)
+                ln = texto[: mm.start()].count("\n")
+                syms.append({
+                    "name": nom, "kind": 12, "detail": f"({sig})",
+                    "range": {"start": {"line": ln, "character": 0},
+                              "end": {"line": ln, "character": mm.end() - mm.start()}},
+                    "selectionRange": {"start": {"line": ln, "character": 4},
+                                       "end": {"line": ln, "character": 5}},
+                })
+            self._responder(msg["id"], syms)
+        elif m == "textDocument/references":
+            self._responder(msg["id"], [{"uri": u, "range": {}}
+                                        for u in self._refs])
+        elif m == "shutdown":
+            self._responder(msg["id"], None)
+
+    def leer(self, n: int) -> bytes:
+        if self.cerrado:
+            return b""
+        t, self._out = self._out[:n], self._out[n:]
+        return t
+
+
+def _sesion(raiz: str, refs_paths: list[str]) -> SesionLSP:
+    srv = _PyrightFalso([path_a_uri(raiz, p) for p in refs_paths])
+    c = ClienteLSP(srv)
+    c.iniciar(path_a_uri(raiz, ""))
+    return SesionLSP(c, raiz)
+
+
+def test_dispatcher_usa_fan_out_real_de_pyright() -> None:
+    raiz = "/data/ws/eq1"
+    ws = {
+        "models.py": "def crea(a):\n    return a\n",
+        "auth.py": "x = 1\n",       # NO contiene el token 'crea'
+        "billing.py": "y = 2\n",    # NO contiene el token 'crea'
+    }
+    # pyright dice (resolución real) que crea() se usa en auth.py y billing.py
+    # aunque el token no aparezca: el token-scan de capa 16 NO los hallaría.
+    ses = _sesion(raiz, ["auth.py", "billing.py", "models.py"])
+    viejo = ws["models.py"]
+    nuevo = "def crea(a, b):\n    return a\n"   # cambió la firma
+
+    assert motivos("models.py", viejo, nuevo, ses) == {
+        "crea": "cambió la firma de «crea»: (a) → (a, b) — revisá las llamadas"
+    }
+    af = impacto({**ws, "models.py": nuevo}, "models.py", viejo, nuevo, ses)
+    assert af == {"crea": ["auth.py", "billing.py"]}  # fan-out real, no token
+
+
+def test_sesion_lsp_caida_degrada_a_capa16() -> None:
+    raiz = "/data/ws/eq1"
+    viejo = "def crea(a):\n    return a\n"
+    nuevo = "def crea(a, b):\n    return a\n"
+    ws = {"models.py": nuevo, "auth.py": "from models import crea\ncrea(1)\n"}
+
+    ses = _sesion(raiz, ["auth.py"])
+    ses._c._t.cerrado = True  # pyright murió a mitad de sesión
+
+    # Debe DEGRADAR a capa 16 (ast + token-scan), no romper: mismo resultado
+    # que sin sesión.
+    assert motivos("models.py", viejo, nuevo, ses) == motivos(
+        "models.py", viejo, nuevo
+    )
+    assert impacto(ws, "models.py", viejo, nuevo, ses) == impacto(
+        ws, "models.py", viejo, nuevo
+    )
+    # y el de capa 16 sí encuentra auth.py por el token (sanity)
+    assert impacto(ws, "models.py", viejo, nuevo) == {"crea": ["auth.py"]}

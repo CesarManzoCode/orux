@@ -32,42 +32,36 @@ from .python import (
 
 
 def impacto(
-    workspace: dict[str, str], path: str, viejo: str, nuevo: str
+    workspace: dict[str, str], path: str, viejo: str, nuevo: str,
+    sesion=None,
 ) -> dict[str, list[str]]:
-    """Símbolo cambiado en `path` -> otros archivos (del MISMO lenguaje) que
-    lo referencian. La pregunta del onboarding: "cambié esto, ¿a quién le
-    importa?". Lenguaje sin tier (o sin cambios que importen) -> {}: el
-    server no avisa nada y nada se rompe (degradación con gracia).
+    """Símbolo cambiado en `path` -> otros archivos que lo referencian. La
+    pregunta del onboarding: "cambié esto, ¿a quién le importa?".
+
+    `sesion` = sesión LSP del equipo (capa 17) o None. Con sesión viva el
+    fan-out es resolución REAL de pyright (no token-scan); sin ella, o si
+    falla, es exactamente capa 16. Lenguaje sin tier / sin cambios -> {}.
     """
     lang = tiers.lenguaje_de(path)
     if lang is None:
         return {}
     # Solo los cambios que de verdad afectan a quien usa el símbolo (no
     # cualquier cambio de cuerpo). El POR QUÉ lo da `motivos()`.
-    cambiados = tiers.cambios(path, viejo, nuevo)
+    cambiados = tiers.cambios(path, viejo, nuevo, sesion)
     if not cambiados:
         return {}
     tier = tiers.tier_para(path)
-    resultado: dict[str, list[str]] = {}
-    for sym in cambiados:
-        afectados = sorted(
-            otro
-            for otro, contenido in workspace.items()
-            if otro != path
-            and tiers.lenguaje_de(otro) == lang
-            and sym in tier.referencias(contenido)
-        )
-        if afectados:
-            resultado[sym] = afectados
-    return resultado
+    return tiers.archivos_afectados(
+        path, workspace, nuevo, list(cambiados), lang, tier, sesion
+    )
 
 
-def motivos(path: str, viejo: str, nuevo: str) -> dict[str, str]:
+def motivos(path: str, viejo: str, nuevo: str, sesion=None) -> dict[str, str]:
     """Símbolo cambiado en `path` -> POR QUÉ su cambio le importa a quien lo
-    usa. Mismo lenguaje/regla que `impacto` (es el mismo cálculo). El server
-    lo usa para que el aviso no sea "algo cambió" sino la razón concreta.
+    usa. Mismo cálculo que `impacto`. El server lo usa para que el aviso no
+    sea "algo cambió" sino la razón concreta.
     """
-    return tiers.cambios(path, viejo, nuevo)
+    return tiers.cambios(path, viejo, nuevo, sesion)
 
 
 __all__ = [
