@@ -6,8 +6,15 @@ FROM python:3.12-slim AS base
 # `git` es REQUISITO de runtime: la capa 8 invoca el binario `git` para
 # reportar el estado del workspace (que es un repo git). Sin git, GitRepo
 # degrada a "no disponible" — lo instalamos para que funcione de verdad.
+#
+# `libatomic1`: el Node que pyright-python baja (capa 17) es un binario
+# prearmado que enlaza `libatomic.so.1`, y python:3.12-slim (Debian slim)
+# NO la trae -> el log lo gritó: "node: error while loading shared
+# libraries: libatomic.so.1". Sin ella pyright no arranca y el análisis
+# degrada mudo a capa 16. Una sola lib, sin recomendados.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends \
+      git ca-certificates libatomic1 \
  && rm -rf /var/lib/apt/lists/*
 
 # Usuario no-root: no se corre el server como root en un servidor expuesto.
