@@ -23,13 +23,16 @@ RUN pip install --no-cache-dir .
 # que se invoca. Si eso pasara en runtime, el 1er análisis de cada deploy
 # necesitaría red y un cache escribible por el usuario no-root. Lo
 # PRE-CALENTAMOS acá (build, como root, con red): Node queda horneado en la
-# imagen y el server arranca offline y rápido. Cache en ruta propia,
-# legible por el usuario no-root. Si pyright no estuviera, el análisis
-# degrada a tree-sitter/ast (no es fatal) — por eso `|| true`.
+# imagen y el server arranca offline y rápido. CLAVE: pyright-python
+# ESCRIBE en su cache en cada arranque (lock/chequeos de versión), así que
+# el dir debe ser PROPIEDAD del usuario runtime no-root, no solo legible
+# (un `chmod a+rX` lo dejaba read-only y el langserver no levantaba en el
+# VPS -> degradaba a capa 16 sin avisar). Si pyright no estuviera, el
+# análisis degrada a tree-sitter/ast (no fatal) — por eso `|| true`.
 ENV PYRIGHT_PYTHON_CACHE_DIR=/opt/pyright
 RUN mkdir -p /opt/pyright \
  && (pyright --version || true) \
- && chmod -R a+rX /opt/pyright
+ && chown -R laidea:laidea /opt/pyright
 
 # Estado persistente (workspace=repo git, users, ownership, secret). Es un
 # VOLUME: vive fuera del contenedor para sobrevivir recrearlo. Propiedad del

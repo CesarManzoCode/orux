@@ -26,13 +26,17 @@ mapeo pyright→modelo y el ciclo de vida del demonio son pasos siguientes.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import select
 import subprocess
+import tempfile
 import threading
 from typing import Protocol
 
 from .modelo import Simbolo
+
+_log = logging.getLogger("laidea.lsp")
 
 
 class Transporte(Protocol):
@@ -468,32 +472,65 @@ class _TransporteProceso:
             pass
 
 
+# pyright-python expone `pyright-langserver`; algunas versiones/instalaciones
+# también `pyright-python-langserver`. Probamos ambos antes de rendirnos.
+_CMDS = (
+    ["pyright-langserver", "--stdio"],
+    ["pyright-python-langserver", "--stdio"],
+)
+
+
 def arrancar_pyright(
     raiz: str, timeout: float = 15.0
 ) -> SesionLSP | None:
-    """Arranca `pyright-langserver --stdio` sobre el workspace `raiz` y hace
-    el handshake. Devuelve la sesión lista, o None ante CUALQUIER fallo
-    (binario ausente —es el caso del sandbox—, spawn falla, handshake no
+    """Arranca el language server de pyright sobre `raiz` y hace el
+    handshake. Devuelve la sesión lista, o None ante CUALQUIER fallo
+    (binario ausente —caso del sandbox—, spawn falla, handshake no
     responde). None => la jerarquía cae sola a tree-sitter/ast: nunca
-    rompe, nunca propaga. El binario lo trae el paquete pip `pyright`.
-    """
-    try:
-        proc = subprocess.Popen(
-            ["pyright-langserver", "--stdio"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=0,
-        )
-    except (FileNotFoundError, OSError):
-        return None  # sin pyright (sandbox/sin internet): degradar limpio
-    try:
-        cliente = ClienteLSP(_TransporteProceso(proc, timeout))
-        cliente.iniciar("file://" + raiz.rstrip("/"))
-    except Exception:  # noqa: BLE001 - handshake falló => matar y degradar
+    rompe, nunca propaga.
+
+    Modo producto: ante fallo se LOGUEA la razón exacta (binario, spawn,
+    handshake) + la cola de stderr de pyright. Sin esto, un pyright que no
+    arranca en el VPS es invisible: el análisis "funciona" pero degradado y
+    nadie sabe por qué. stderr va a un archivo temporal (no a un pipe: un
+    pipe sin leer se llena y CUELGA pyright en el camino feliz)."""
+    ultimo = ""
+    for cmd in _CMDS:
+        err = tempfile.TemporaryFile()
         try:
-            proc.kill()
-        except Exception:  # noqa: BLE001
-            pass
-        return None
-    return SesionLSP(cliente, raiz)
+            proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=err, bufsize=0,
+            )
+        except (FileNotFoundError, OSError) as e:
+            ultimo = f"{cmd[0]}: no se pudo ejecutar ({e})"
+            err.close()
+            continue
+        try:
+            cliente = ClienteLSP(_TransporteProceso(proc, timeout))
+            cliente.iniciar("file://" + raiz.rstrip("/"))
+            _log.info("pyright LSP arrancado (%s) sobre %s", cmd[0], raiz)
+            return SesionLSP(cliente, raiz)
+        except Exception as e:  # noqa: BLE001 - handshake falló
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                err.seek(0)
+                cola = err.read()[-800:].decode("utf-8", "replace").strip()
+            except Exception:  # noqa: BLE001
+                cola = ""
+            ultimo = (
+                f"{cmd[0]}: handshake falló ({type(e).__name__}: {e})"
+                + (f" | stderr: {cola}" if cola else
+                   " | stderr vacío (¿pyright no escribió nada? "
+                   "suele ser cache/red en el 1er uso)")
+            )
+        finally:
+            err.close()
+    _log.warning(
+        "pyright NO disponible -> el análisis degrada a tree-sitter/ast. "
+        "Razón: %s", ultimo or "binario no encontrado en PATH",
+    )
+    return None
