@@ -167,18 +167,15 @@ def cambios(
 ) -> dict[str, str]:
     """Símbolo cambiado en `path` -> por qué importa.
 
-    Con sesión LSP viva (Tier 0): resolución type-aware de pyright. Si el
-    server falla (`simbolos` => None) se DEGRADA al tier de capa 16 (no es
-    "código roto", es "server caído": ast aplicará su propia regla). Sin
-    sesión: exactamente el camino de capa 16 (contrato byte-idéntico, los
-    226 tests que llaman sin sesión no cambian).
+    DETECCIÓN del cambio = jerarquía de capa 16 (ast para Python, ya aísla
+    firma/superficie perfecto; tree-sitter; regex). El `documentSymbol` de
+    pyright NO sirve para esto: no rellena la firma en `detail`, así que un
+    cambio de `__init__` pasaba inadvertido (verificado en el VPS). El
+    aporte real de pyright es OTRO —el fan-out con resolución real, ver
+    `archivos_afectados`—, no la detección. Por eso `sesion` no se usa acá:
+    detección y fan-out son cosas distintas y se las desacopla a propósito.
+    Sin sesión = idéntico (los tests sin sesión no cambian).
     """
-    if _usar_lsp(sesion, path):
-        despues = sesion.simbolos(path, nuevo)
-        if despues is not None:
-            antes = sesion.simbolos(path, viejo) or {}
-            return cambios_que_importan_modelo(antes, despues)
-        # server LSP falló -> degradar a la jerarquía de capa 16
     tier = tier_para(path)
     if tier is None:
         return {}
