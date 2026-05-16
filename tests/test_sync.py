@@ -124,15 +124,29 @@ async def entrar_equipo(ws):
     lobby = json.loads(await ws.recv())
     assert lobby["type"] == "lobby", f"esperaba lobby, llegó {lobby}"
     port = _puerto(ws)
-    coord = _coord.get(port)
-    if coord is None:
-        await ws.send(json.dumps({"type": "create_team", "nombre": f"eq-{port}"}))
-        _coord[port] = {"ws": ws}
+    if lobby["teams"]:
+        # Ya es miembro (reconexión, o segunda pestaña, o multi-equipo):
+        # entra al suyo. NO depende de la conexión del admin (que pudo
+        # cerrarse) — es además el flujo real de un usuario que vuelve.
+        await ws.send(
+            json.dumps({"type": "select_team", "team_id": lobby["teams"][0]["id"]})
+        )
     else:
-        admin_ws = coord["ws"]
-        await admin_ws.send(json.dumps({"type": "create_invite"}))
-        ic = await recv_tipo(admin_ws, "invite_created")
-        await ws.send(json.dumps({"type": "redeem_invite", "code": ic["code"]}))
+        coord = _coord.get(port)
+        if coord is None:
+            # Primer cliente del server: crea el equipo (queda admin) y
+            # queda como emisor de invitaciones para los que sigan.
+            await ws.send(
+                json.dumps({"type": "create_team", "nombre": f"eq-{port}"})
+            )
+            _coord[port] = {"ws": ws}
+        else:
+            admin_ws = coord["ws"]
+            await admin_ws.send(json.dumps({"type": "create_invite"}))
+            ic = await recv_tipo(admin_ws, "invite_created")
+            await ws.send(
+                json.dumps({"type": "redeem_invite", "code": ic["code"]})
+            )
     tr = json.loads(await ws.recv())
     assert tr["type"] == "team_ready", f"esperaba team_ready, llegó {tr}"
 
@@ -175,6 +189,7 @@ async def test_initial_state_is_empty(server_port: int) -> None:
     # init con files vacío: ese contrato de capa 1 no cambió.
     async with connect(f"ws://localhost:{server_port}") as ws:
         await autenticar(ws)  # capa 7: la app está cerrada
+        await entrar_equipo(ws)  # capa 15: gate de equipo antes del workspace
         msg = json.loads(await ws.recv())
         assert msg == {"type": "init", "files": {}}
 
@@ -203,6 +218,7 @@ async def test_late_joiner_gets_current_state(server_port: int) -> None:
         await asyncio.sleep(0.05)  # darle tiempo al servidor a aplicar
         async with connect(f"ws://localhost:{server_port}") as late:
             await autenticar(late)
+            await entrar_equipo(late)
             msg = json.loads(await late.recv())
             assert msg == {"type": "init", "files": {"a.py": "uno", "b.py": "dos"}}
 
@@ -264,6 +280,7 @@ async def test_edits_to_different_files_dont_interfere(server_port: int) -> None
         # Verificamos que un tercer cliente que entre vea ambos archivos sanos.
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             init_c = json.loads(await c.recv())
             assert init_c == {
                 "type": "init",
@@ -403,6 +420,12 @@ async def test_server_reiniciado_sirve_lo_persistido(tmp_path) -> None:
     try:
         async with connect(f"ws://localhost:{port_b}") as c:
             await autenticar(c)
+            # Capa 15: tras el reinicio el cliente entra a un equipo; su
+            # workspace se hidrata del MISMO DiskStorage (lo persistido en
+            # disco sobrevivió). Que el EQUIPO persista entre reinicios es
+            # cosa de Postgres (paso 3b); acá solo verificamos que los
+            # archivos en disco siguen ahí.
+            await entrar_equipo(c)
             init = json.loads(await c.recv())
             assert init == {"type": "init", "files": {"main.py": "x = 1"}}
     finally:
@@ -437,6 +460,7 @@ async def test_ownership_vacio_en_el_handshake(server_port: int) -> None:
     # arrancar. init (capa 1) -> welcome (capa 2) -> ownership (capa 4).
     async with connect(f"ws://localhost:{server_port}") as a:
         await autenticar(a)
+        await entrar_equipo(a)
         assert json.loads(await a.recv())["type"] == "init"
         assert json.loads(await a.recv())["type"] == "welcome"
         assert json.loads(await a.recv()) == {"type": "ownership", "owners": {}}
@@ -483,6 +507,7 @@ async def test_edit_de_no_dueno_es_tentativo(server_port: int) -> None:
         # El workspace autoritativo no cambió: un cliente nuevo no ve main.py.
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
@@ -533,6 +558,7 @@ async def test_aprobar_propuesta_aplica_y_converge(server_port: int) -> None:
         assert json.loads(await asyncio.wait_for(b.recv(), timeout=2)) == esperado
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             assert json.loads(await c.recv()) == {
                 "type": "init",
                 "files": {"main.py": "v de B"},
@@ -589,6 +615,7 @@ async def test_solo_el_dueno_puede_resolver(server_port: int) -> None:
             await asyncio.wait_for(b.recv(), timeout=0.3)
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
@@ -671,6 +698,7 @@ async def test_ownership_sobrevive_reconexion(server_port: int) -> None:
         # ana vuelve (login): misma identidad y sigue siendo dueña.
         async with connect(f"ws://localhost:{server_port}") as a2:
             await autenticar(a2, user="ana", registrar=False)
+            await entrar_equipo(a2)  # ana ya es miembro -> select_team
             assert json.loads(await a2.recv())["type"] == "init"
             welcome = json.loads(await a2.recv())
             assert welcome["you"]["client_id"] == "ana"
@@ -687,14 +715,24 @@ async def test_ownership_sobrevive_reconexion(server_port: int) -> None:
 # --- Capa 5: prevención de colisiones por línea ---
 
 
+def _runtime_unico(srv):
+    """Tras conectar el 1er cliente hay exactamente UN TeamRuntime: el del
+    equipo que creó. Sembrar su workspace simula "archivo en disco, sin
+    dueño" (capa 5) en el mundo multi-equipo (antes era srv.workspace
+    global, que ya no existe)."""
+    assert len(srv._runtimes) == 1, srv._runtimes
+    return next(iter(srv._runtimes.values()))
+
+
 async def test_no_puedes_pisar_la_linea_de_otro(servidor) -> None:
     srv, port = servidor
-    # Archivo con contenido y SIN dueño: el estado real tras hidratar de disco.
-    srv.workspace.update("shared.py", "l1\nl2\nl3")
     async with connect(f"ws://localhost:{port}") as b, connect(
         f"ws://localhost:{port}"
     ) as c:
         await handshake(b)
+        # Archivo con contenido y SIN dueño en el equipo de b: el estado real
+        # tras hidratar de disco (sembrado directo = no pasa por claim).
+        _runtime_unico(srv).workspace.update("shared.py", "l1\nl2\nl3")
         await handshake(c)
 
         # B se para en la línea 2 de shared.py.
@@ -715,6 +753,7 @@ async def test_no_puedes_pisar_la_linea_de_otro(servidor) -> None:
         # El workspace no cambió: un cliente nuevo ve el contenido original.
         async with connect(f"ws://localhost:{port}") as d:
             await autenticar(d)
+            await entrar_equipo(d)
             assert json.loads(await d.recv()) == {
                 "type": "init", "files": {"shared.py": "l1\nl2\nl3"},
             }
@@ -722,11 +761,11 @@ async def test_no_puedes_pisar_la_linea_de_otro(servidor) -> None:
 
 async def test_editar_otra_linea_si_se_aplica(servidor) -> None:
     srv, port = servidor
-    srv.workspace.update("shared.py", "l1\nl2\nl3")
     async with connect(f"ws://localhost:{port}") as b, connect(
         f"ws://localhost:{port}"
     ) as c:
         await handshake(b)
+        _runtime_unico(srv).workspace.update("shared.py", "l1\nl2\nl3")
         await handshake(c)
         await b.send(json.dumps({"type": "presence", "path": "shared.py", "line": 2}))
         await asyncio.sleep(0.05)
@@ -963,6 +1002,7 @@ async def test_borrar_archivo_se_difunde_a_todos(server_port: int) -> None:
         # Un cliente nuevo no ve x.py.
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             assert json.loads(await c.recv()) == {"type": "init", "files": {}}
 
 
@@ -984,6 +1024,7 @@ async def test_no_dueno_no_puede_borrar_archivo_ajeno(server_port: int) -> None:
         # Sigue existiendo para un cliente nuevo.
         async with connect(f"ws://localhost:{server_port}") as c:
             await autenticar(c)
+            await entrar_equipo(c)
             assert json.loads(await c.recv()) == {
                 "type": "init", "files": {"x.py": "de A"},
             }
@@ -1080,6 +1121,7 @@ async def test_clone_reemplaza_y_reinicia_a_todos(tmp_path) -> None:
             # Un cliente nuevo también ve solo lo clonado.
             async with connect(f"ws://localhost:{port}") as c:
                 await autenticar(c)
+                await entrar_equipo(c)
                 assert json.loads(await c.recv()) == {
                     "type": "init", "files": {"hola.py": "print('del remoto')\n"}}
     finally:
@@ -1103,6 +1145,7 @@ async def test_clone_que_falla_no_destruye(tmp_path) -> None:
             assert res["ok"] is False
             async with connect(f"ws://localhost:{port}") as c:
                 await autenticar(c)
+                await entrar_equipo(c)
                 assert json.loads(await c.recv()) == {
                     "type": "init", "files": {"importante.py": "no borrar"}}
     finally:
@@ -1144,24 +1187,36 @@ async def test_push_desde_la_web(tmp_path) -> None:
 # sobre el WebSocket (el núcleo puro está en test_admin.py).
 
 
+async def _leer_admin_info(ws) -> dict:
+    """Consume init/welcome/ownership y devuelve el admin_info (4º del
+    handshake). En el mundo multi-equipo `is_admin` = sos admin DEL EQUIPO
+    y `users` = los MIEMBROS del equipo (no todos los del sistema)."""
+    for _ in range(3):  # init, welcome, ownership
+        await ws.recv()
+    info = json.loads(await ws.recv())
+    assert info["type"] == "admin_info"
+    return info
+
+
 async def test_admin_info_primer_usuario_es_admin(server_port: int) -> None:
-    # El primer registrado es admin; el resto no. admin_info cierra el
-    # handshake (lo consume el helper); aquí lo leemos a mano para mirarlo.
-    async with connect(f"ws://localhost:{server_port}") as a:
+    # Capa 15: "admin" ya NO es global — es el creador del equipo. El que
+    # crea el equipo es su admin; quien se une después es member y NO admin.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
         await autenticar(a, user="lider")
-        for _ in range(3):  # init, welcome, ownership
-            await a.recv()
-        info = json.loads(await a.recv())
-        assert info == {"type": "admin_info", "is_admin": True, "users": ["lider"]}
-    async with connect(f"ws://localhost:{server_port}") as b:
+        await entrar_equipo(a)  # 1er cliente: crea el equipo -> admin
+        info_a = await _leer_admin_info(a)
+        # Cuando lider entró, era el único miembro del equipo.
+        assert info_a == {"type": "admin_info", "is_admin": True, "users": ["lider"]}
+        # `a` sigue abierto: el admin puede emitir el código para que `b`
+        # se una (flujo real: el admin invita).
         await autenticar(b, user="otro")
-        for _ in range(3):
-            await b.recv()
-        info = json.loads(await b.recv())
-        assert info["type"] == "admin_info"
-        assert info["is_admin"] is False
-        # La lista de usuarios es estable y trae a todos (solo nombres).
-        assert info["users"] == ["lider", "otro"]
+        await entrar_equipo(b)  # se une al MISMO equipo -> member
+        info_b = await _leer_admin_info(b)
+        assert info_b["is_admin"] is False
+        # users = miembros del equipo (no del sistema), ordenado.
+        assert info_b["users"] == ["lider", "otro"]
 
 
 async def test_admin_asigna_ownership_y_se_difunde(server_port: int) -> None:
@@ -1307,3 +1362,81 @@ async def test_no_admin_no_puede_bulk(server_port: int) -> None:
             await asyncio.wait_for(b.recv(), timeout=0.3)
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(a.recv(), timeout=0.3)
+
+
+# --- Capa 15: AISLAMIENTO entre equipos (el corazón del pedido) ---
+#
+# "Dos equipos trabajando, cada uno con sus workspaces, sin saber que el
+# otro existe." Acá se prueba a nivel WS: lo que pasa en un equipo JAMÁS
+# llega al otro, aunque compartan el mismo server.
+
+
+async def _crear_equipo(ws, nombre, user=None):
+    """Autentica y CREA un equipo nuevo (no usa la coordinación de
+    handshake, que une al mismo equipo). Consume el handshake del equipo y
+    devuelve el welcome. Para tests que necesitan equipos DISTINTOS."""
+    await autenticar(ws, user=user)
+    lobby = json.loads(await ws.recv())
+    assert lobby["type"] == "lobby"
+    await ws.send(json.dumps({"type": "create_team", "nombre": nombre}))
+    tr = json.loads(await ws.recv())
+    assert tr["type"] == "team_ready" and tr["nombre"] == nombre
+    assert json.loads(await ws.recv())["type"] == "init"
+    welcome = json.loads(await ws.recv())
+    assert welcome["type"] == "welcome"
+    assert json.loads(await ws.recv())["type"] == "ownership"
+    assert json.loads(await ws.recv())["type"] == "admin_info"
+    return welcome
+
+
+async def test_equipos_no_se_ven_edicion_ni_presencia(server_port: int) -> None:
+    # Mismo server, DOS equipos distintos. Lo que A edita o dónde está
+    # parado NO puede llegarle a B: son universos separados.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await _crear_equipo(a, "alpha")
+        await _crear_equipo(b, "beta")
+        # A edita en alpha y se para en una línea.
+        await a.send(json.dumps({"type": "update", "path": "secreto.py", "content": "de alpha"}))
+        await a.send(json.dumps({"type": "presence", "path": "secreto.py", "line": 3}))
+        # B (equipo beta) NO recibe NADA de eso.
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.4)
+
+
+async def test_workspace_y_ownership_aislados_por_equipo(server_port: int) -> None:
+    # El archivo y su dueño existen SOLO en el equipo donde se crearon.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await _crear_equipo(a, "alpha", user="ana")
+        await a.send(json.dumps({"type": "update", "path": "a.py", "content": "x = 1"}))
+        await recv_tipo(a, "ownership")  # ana queda dueña en alpha
+    # Un cliente que crea OTRO equipo arranca con workspace vacío y sin
+    # dueños: no hereda nada de alpha.
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await autenticar(b, user="beto")
+        lobby = json.loads(await b.recv())
+        assert lobby["type"] == "lobby" and lobby["teams"] == []  # beto no ve alpha
+        await b.send(json.dumps({"type": "create_team", "nombre": "beta"}))
+        assert json.loads(await b.recv())["type"] == "team_ready"
+        # init VACÍO: beta no heredó a.py de alpha.
+        assert json.loads(await b.recv()) == {"type": "init", "files": {}}
+        assert json.loads(await b.recv())["type"] == "welcome"
+        # ownership VACÍO: el dueño de a.py (ana) existe sólo en alpha.
+        assert json.loads(await b.recv()) == {"type": "ownership", "owners": {}}
+        assert json.loads(await b.recv())["type"] == "admin_info"
+
+
+async def test_no_miembro_no_puede_entrar_a_equipo_ajeno(server_port: int) -> None:
+    # Aislamiento de acceso: conocer el id de un equipo NO te deja entrar.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await _crear_equipo(a, "privado", user="duenio")
+        # Un no-miembro que hace select_team (aunque acierte/invente un id):
+        # el server lo rechaza, sigue en lobby, NUNCA manda team_ready.
+        async with connect(f"ws://localhost:{server_port}") as b:
+            await autenticar(b, user="intruso")
+            assert json.loads(await b.recv())["type"] == "lobby"
+            await b.send(json.dumps({"type": "select_team", "team_id": "deadbeef"}))
+            msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
+            # Vuelve lobby con error, NO team_ready: no entró.
+            assert msg["type"] == "lobby" and msg["error"]
