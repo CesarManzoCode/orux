@@ -263,6 +263,11 @@ class ImpactMessage:
     author_name: str
     affected_path: str
     symbols: list[str]
+    # Capa de "que no sea adorno": por cada símbolo, POR QUÉ su cambio te
+    # importa (alineado 1:1 con `symbols`). "cambió la firma de X: …",
+    # "se eliminó X". Sin esto el dev piensa "¿y esto a mí qué?". Default
+    # vacío: un server viejo sin motivos no rompe el decode del cliente.
+    motivos: list[str] = field(default_factory=list)
     type: Literal["impact"] = "impact"
 
 
@@ -564,6 +569,7 @@ def decode(raw: str) -> Message:
             author_name=data["author_name"],
             affected_path=data["affected_path"],
             symbols=list(data.get("symbols", [])),
+            motivos=list(data.get("motivos", [])),
         )
     if kind == "register":
         return RegisterMessage(

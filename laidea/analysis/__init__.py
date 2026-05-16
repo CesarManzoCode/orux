@@ -21,7 +21,12 @@ lo que prueban los tests puros.
 from __future__ import annotations
 
 from . import javascript, python
-from .python import definiciones_top, referencias, simbolos_cambiados
+from .python import (
+    cambios_que_importan,
+    definiciones_top,
+    referencias,
+    simbolos_cambiados,
+)
 
 # Extensión -> módulo de lenguaje. Mismo módulo para js/jsx/ts/tsx: a nivel
 # de NOMBRE TS es JS + anotaciones (ver javascript.py).
@@ -50,7 +55,10 @@ def impacto(
     mod = _modulo(path)
     if mod is None:
         return {}
-    cambiados = mod.simbolos_cambiados(viejo, nuevo)
+    # Antes: simbolos_cambiados (cualquier cambio de cuerpo → ruido). Ahora:
+    # solo cambios que afectan a quien usa el símbolo. El POR QUÉ de cada uno
+    # lo da `motivos()` (mismo cálculo, lo expone el server en el aviso).
+    cambiados = mod.cambios_que_importan(viejo, nuevo)
     if not cambiados:
         return {}
     resultado: dict[str, list[str]] = {}
@@ -67,9 +75,23 @@ def impacto(
     return resultado
 
 
+def motivos(path: str, viejo: str, nuevo: str) -> dict[str, str]:
+    """Símbolo cambiado en `path` -> POR QUÉ su cambio le importa a quien lo
+    usa. Despacha por extensión igual que `impacto` (mismo lenguaje, misma
+    regla). El server lo usa para que el aviso no sea "algo cambió" sino la
+    razón concreta — que era justo lo que faltaba para que no fuera adorno.
+    """
+    mod = _modulo(path)
+    if mod is None:
+        return {}
+    return mod.cambios_que_importan(viejo, nuevo)
+
+
 __all__ = [
+    "cambios_que_importan",
     "definiciones_top",
     "impacto",
+    "motivos",
     "referencias",
     "simbolos_cambiados",
 ]

@@ -112,3 +112,35 @@ def simbolos_cambiados(viejo: str, nuevo: str) -> set[str]:
         if nombre not in despues:  # eliminado/renombrado
             cambiados.add(nombre)
     return cambiados
+
+
+def cambios_que_importan(viejo: str, nuevo: str) -> dict[str, str]:
+    """Símbolo top -> por qué su cambio importa. Versión JS/TS, honesta sobre
+    su límite: sin parser no se puede aislar la firma del cuerpo, así que el
+    caso fuerte ("se eliminó/renombró", que ROMPE seguro) sí se distingue,
+    pero un cambio dentro del símbolo no se puede separar de un cambio de
+    interfaz → se reporta como "cambió, revisá tu uso".
+
+    Es deliberadamente menos fino que el de Python (que sí parsea y aísla la
+    firma). El usuario aceptó un caso de uso real; el real y validado vive en
+    `python.py` (el stack del proyecto). Mejor mensaje que antes igual: ya
+    no es "algo cambió" a secas, dice qué símbolo y si desapareció.
+    """
+    antes = definiciones_top(viejo)
+    despues = definiciones_top(nuevo)
+    motivos: dict[str, str] = {}
+    for nombre, region in despues.items():
+        if nombre not in antes:
+            continue  # nuevo símbolo: no rompe a nadie que ya existía
+        if antes[nombre] != region:
+            motivos[nombre] = (
+                f"«{nombre}» cambió — sin parser de TS no puedo separar "
+                f"firma de cuerpo; revisá si tu uso sigue válido"
+            )
+    for nombre in antes:
+        if nombre not in despues:
+            motivos[nombre] = (
+                f"se eliminó o renombró «{nombre}» — el código que lo usa "
+                f"va a romper"
+            )
+    return motivos

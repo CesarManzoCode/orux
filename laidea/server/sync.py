@@ -64,7 +64,7 @@ from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
 
-from ..analysis import impacto
+from ..analysis import impacto, motivos as motivos_de
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -229,6 +229,9 @@ class SyncServer:
         afectados = impacto(self.workspace.snapshot(), path, viejo, nuevo)
         if not afectados:
             return
+        # El POR QUÉ de cada símbolo (mismo cálculo que decidió avisar). Sin
+        # esto el aviso es adorno: "cambió X" y el dueño piensa "¿y a mí qué?".
+        razones = motivos_de(path, viejo, nuevo)
         # Reagrupamos: símbolo->archivos  ==>  archivo_afectado->símbolos,
         # porque el aviso es "tu archivo X lo tocan estos símbolos".
         por_archivo: dict[str, list[str]] = {}
@@ -239,6 +242,7 @@ class SyncServer:
             dueño = self.ownership.owner(af)
             if dueño is None or dueño == autor_id:
                 continue
+            syms = sorted(simbolos)
             await self._enviar_a(
                 dueño,
                 encode(
@@ -246,7 +250,9 @@ class SyncServer:
                         source_path=path,
                         author_name=autor_nombre,
                         affected_path=af,
-                        symbols=sorted(simbolos),
+                        symbols=syms,
+                        # Alineado 1:1 con `symbols` (mismo orden).
+                        motivos=[razones.get(s, "") for s in syms],
                     )
                 ),
             )

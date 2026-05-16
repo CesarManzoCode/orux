@@ -7,8 +7,10 @@ Pieza pura: sin red ni estado. Lo crítico a fijar como contrato:
 """
 
 from laidea.analysis import (
+    cambios_que_importan,
     definiciones_top,
     impacto,
+    motivos,
     referencias,
     simbolos_cambiados,
 )
@@ -83,9 +85,77 @@ def test_impacto_vacio_si_nadie_usa_el_simbolo() -> None:
         "a.py": "def solitaria():\n    return 1\n",
         "b.py": "x = 1\n",
     }
+    # Cambio de firma REAL (no solo cuerpo): aun así, nadie la usa -> {}.
     res = impacto(workspace, "a.py", "def solitaria():\n    return 1\n",
-                  "def solitaria():\n    return 2\n")
+                  "def solitaria(x):\n    return x\n")
     assert res == {}
+
+
+# --- El arreglo: el aviso solo salta cuando IMPORTA, y dice POR QUÉ ---
+# (antes era adorno: cualquier cambio de cuerpo pingaba a todos)
+
+
+def test_cambio_de_solo_cuerpo_no_avisa() -> None:
+    # Cambiar lo interno de una función NO afecta a quien la llama: silencio.
+    # Esto es lo que mata el "¿y esto a mí qué me importa?".
+    viejo = "def f(a, b):\n    return a + b\n"
+    nuevo = "def f(a, b):\n    total = a + b\n    return total\n"
+    assert cambios_que_importan(viejo, nuevo) == {}
+    ws = {"a.py": viejo, "b.py": "from a import f\nf(1, 2)\n"}
+    assert impacto(ws, "a.py", viejo, nuevo) == {}  # no se avisa nada
+
+
+def test_cambio_de_firma_avisa_con_el_porque() -> None:
+    viejo = "def cobrar(monto):\n    return monto\n"
+    nuevo = "def cobrar(monto, moneda):\n    return monto\n"
+    motivo = cambios_que_importan(viejo, nuevo)
+    assert set(motivo) == {"cobrar"}
+    assert "firma" in motivo["cobrar"]
+    assert "(monto)" in motivo["cobrar"] and "(monto, moneda)" in motivo["cobrar"]
+
+
+def test_simbolo_eliminado_avisa_que_va_a_romper() -> None:
+    motivo = cambios_que_importan("def viejo():\n    pass\n", "x = 1\n")
+    assert "viejo" in motivo
+    assert "eliminó" in motivo["viejo"] or "renombró" in motivo["viejo"]
+
+
+def test_clase_cambia_construccion_avisa() -> None:
+    viejo = "class Pago:\n    pass\n"
+    nuevo = "class Pago:\n    def __init__(self, monto):\n        self.monto = monto\n"
+    motivo = cambios_que_importan(viejo, nuevo)
+    assert "Pago" in motivo and "construye" in motivo["Pago"]
+
+
+def test_clase_quita_metodo_publico_avisa_pero_privado_no() -> None:
+    viejo = (
+        "class API:\n"
+        "    def publico(self):\n        return 1\n"
+        "    def _interno(self):\n        return 2\n"
+    )
+    # Se quita el método público -> avisa.
+    sin_pub = "class API:\n    def _interno(self):\n        return 2\n"
+    m = cambios_que_importan(viejo, sin_pub)
+    assert "API" in m and "publico()" in m["API"]
+    # Se cambia SOLO el cuerpo del privado -> no rompe a nadie: silencio.
+    priv = (
+        "class API:\n"
+        "    def publico(self):\n        return 1\n"
+        "    def _interno(self):\n        return 99\n"
+    )
+    assert cambios_que_importan(viejo, priv) == {}
+
+
+def test_cambios_que_importan_vacio_si_roto() -> None:
+    # Código a medio escribir: no se opina (cero falsos positivos).
+    assert cambios_que_importan("def f(): pass", "def f(:") == {}
+
+
+def test_motivos_despacha_por_extension() -> None:
+    # `motivos` es el "por qué" que el server adjunta al aviso.
+    m = motivos("api.py", "def f(a):\n    pass\n", "def f(a, b):\n    pass\n")
+    assert "f" in m and "firma" in m["f"]
+    assert motivos("nota.md", "x", "y") == {}  # lenguaje sin extractor
 
 
 def test_impacto_solo_para_archivos_py() -> None:

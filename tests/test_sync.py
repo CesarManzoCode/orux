@@ -757,13 +757,15 @@ async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
         # A modifica la clase Usuario -> B (dueño de auth.py) debe enterarse solo.
         await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V2}))
         aviso = await recv_tipo(b, "impact")
-        assert aviso == {
-            "type": "impact",
-            "source_path": "models.py",
-            "author_name": wa["you"]["name"],
-            "affected_path": "auth.py",
-            "symbols": ["Usuario"],
-        }
+        assert aviso["type"] == "impact"
+        assert aviso["source_path"] == "models.py"
+        assert aviso["author_name"] == wa["you"]["name"]
+        assert aviso["affected_path"] == "auth.py"
+        assert aviso["symbols"] == ["Usuario"]
+        # El arreglo: el aviso ya no es adorno, dice POR QUÉ (alineado 1:1).
+        assert len(aviso["motivos"]) == 1
+        assert "Usuario" in aviso["motivos"][0]
+        assert "construye" in aviso["motivos"][0]  # V1->V2 agrega __init__
 
 
 async def test_impacto_tambien_en_typescript(server_port: int) -> None:
@@ -790,13 +792,15 @@ async def test_impacto_tambien_en_typescript(server_port: int) -> None:
         await a.send(json.dumps({"type": "update", "path": "models.ts",
                                  "content": "export class Usuario { activo = true }\n"}))
         aviso = await recv_tipo(b, "impact")
-        assert aviso == {
-            "type": "impact",
-            "source_path": "models.ts",
-            "author_name": wa["you"]["name"],
-            "affected_path": "auth.ts",
-            "symbols": ["Usuario"],
-        }
+        assert aviso["type"] == "impact"
+        assert aviso["source_path"] == "models.ts"
+        assert aviso["author_name"] == wa["you"]["name"]
+        assert aviso["affected_path"] == "auth.ts"
+        assert aviso["symbols"] == ["Usuario"]
+        # JS/TS: motivo honesto sobre su límite (sin parser no aísla firma),
+        # pero ya no es "algo cambió" a secas: nombra el símbolo.
+        assert len(aviso["motivos"]) == 1
+        assert "Usuario" in aviso["motivos"][0]
 
 
 async def test_no_avisa_si_el_codigo_no_parsea(server_port: int) -> None:
@@ -847,6 +851,7 @@ async def test_impacto_tambien_al_aprobar_propuesta(server_port: int) -> None:
         aviso = await recv_tipo(b, "impact")
         assert aviso["source_path"] == "models.py"
         assert aviso["affected_path"] == "auth.py"
+        assert aviso["motivos"] and "Usuario" in aviso["motivos"][0]
         assert aviso["symbols"] == ["Usuario"]
         assert aviso["author_name"] == wc["you"]["name"]
 
