@@ -495,6 +495,81 @@ class AdminAssignManyMessage:
     type: Literal["admin_assign_many"] = "admin_assign_many"
 
 
+# --- Capa 15: sistema multi-equipo (gate de equipo) ---
+#
+# Tras autenticarse, el usuario NO entra directo al workspace: primero el
+# server le dice de qué equipos es. Sin equipo no ve nada (la app sigue
+# cerrada un escalón más). Crea uno (queda admin) o redime un código de
+# invitación. Recién con un equipo elegido empieza el handshake normal,
+# scopeado a ESE equipo (otro equipo no existe para él).
+
+
+@dataclass(frozen=True)
+class LobbyMessage:
+    """Servidor -> cliente: estás autenticado pero todavía no en un equipo.
+
+    `teams` = los equipos a los que pertenecés [{id, nombre, rol}] (puede
+    estar vacío: recién te registraste y nadie te invitó). `error` trae el
+    motivo si la última acción de lobby falló (código inválido, nombre
+    vacío). El cliente muestra: elegí un equipo / creá uno / pegá un código.
+    """
+
+    teams: list[dict] = field(default_factory=list)
+    error: str = ""
+    type: Literal["lobby"] = "lobby"
+
+
+@dataclass(frozen=True)
+class CreateTeamMessage:
+    """Cliente -> servidor: creá un equipo nuevo; quedo como su admin."""
+
+    nombre: str
+    type: Literal["create_team"] = "create_team"
+
+
+@dataclass(frozen=True)
+class RedeemInviteMessage:
+    """Cliente -> servidor: unime al equipo de este código (de un solo uso)."""
+
+    code: str
+    type: Literal["redeem_invite"] = "redeem_invite"
+
+
+@dataclass(frozen=True)
+class SelectTeamMessage:
+    """Cliente -> servidor: entrar a este equipo (del que ya soy miembro)."""
+
+    team_id: str
+    type: Literal["select_team"] = "select_team"
+
+
+@dataclass(frozen=True)
+class TeamReadyMessage:
+    """Servidor -> cliente: entraste a este equipo; lo que sigue (init/
+    welcome/ownership/admin_info/git) es de ESTE equipo y de ningún otro."""
+
+    team_id: str
+    nombre: str
+    rol: str
+    type: Literal["team_ready"] = "team_ready"
+
+
+@dataclass(frozen=True)
+class CreateInviteMessage:
+    """Cliente (admin del equipo) -> servidor: generá un código de invitación
+    para mi equipo actual. Sólo el admin; un no-admin se ignora en silencio."""
+
+    type: Literal["create_invite"] = "create_invite"
+
+
+@dataclass(frozen=True)
+class InviteCreatedMessage:
+    """Servidor -> el admin que lo pidió: el código a compartir (un solo uso)."""
+
+    code: str
+    type: Literal["invite_created"] = "invite_created"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -523,6 +598,13 @@ Message = Union[
     AdminInfoMessage,
     AdminAssignMessage,
     AdminAssignManyMessage,
+    LobbyMessage,
+    CreateTeamMessage,
+    RedeemInviteMessage,
+    SelectTeamMessage,
+    TeamReadyMessage,
+    CreateInviteMessage,
+    InviteCreatedMessage,
 ]
 
 
@@ -636,4 +718,22 @@ def decode(raw: str) -> Message:
             paths=list(data.get("paths", [])),
             username=data.get("username", ""),
         )
+    if kind == "lobby":
+        return LobbyMessage(
+            teams=list(data.get("teams", [])), error=data.get("error", "")
+        )
+    if kind == "create_team":
+        return CreateTeamMessage(nombre=data["nombre"])
+    if kind == "redeem_invite":
+        return RedeemInviteMessage(code=data["code"])
+    if kind == "select_team":
+        return SelectTeamMessage(team_id=data["team_id"])
+    if kind == "team_ready":
+        return TeamReadyMessage(
+            team_id=data["team_id"], nombre=data["nombre"], rol=data["rol"]
+        )
+    if kind == "create_invite":
+        return CreateInviteMessage()
+    if kind == "invite_created":
+        return InviteCreatedMessage(code=data["code"])
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

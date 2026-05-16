@@ -1,59 +1,28 @@
-"""Servidor de sincronización en tiempo real.
+"""Servidor de sincronización en tiempo real — capa 15: multi-equipo.
 
-El servidor tiene tres responsabilidades, en este orden:
+Hasta capa 14 había UN workspace global: un solo equipo implícito. El
+usuario pidió un sistema de verdad: varios equipos que no se enteran del
+otro. Ahora cada equipo tiene su propio `TeamRuntime` (workspace,
+presencia, ownership, propuestas, git, conexiones) y una conexión está
+scopeada a UN equipo: un broadcast/propuesta/impacto jamás cruza de equipo.
 
-1. **Mantener el estado autoritativo del workspace.** Si dos clientes discrepan
-   sobre qué dice un archivo, el servidor decide. La fuente de verdad vive aquí
-   en memoria (más adelante, en disco).
+Flujo de una conexión:
 
-2. **Llevar la cuenta de quién está conectado.** El set `clients` es el registro
-   vivo de WebSockets activos. Cuando uno cae, sale del set.
+1. **Autenticar** (capa 7, sin cambios): register/login/session -> usuario.
+2. **Lobby** (capa 15, nuevo): el usuario autenticado todavía NO ve nada.
+   El server le manda sus equipos; él crea uno (queda admin), redime un
+   código de invitación, o elige uno del que ya es miembro.
+3. **Sesión de equipo**: recién acá el handshake normal (init/welcome/
+   ownership/admin_info/git), scopeado al `TeamRuntime` de ESE equipo, y
+   el bucle de mensajes (capas 4/5/6/9/10/12/13) operando sobre ese rt.
 
-3. **Retransmitir cambios.** Cuando un cliente manda un update, el servidor lo
-   aplica al estado y lo manda a todos los demás clientes — pero no al emisor
-   (eso causaría un eco molesto que rompería el cursor del que está escribiendo).
+El "admin" de capas 12/13 ya no es global: es el rol 'admin' DENTRO del
+equipo (su creador). El selector de owners del panel admin lista los
+MIEMBROS del equipo, no todos los usuarios del sistema.
 
-Capa 1: el servidor ya no maneja un Document, ahora maneja un Workspace
-completo (múltiples archivos). El protocolo nuevo carga el `path` en cada
-update así el servidor sabe a qué archivo aplicar el cambio.
-
-Capa 2: el servidor también mantiene un `Roster` (quién está y dónde). Al
-conectar le asigna al cliente una identidad anónima y le manda un Welcome con
-su identidad + los demás presentes. Cuando un cliente manda su presencia
-(archivo + línea), el servidor la fusiona con su identidad confiable y la
-retransmite a los demás. Cuando un cliente cae, avisa con un Leave. La regla
-de "no eco al emisor" es la misma que para los updates.
-
-Capa 3: el workspace puede tener un `DiskStorage` inyectado (persistencia).
-
-Capa 4: ownership. El handshake gana un tercer mensaje (`ownership`, después
-de `welcome`). Si un cliente edita un archivo con dueño y no es el dueño, su
-update NO se aplica: se vuelve una propuesta que se le manda al dueño, que la
-aprueba (se aplica y converge todo el mundo) o la rechaza (al autor se le
-revierte). Crear un archivo hace dueño al creador. Esto es la tesis del
-producto en código: prevenir con coordinación, no fusionar después.
-
-Capa 5: prevención de colisiones por línea. Si el archivo NO tiene dueño,
-antes de aplicar un update el servidor mira (vía presencia) si alguna línea
-que el emisor pisa la está ocupando otro presente; si sí, rechaza el update
-y le devuelve el contenido autoritativo. "Nunca dos en la misma línea." El
-dueño tiene preferencia (sin lock). Sin CRDT: se previene, no se fusiona.
-
-Capa 6: análisis semántico de impacto. Cada vez que un cambio a un `.py` se
-aplica de verdad (edición directa o propuesta aprobada), el servidor calcula
-qué símbolos top cambiaron y qué otros archivos los usan, y le manda un
-`ImpactMessage` al dueño de cada archivo afectado. "Sin clickear, lo hace
-solo." Solo cuando el código parsea: cero avisos por código a medio escribir.
-
-Capa 7: identidad real. La app está CERRADA: al conectar no se manda nada
-hasta que el cliente pasa por `_autenticar` (register/login/session). La
-identidad ES el usuario (estable, persistido); el ownership ahora se indexa
-por usuario y sobrevive a reiniciar. El token de sesión va firmado con HMAC.
-
-Capa 8: el workspace es un repo git real (solo lectura desde la tool). Tras
-el handshake se manda `git_status` (rama, cambios sin commitear, últimos
-commits) si hay git; el cliente puede pedir `git_refresh`. No se commitea
-desde aquí: el dev lo hace en su terminal.
+Las capas previas (4 ownership/tentativo, 5 colisiones por línea, 6
+impacto, 8/9/10 git) NO cambiaron su lógica: sólo operan ahora sobre el
+runtime del equipo en vez de sobre un estado global.
 """
 
 from __future__ import annotations
@@ -80,22 +49,29 @@ from ..protocol import (
     AuthOkMessage,
     ClaimMessage,
     CloneMessage,
-    DeleteMessage,
     CommitMessage,
+    CreateInviteMessage,
+    CreateTeamMessage,
+    DeleteMessage,
     GitRefreshMessage,
     GitResultMessage,
     GitStatusMessage,
     ImpactMessage,
     InitMessage,
+    InviteCreatedMessage,
     LeaveMessage,
+    LobbyMessage,
     LoginMessage,
     OwnershipMessage,
     PresenceMessage,
     ProposalMessage,
     PushMessage,
+    RedeemInviteMessage,
     RegisterMessage,
     ResolveMessage,
+    SelectTeamMessage,
     SessionMessage,
+    TeamReadyMessage,
     UpdateMessage,
     WelcomeMessage,
     decode,
@@ -109,7 +85,7 @@ from ..state import (
     Workspace,
     lineas_tocadas,
 )
-from ..teams import MemTeamStore
+from ..teams import MemTeamStore, TeamError
 
 logger = logging.getLogger(__name__)
 
@@ -129,13 +105,8 @@ def _autor_git(usuario: str) -> tuple[str, str]:
 
 class TeamRuntime:
     """Todo el estado vivo de UN equipo: su workspace, presencia, ownership,
-    propuestas, repo git y conexiones. Antes esto vivía suelto en
-    `SyncServer` (mono-tenant). Capa 15: se encapsula acá para que el server
-    pueda tener uno POR equipo y un equipo no vea al otro.
-
-    Paso 3a-i (este commit): cambio que PRESERVA el comportamiento — el
-    server crea UN runtime y delega; la suite entera pasa sin tocarse, lo
-    que prueba que no se rompió nada. El paso 3a-ii lo vuelve por-equipo.
+    propuestas, repo git y conexiones. Un equipo no ve al otro porque cada
+    uno tiene su runtime y los broadcasts se hacen sobre `rt.clients`.
     """
 
     def __init__(
@@ -168,75 +139,85 @@ class SyncServer:
         git: GitRepo | None = None,
         teams: object | None = None,
     ) -> None:
-        # Capa 15 paso 3a-i: el estado del workspace se encapsuló en
-        # `TeamRuntime`. Hoy hay UNO solo (comportamiento idéntico al
-        # mono-tenant); las propiedades de abajo delegan en él para no tocar
-        # los ~700 renglones de handlers. El paso 3a-ii crea uno por equipo.
-        self._rt = TeamRuntime(storage=storage, ownership=ownership, git=git)
+        # Compat con la firma previa: si pasan storage/ownership/git
+        # concretos (tests de git, y el __main__ mono-tenant de hoy), ese
+        # mismo trío se usa para el equipo que se cree. Los tests tienen UN
+        # equipo, así que compartir es indistinguible de "por equipo". El
+        # paso 3b reemplaza esta fábrica por una que enraíza disco/Postgres
+        # por team_id (/data/ws/<team_id>).
+        self._base_storage = storage
+        self._base_ownership = ownership
+        self._base_git = git
+        self._runtimes: dict[str, TeamRuntime] = {}
         # Capa 7: identidad real. `users` inyectado (en memoria si None).
         self.users = users if users is not None else UserStore()
         self._secret = secret if secret is not None else token_hex(32)
-        # Capa 15: store de equipos/membresía/invitaciones. Inyectado igual
-        # que el resto (None = en memoria). Aún NO lo usa `handle()` — eso es
-        # el paso 3a-ii (gate "sin equipo" + runtime por equipo). Se cablea
-        # ahora para fijar la costura sin cambiar comportamiento.
+        # Capa 15: equipos/membresía/invitaciones (async; None = memoria).
         self.teams = teams if teams is not None else MemTeamStore()
 
-    # --- Delegación al runtime (paso 3a-i) ---
-    # Mantienen `self.workspace`/`self.clients`/... funcionando sin reescribir
-    # los handlers. En 3a-ii estos accesos pasarán a resolverse por equipo.
-    @property
-    def workspace(self): return self._rt.workspace
-    @property
-    def clients(self): return self._rt.clients
-    @property
-    def roster(self): return self._rt.roster
-    @property
-    def _ids(self): return self._rt._ids
-    @property
-    def _conns(self): return self._rt._conns
-    @property
-    def ownership(self): return self._rt.ownership
-    @property
-    def git(self): return self._rt.git
-    @property
-    def _git_lock(self): return self._rt._git_lock
-    @property
-    def proposals(self): return self._rt.proposals
-    @proposals.setter
-    def proposals(self, v): self._rt.proposals = v
+    def _runtime_para(self, team_id: str) -> TeamRuntime:
+        """Runtime del equipo, creado perezosamente. Con storage/ownership/git
+        a None (tests) cada equipo obtiene su propio estado en memoria
+        independiente -> aislamiento real."""
+        rt = self._runtimes.get(team_id)
+        if rt is None:
+            rt = TeamRuntime(
+                storage=self._base_storage,
+                ownership=self._base_ownership,
+                git=self._base_git,
+            )
+            self._runtimes[team_id] = rt
+        return rt
 
-    async def _enviar_a(self, client_id: str, payload: str) -> None:
-        """Manda `payload` a un único cliente por su identidad. Silencioso si no está.
+    # --- Envío scopeado al equipo (rt) ---
+
+    async def _enviar_a(self, rt: TeamRuntime, client_id: str, payload: str) -> None:
+        """Manda `payload` a un único cliente del equipo. Silencioso si no está.
 
         Capa 4 manda mensajes dirigidos (propuesta al dueño, reversión al
         autor). Si ese cliente no está conectado, simplemente no llega: el
-        prototipo no tiene cola de reentrega (límite conocido, ver proposals.py).
+        prototipo no tiene cola de reentrega (límite conocido).
         """
-        conn = self._conns.get(client_id)
+        conn = rt._conns.get(client_id)
         if conn is None:
             return
         try:
             await conn.send(payload)
         except Exception:
-            self.clients.discard(conn)
+            rt.clients.discard(conn)
 
-    async def _broadcast_todos(self, payload: str) -> None:
-        """Manda `payload` a TODOS los clientes, incluido quien disparó la acción.
+    async def _broadcast_todos(self, rt: TeamRuntime, payload: str) -> None:
+        """A TODOS los del equipo, incluido quien disparó la acción.
 
-        A diferencia de `_broadcast` (que omite al emisor para no hacerle eco de
-        su propio tecleo), aquí sí queremos llegar a todos: cuando el dueño
-        aprueba una propuesta, el contenido es del *autor*, no del dueño, así
-        que hasta el dueño que aprobó tiene que recibir y converger.
+        A diferencia de `_broadcast` (omite al emisor para no hacerle eco de
+        su tecleo), cuando el dueño aprueba una propuesta el contenido es del
+        *autor*: hasta el dueño que aprobó tiene que recibir y converger.
         """
-        for client in list(self.clients):
+        for client in list(rt.clients):
             try:
                 await client.send(payload)
             except Exception:
-                self.clients.discard(client)
+                rt.clients.discard(client)
+
+    async def _broadcast(
+        self, rt: TeamRuntime, sender: ServerConnection, payload: str
+    ) -> None:
+        """A todos los del equipo menos al emisor (eco rompería su cursor).
+
+        Si el envío falla, ese cliente ya no está sano y se saca: no
+        retransmitimos a muertos (bloquearía el broadcast).
+        """
+        for client in list(rt.clients):
+            if client is sender:
+                continue
+            try:
+                await client.send(payload)
+            except Exception:
+                rt.clients.discard(client)
 
     async def _notificar_impacto(
         self,
+        rt: TeamRuntime,
         path: str,
         viejo: str,
         nuevo: str,
@@ -245,34 +226,29 @@ class SyncServer:
     ) -> None:
         """Capa 6: avisa al dueño de cada archivo afectado por este cambio.
 
-        "Sin clickear un botón, lo hace solo" (README). Calcula el impacto con
-        el análisis puro y, agrupado por archivo afectado, le manda un
-        `ImpactMessage` al dueño de ese archivo. Reglas mínimas:
-
-        - Si el archivo afectado no tiene dueño, no hay a quién avisar.
-        - Si el dueño del archivo afectado es el propio autor del cambio, no
-          se le avisa: él lo hizo, ya lo sabe (evita auto-ruido).
-        - Si el código no parsea, `impacto` devuelve {} y esto no manda nada:
-          cero avisos por estados a medio escribir.
+        "Sin clickear, lo hace solo" (README). Reglas: si el afectado no
+        tiene dueño no hay a quién avisar; si el dueño es el propio autor no
+        se le avisa (evita auto-ruido); si no parsea, `impacto` da {} y no
+        manda nada. Todo scopeado al workspace/ownership de ESTE equipo.
         """
-        afectados = impacto(self.workspace.snapshot(), path, viejo, nuevo)
+        afectados = impacto(rt.workspace.snapshot(), path, viejo, nuevo)
         if not afectados:
             return
         # El POR QUÉ de cada símbolo (mismo cálculo que decidió avisar). Sin
         # esto el aviso es adorno: "cambió X" y el dueño piensa "¿y a mí qué?".
         razones = motivos_de(path, viejo, nuevo)
-        # Reagrupamos: símbolo->archivos  ==>  archivo_afectado->símbolos,
-        # porque el aviso es "tu archivo X lo tocan estos símbolos".
+        # Reagrupamos símbolo->archivos ==> archivo_afectado->símbolos.
         por_archivo: dict[str, list[str]] = {}
         for simbolo, archivos in afectados.items():
             for af in archivos:
                 por_archivo.setdefault(af, []).append(simbolo)
         for af, simbolos in por_archivo.items():
-            dueño = self.ownership.owner(af)
+            dueño = rt.ownership.owner(af)
             if dueño is None or dueño == autor_id:
                 continue
             syms = sorted(simbolos)
             await self._enviar_a(
+                rt,
                 dueño,
                 encode(
                     ImpactMessage(
@@ -280,19 +256,16 @@ class SyncServer:
                         author_name=autor_nombre,
                         affected_path=af,
                         symbols=syms,
-                        # Alineado 1:1 con `symbols` (mismo orden).
                         motivos=[razones.get(s, "") for s in syms],
                     )
                 ),
             )
 
-    async def _git_status_encoded(self) -> str | None:
-        """Consulta git (en un hilo, es bloqueante) y devuelve el git_status
-        ya serializado, o None si no hay git. Reutilizable: handshake, refresh
-        y broadcast tras un commit."""
-        if self.git is None:
+    async def _git_status_encoded(self, rt: TeamRuntime) -> str | None:
+        """Estado git del equipo, serializado, o None si no hay git."""
+        if rt.git is None:
             return None
-        e = await asyncio.to_thread(self.git.estado)
+        e = await asyncio.to_thread(rt.git.estado)
         return encode(
             GitStatusMessage(
                 available=e.disponible,
@@ -302,78 +275,55 @@ class SyncServer:
             )
         )
 
-    def _admin_info_encoded(self, usuario: str) -> str:
-        """Capa 12: `admin_info` para ESTE usuario ya serializado.
-
-        `is_admin` se decide acá (server), nunca lo dice el cliente. El
-        listado de usuarios es solo nombres (UserStore.usuarios no filtra
-        contraseñas). Lo usa el handshake; reutilizable si algún día se
-        decide refrescarlo (hoy: el admin recarga, decisión mínima).
-        """
+    async def _admin_info_encoded(
+        self, team_id: str, usuario: str
+    ) -> str:
+        """Capa 12/15: `admin_info` del EQUIPO. `is_admin` = rol 'admin' en
+        este equipo (lo decide el server). La lista para el selector son los
+        MIEMBROS del equipo (no todos los usuarios del sistema: aislamiento
+        también de identidades)."""
+        rol = await self.teams.rol(team_id, usuario)
+        miembros = await self.teams.miembros(team_id)
         return encode(
             AdminInfoMessage(
-                is_admin=self.users.admin() == usuario,
-                users=self.users.usuarios(),
+                is_admin=rol == "admin",
+                users=[m["usuario"] for m in miembros],
             )
         )
 
-    async def _reiniciar_para_todos(self) -> None:
-        """Tras un clone destructivo: el workspace es OTRO repo. Tira el estado
-        compartido viejo y re-inicializa a todos los clientes autenticados.
-
-        Ownership y propuestas del proyecto anterior ya no significan nada;
-        se vacían. La presencia (Roster) NO se toca: las personas siguen
-        conectadas y re-anuncian su archivo al abrir uno del repo nuevo.
-        """
-        self.workspace.recargar()
-        self.ownership.reset()
-        self.proposals = Proposals()
-        init = encode(InitMessage(files=self.workspace.snapshot()))
-        own = encode(OwnershipMessage(owners=self.ownership.snapshot()))
-        gs = await self._git_status_encoded()
-        # Solo a los autenticados (los que están en la compuerta de login no
-        # deben recibir estado de app).
-        for conn in list(self._conns.values()):
+    async def _reiniciar_para_todos(self, rt: TeamRuntime) -> None:
+        """Tras un clone destructivo en ESTE equipo: su workspace es otro
+        repo. Tira el estado compartido viejo del equipo y re-inicializa a
+        sus clientes. La presencia (Roster) NO se toca."""
+        rt.workspace.recargar()
+        rt.ownership.reset()
+        rt.proposals = Proposals()
+        init = encode(InitMessage(files=rt.workspace.snapshot()))
+        own = encode(OwnershipMessage(owners=rt.ownership.snapshot()))
+        gs = await self._git_status_encoded(rt)
+        for conn in list(rt._conns.values()):
             try:
                 await conn.send(init)
                 await conn.send(own)
                 if gs is not None:
                     await conn.send(gs)
             except Exception:
-                self.clients.discard(conn)
+                rt.clients.discard(conn)
 
-    async def _enviar_git_status(self, websocket: ServerConnection) -> None:
-        """Le manda el estado del repo a ESE cliente (conectar / actualizar)."""
-        payload = await self._git_status_encoded()
+    async def _enviar_git_status(
+        self, rt: TeamRuntime, websocket: ServerConnection
+    ) -> None:
+        payload = await self._git_status_encoded(rt)
         if payload is not None:
             await websocket.send(payload)
-
-    async def _broadcast(self, sender: ServerConnection, payload: str) -> None:
-        """Manda `payload` a todos los clientes conectados excepto al emisor.
-
-        Usamos `list(self.clients)` para evitar mutar el set mientras iteramos
-        (si una conexión muere durante el envío, la sacamos del set en el catch).
-
-        Si el envío a un cliente falla, asumimos que ese cliente ya no está
-        sano y lo sacamos. No retransmitimos a clientes muertos — eso bloquearía
-        el broadcast.
-        """
-        for client in list(self.clients):
-            if client is sender:
-                continue
-            try:
-                await client.send(payload)
-            except Exception:
-                self.clients.discard(client)
 
     async def _autenticar(self, websocket: ServerConnection) -> str | None:
         """Compuerta de la capa 7: nada de app hasta autenticarse.
 
         Lee mensajes hasta que uno autentique (register/login/session) y
         devuelve el usuario normalizado. Mientras no lo logre responde
-        `auth_error` y sigue escuchando en la MISMA conexión (el cliente
-        reintenta sin reconectar). Devuelve None si la conexión se cierra sin
-        autenticarse — la app jamás manda init/welcome a un desconocido.
+        `auth_error` y sigue escuchando en la MISMA conexión. None si la
+        conexión se cierra sin autenticarse.
         """
         async for raw in websocket:
             try:
@@ -401,8 +351,6 @@ class SyncServer:
                     )
                 )
             elif isinstance(msg, SessionMessage):
-                # Auto-login: token firmado por ESTE server y usuario que aún
-                # existe. Reemplaza al token anónimo sin firmar de antes.
                 user = usuario_de_token(msg.token, self._secret)
                 if user is not None and self.users.existe(user):
                     return user
@@ -419,109 +367,146 @@ class SyncServer:
                 )
         return None
 
-    async def handle(self, websocket: ServerConnection) -> None:
-        """Handler por cada conexión. Capa 7: primero autenticar, luego app.
-
-        Flujo: conectar -> _autenticar (cerrado: sin login no se entra) ->
-        identidad = usuario real -> auth_ok + handshake (init/welcome/
-        ownership) -> bucle de mensajes -> finally.
-
-        Nota de prototipo: si el mismo usuario abre dos conexiones a la vez
-        (dos pestañas/dispositivos), comparten identidad; la presencia y el
-        canal dirigido se quedan con la última conexión. Aceptable para el
-        público objetivo; el manejo fino multi-sesión es trabajo posterior.
+    async def _lobby(
+        self, websocket: ServerConnection, usuario: str
+    ) -> str | None:
+        """Compuerta de equipo (capa 15). Autenticado pero sin equipo: NO ve
+        nada. Le mandamos sus equipos y esperamos que cree uno, redima un
+        código, o elija uno suyo. Devuelve el team_id elegido, o None si la
+        conexión se cierra sin elegir.
         """
-        self.clients.add(websocket)
-        yo = None
-        try:
-            usuario = await self._autenticar(websocket)
-            if usuario is None:
-                return  # se desconectó sin autenticarse: nunca fue "alguien"
-            yo = self.roster.asignar(usuario)
-            self._ids[websocket] = yo.client_id
-            self._conns[yo.client_id] = websocket
-            logger.info(
-                "usuario autenticado: %s (total: %d)",
-                yo.client_id,
-                len(self.clients),
+        async def _mandar_lobby(error: str = "") -> None:
+            equipos = await self.teams.equipos_de(usuario)
+            await websocket.send(
+                encode(LobbyMessage(teams=equipos, error=error))
             )
-            # auth_ok con token de sesión fresco: el cliente lo guarda y lo
-            # presenta como `session` al recargar (auto-login firmado).
+
+        await _mandar_lobby()
+        async for raw in websocket:
+            try:
+                msg = decode(raw)
+            except ValueError:
+                await _mandar_lobby("mensaje inválido")
+                continue
+            if isinstance(msg, CreateTeamMessage):
+                try:
+                    eq = await self.teams.crear_equipo(msg.nombre, usuario)
+                    return eq["id"]
+                except TeamError as e:
+                    await _mandar_lobby(str(e))
+            elif isinstance(msg, RedeemInviteMessage):
+                eq = await self.teams.redimir(msg.code, usuario)
+                if eq is not None:
+                    return eq["id"]
+                await _mandar_lobby("código inválido o ya usado")
+            elif isinstance(msg, SelectTeamMessage):
+                if await self.teams.es_miembro(msg.team_id, usuario):
+                    return msg.team_id
+                await _mandar_lobby("no sos miembro de ese equipo")
+            else:
+                # Cualquier mensaje de app antes de tener equipo: recordale
+                # que primero hay que elegir/crear uno (la app sigue cerrada).
+                await _mandar_lobby()
+        return None
+
+    async def handle(self, websocket: ServerConnection) -> None:
+        """Una conexión: autenticar -> lobby (elegir equipo) -> sesión del
+        equipo. Hasta no estar en un equipo, la conexión no pertenece a
+        ningún `rt` (no recibe broadcasts de nadie)."""
+        usuario = await self._autenticar(websocket)
+        if usuario is None:
+            return  # se desconectó sin autenticarse: nunca fue "alguien"
+        # auth_ok con token de sesión fresco (auto-login firmado al recargar).
+        await websocket.send(
+            encode(
+                AuthOkMessage(
+                    username=usuario,
+                    token=crear_token(usuario, self._secret),
+                )
+            )
+        )
+        team_id = await self._lobby(websocket, usuario)
+        if team_id is None:
+            return  # se fue desde el lobby sin elegir equipo
+        await self._sesion_equipo(websocket, usuario, team_id)
+
+    async def _sesion_equipo(
+        self, websocket: ServerConnection, usuario: str, team_id: str
+    ) -> None:
+        """Sesión dentro de UN equipo. Todo (handshake + bucle) opera sobre
+        el runtime de ese equipo: otro equipo no existe para esta conexión.
+        """
+        rt = self._runtime_para(team_id)
+        rt.clients.add(websocket)
+        yo = rt.roster.asignar(usuario)
+        rt._ids[websocket] = yo.client_id
+        rt._conns[yo.client_id] = websocket
+        eq = await self.teams.equipo(team_id)
+        rol = await self.teams.rol(team_id, usuario)
+        logger.info(
+            "usuario %s entró al equipo %s (%s) — %d en el equipo",
+            yo.client_id, team_id, eq["nombre"] if eq else "?", len(rt.clients),
+        )
+        try:
+            # Confirmamos el equipo: lo que sigue es de ESTE equipo.
             await websocket.send(
                 encode(
-                    AuthOkMessage(
-                        username=yo.client_id,
-                        token=crear_token(yo.client_id, self._secret),
+                    TeamReadyMessage(
+                        team_id=team_id,
+                        nombre=eq["nombre"] if eq else team_id,
+                        rol=rol or "member",
                     )
                 )
             )
-            # Handshake normal (ya autenticado): workspace, presencia, ownership.
-            await websocket.send(encode(InitMessage(files=self.workspace.snapshot())))
+            await websocket.send(
+                encode(InitMessage(files=rt.workspace.snapshot()))
+            )
             await websocket.send(
                 encode(
                     WelcomeMessage(
                         you=yo,
-                        peers=self.roster.presentes(excepto=yo.client_id),
+                        peers=rt.roster.presentes(excepto=yo.client_id),
                     )
                 )
             )
             await websocket.send(
-                encode(OwnershipMessage(owners=self.ownership.snapshot()))
+                encode(OwnershipMessage(owners=rt.ownership.snapshot()))
             )
-            # Capa 12: ¿es el admin del workspace? + lista de usuarios para
-            # el selector del panel. Una sola vez. Va ANTES del git_status: el
-            # git_status es opcional (solo si hay git) y varios tests lo leen
-            # ellos mismos tras el handshake; dejándolo último, el contrato
-            # "el handshake termina en algo fijo" lo cierra admin_info, que
-            # siempre se manda, con o sin git.
-            await websocket.send(self._admin_info_encoded(yo.client_id))
-            # Capa 8: estado del repo git tras el handshake (si hay git).
-            await self._enviar_git_status(websocket)
+            await websocket.send(
+                await self._admin_info_encoded(team_id, yo.client_id)
+            )
+            await self._enviar_git_status(rt, websocket)
 
             async for raw in websocket:
                 message = decode(raw)
                 if isinstance(message, UpdateMessage):
-                    dueño = self.ownership.owner(message.path)
+                    dueño = rt.ownership.owner(message.path)
                     if dueño is not None and dueño != yo.client_id:
-                        # El archivo tiene dueño y NO eres tú: tu edición es
-                        # tentativa. No se aplica ni se difunde — se guarda
-                        # como propuesta y se le avisa al dueño. El autor
-                        # conserva su texto local; nadie más ve el cambio
-                        # todavía. "Editar primero, negociar después."
-                        prop = self.proposals.put(
+                        # Archivo con dueño y no sos vos: edición tentativa.
+                        # No se aplica ni difunde — se guarda como propuesta
+                        # y se le avisa al dueño. "Editar primero, negociar
+                        # después."
+                        prop = rt.proposals.put(
                             path=message.path,
                             author_id=yo.client_id,
                             author_name=yo.name,
                             content=message.content,
                         )
                         await self._enviar_a(
-                            dueño, encode(ProposalMessage(proposal=prop))
+                            rt, dueño, encode(ProposalMessage(proposal=prop))
                         )
                     else:
-                        # Sin dueño, o eres tú el dueño: se aplica directo.
-                        #
-                        # Capa 5 — prevención de colisiones. Si el archivo NO
-                        # tiene dueño, aplica el lock por línea: no puedes pisar
-                        # una línea que otro presente está tocando. Si eres el
-                        # dueño, tienes preferencia y el lock no te aplica
-                        # ("el owner tiene preferencia", README).
-                        # Contenido previo del archivo: lo necesitan tanto el
-                        # lock de capa 5 como el análisis de impacto de capa 6,
-                        # y hay que leerlo ANTES de aplicar. Una sola lectura.
-                        viejo = self.workspace.snapshot().get(message.path, "")
+                        # Sin dueño, o sos el dueño: se aplica directo.
+                        # Capa 5 (colisiones por línea): si NO tiene dueño y
+                        # pisás una línea ocupada por otro presente, se
+                        # rechaza el update entero. El dueño tiene preferencia.
+                        viejo = rt.workspace.snapshot().get(message.path, "")
                         if dueño is None:
                             tocadas = lineas_tocadas(viejo, message.content)
-                            ocupadas = self.roster.lineas_ocupadas(
+                            ocupadas = rt.roster.lineas_ocupadas(
                                 message.path, excepto=yo.client_id
                             )
                             if tocadas & ocupadas:
-                                # Otro presente ya está en una de esas líneas:
-                                # "el que la tocó primero escribe". Rechazamos
-                                # el update ENTERO (sin CRDT no hay merge por
-                                # línea robusto; en la práctica los updates son
-                                # por pulsación, así que el alcance es mínimo) y
-                                # le devolvemos al emisor el contenido
-                                # autoritativo para que su edición se revierta.
                                 await websocket.send(
                                     encode(
                                         UpdateMessage(
@@ -530,17 +515,12 @@ class SyncServer:
                                     )
                                 )
                                 continue
-                        # ¿Es la PRIMERA vez que se ve este path? Entonces este
-                        # update lo está *creando*. "El que la tocó primero
-                        # escribe" + ownership invisible: quien crea un archivo
-                        # es su dueño, sin botón. Antes un archivo nuevo nacía
-                        # sin dueño y había que reclamarlo a mano (el bug).
-                        es_nuevo = not self.workspace.exists(message.path)
-                        # Estado autoritativo PRIMERO, después se retransmite,
-                        # para que un cliente que llegue en medio no vea un
-                        # estado inconsistente.
-                        self.workspace.update(message.path, message.content)
+                        # Primera vez que se ve el path = lo está creando:
+                        # quien crea un archivo es su dueño, sin botón.
+                        es_nuevo = not rt.workspace.exists(message.path)
+                        rt.workspace.update(message.path, message.content)
                         await self._broadcast(
+                            rt,
                             websocket,
                             encode(
                                 UpdateMessage(
@@ -550,103 +530,79 @@ class SyncServer:
                             ),
                         )
                         if es_nuevo and dueño is None:
-                            # Solo cuando el archivo nace SIN dueño (no cuando
-                            # ya lo tenías reclamado y lo materializas con un
-                            # update): si no, re-difundiríamos un mapa idéntico
-                            # y meteríamos ruido en el stream.
-                            self.ownership.claim(message.path, yo.client_id)
-                            # Difundimos a todos (incluido el creador: su UI
-                            # pinta "tuyo" sin que pida nada).
+                            rt.ownership.claim(message.path, yo.client_id)
                             await self._broadcast_todos(
+                                rt,
                                 encode(
                                     OwnershipMessage(
-                                        owners=self.ownership.snapshot()
+                                        owners=rt.ownership.snapshot()
                                     )
-                                )
+                                ),
                             )
-                        # Capa 6: ¿este cambio afecta código de alguien más?
                         await self._notificar_impacto(
-                            message.path, viejo, message.content,
+                            rt, message.path, viejo, message.content,
                             yo.client_id, yo.name,
                         )
                 elif isinstance(message, DeleteMessage):
-                    # Coordinación (capa 4): solo borra el dueño, o cualquiera
-                    # si el archivo no tiene dueño. Un no-dueño que intenta
-                    # borrar algo ajeno se ignora en silencio (no hay "borrado
-                    # tentativo": sería otra pieza, y borrar lo ajeno sin pedir
-                    # contradice la tesis).
-                    dueño = self.ownership.owner(message.path)
+                    # Sólo borra el dueño, o cualquiera si no tiene dueño.
+                    dueño = rt.ownership.owner(message.path)
                     if dueño is None or dueño == yo.client_id:
-                        if self.workspace.delete(message.path):
-                            self.proposals.drop_path(message.path)
-                            cambio_owner = self.ownership.liberar(message.path)
-                            # El borrado va a TODOS (incluido quien lo pidió):
-                            # converge sin que el cliente adivine.
+                        if rt.workspace.delete(message.path):
+                            rt.proposals.drop_path(message.path)
+                            cambio_owner = rt.ownership.liberar(message.path)
                             await self._broadcast_todos(
-                                encode(DeleteMessage(path=message.path))
+                                rt, encode(DeleteMessage(path=message.path))
                             )
                             if cambio_owner:
                                 await self._broadcast_todos(
+                                    rt,
                                     encode(
                                         OwnershipMessage(
-                                            owners=self.ownership.snapshot()
+                                            owners=rt.ownership.snapshot()
                                         )
-                                    )
+                                    ),
                                 )
                 elif isinstance(message, ClaimMessage):
-                    # Reclamar ser dueño de un path. Difundimos el mapa entero
-                    # a todos (incluido quien reclamó: así su UI confirma si
-                    # quedó como dueño o si ya lo tenía otro).
-                    self.ownership.claim(message.path, yo.client_id)
+                    rt.ownership.claim(message.path, yo.client_id)
                     await self._broadcast_todos(
-                        encode(OwnershipMessage(owners=self.ownership.snapshot()))
+                        rt,
+                        encode(OwnershipMessage(owners=rt.ownership.snapshot())),
                     )
                 elif isinstance(message, AdminAssignMessage):
-                    # Capa 12: el admin del workspace reparte ownership en un
-                    # proyecto ya hecho (lo que faltaba para soltárselo a un
-                    # equipo open source). Solo el admin; un no-admin se
-                    # ignora en silencio (igual que toda acción no autorizada
-                    # en capas 4/5/9 — no se delata el porqué; el panel
-                    # tampoco se le pinta). `username` vacío = revocar
-                    # (reusa liberar). Con usuario, asignar REASIGNA aunque
-                    # ya tuviera dueño (el admin sí mueve zonas; claim no).
-                    # Solo a usuarios que existen: asignar a un fantasma
-                    # dejaría una zona de nadie alcanzable.
-                    if self.users.admin() == yo.client_id:
+                    # Capa 12/15: el admin DEL EQUIPO reparte ownership. Sólo
+                    # el admin del equipo; un no-admin se ignora en silencio.
+                    # `username` vacío = revocar. El destino debe ser miembro
+                    # del equipo (asignar a alguien de afuera no tiene sentido
+                    # y rompería el aislamiento).
+                    if await self.teams.rol(team_id, yo.client_id) == "admin":
                         aplicado = False
                         if message.username:
                             destino = normalizar(message.username)
-                            if self.users.existe(destino):
-                                self.ownership.asignar(message.path, destino)
+                            if await self.teams.es_miembro(team_id, destino):
+                                rt.ownership.asignar(message.path, destino)
                                 aplicado = True
                         else:
-                            aplicado = self.ownership.liberar(message.path)
+                            aplicado = rt.ownership.liberar(message.path)
                         if aplicado:
-                            # Mismo patrón que claim/delete: mapa entero a
-                            # todos (incluido el admin: su panel confirma).
                             await self._broadcast_todos(
+                                rt,
                                 encode(
                                     OwnershipMessage(
-                                        owners=self.ownership.snapshot()
+                                        owners=rt.ownership.snapshot()
                                     )
-                                )
+                                ),
                             )
                 elif isinstance(message, AdminAssignManyMessage):
-                    # Capa 13: reparto MASIVO (primera queja real: 100
-                    # archivos uno por uno es inusable). Misma compuerta y
-                    # reglas que admin_assign, pero en lote y con UN solo
-                    # broadcast (no 100). Carpeta = el cliente ya expandió
-                    # la selección a paths concretos.
-                    if self.users.admin() == yo.client_id:
+                    # Capa 13/15: reparto masivo, un solo broadcast. Misma
+                    # compuerta (admin del equipo) y reglas que admin_assign.
+                    if await self.teams.rol(team_id, yo.client_id) == "admin":
                         destino = (
                             normalizar(message.username)
                             if message.username else ""
                         )
-                        # Asignar a un fantasma dejaría zonas de nadie: si el
-                        # usuario no existe, no se aplica NADA (ni parcial:
-                        # mejor un no-op claro que un estado a medias).
                         valido = (
-                            not destino or self.users.existe(destino)
+                            not destino
+                            or await self.teams.es_miembro(team_id, destino)
                         )
                         aplicado = False
                         if valido:
@@ -654,77 +610,77 @@ class SyncServer:
                                 if not isinstance(p, str) or not p:
                                     continue
                                 if destino:
-                                    self.ownership.asignar(p, destino)
+                                    rt.ownership.asignar(p, destino)
                                     aplicado = True
-                                else:
-                                    if self.ownership.liberar(p):
-                                        aplicado = True
+                                elif rt.ownership.liberar(p):
+                                    aplicado = True
                         if aplicado:
-                            # UN broadcast para todo el lote (el punto).
                             await self._broadcast_todos(
+                                rt,
                                 encode(
                                     OwnershipMessage(
-                                        owners=self.ownership.snapshot()
+                                        owners=rt.ownership.snapshot()
                                     )
-                                )
+                                ),
                             )
+                elif isinstance(message, CreateInviteMessage):
+                    # Capa 15: el admin del equipo genera un código para
+                    # invitar. Sólo el admin; un no-admin se ignora (igual
+                    # que toda acción no autorizada: no se delata).
+                    if await self.teams.rol(team_id, yo.client_id) == "admin":
+                        try:
+                            code = await self.teams.crear_invitacion(
+                                team_id, yo.client_id
+                            )
+                            await self._enviar_a(
+                                rt, yo.client_id,
+                                encode(InviteCreatedMessage(code=code)),
+                            )
+                        except TeamError:
+                            pass  # carrera benigna (dejó de ser admin, etc.)
                 elif isinstance(message, ResolveMessage):
-                    prop = self.proposals.get(message.proposal_id)
-                    # Solo el dueño actual del archivo puede resolver. Si la
-                    # propuesta ya no existe o quien resuelve no es el dueño,
-                    # se ignora en silencio (carrera benigna: alguien más ya
-                    # resolvió, o el ownership cambió).
-                    if prop is not None and self.ownership.owner(
+                    prop = rt.proposals.get(message.proposal_id)
+                    # Sólo el dueño actual resuelve. Si ya no existe o no sos
+                    # el dueño, se ignora (carrera benigna).
+                    if prop is not None and rt.ownership.owner(
                         prop.path
                     ) == yo.client_id:
-                        self.proposals.pop(message.proposal_id)
+                        rt.proposals.pop(message.proposal_id)
                         if message.accept:
-                            # Aprobada: ahora sí se aplica y converge TODO el
-                            # mundo (autor, dueño y demás) — por eso va a
-                            # todos, no _broadcast (que omitiría al dueño que
-                            # acaba de aprobar y necesita ver el contenido).
-                            viejo = self.workspace.snapshot().get(
-                                prop.path, ""
-                            )
-                            self.workspace.update(prop.path, prop.content)
+                            viejo = rt.workspace.snapshot().get(prop.path, "")
+                            rt.workspace.update(prop.path, prop.content)
                             await self._broadcast_todos(
+                                rt,
                                 encode(
                                     UpdateMessage(
                                         path=prop.path, content=prop.content
                                     )
-                                )
+                                ),
                             )
-                            # Capa 6: el cambio aprobado (del autor) puede
-                            # afectar archivos de otros dueños.
                             await self._notificar_impacto(
-                                prop.path, viejo, prop.content,
+                                rt, prop.path, viejo, prop.content,
                                 prop.author_id, prop.author_name,
                             )
                         else:
-                            # Rechazada: al autor se le reenvía el contenido
-                            # autoritativo para que su edición tentativa local
-                            # se revierta a lo que de verdad hay.
                             await self._enviar_a(
+                                rt,
                                 prop.author_id,
                                 encode(
                                     UpdateMessage(
                                         path=prop.path,
-                                        content=self.workspace.snapshot().get(
+                                        content=rt.workspace.snapshot().get(
                                             prop.path, ""
                                         ),
                                     )
                                 ),
                             )
                 elif isinstance(message, PresenceMessage):
-                    # El cliente solo nos dijo path+line. Fusionamos con la
-                    # identidad confiable que el servidor ya tenía para esta
-                    # conexión y difundimos el estado completo a los demás
-                    # (sin eco al emisor: él ya sabe dónde está su propio cursor).
-                    estado = self.roster.mover(
+                    estado = rt.roster.mover(
                         yo.client_id, message.path, message.line
                     )
                     if estado is not None:
                         await self._broadcast(
+                            rt,
                             websocket,
                             encode(
                                 PresenceMessage(
@@ -737,121 +693,97 @@ class SyncServer:
                             ),
                         )
                 elif isinstance(message, GitRefreshMessage):
-                    # El cliente pidió re-consultar git ("actualizar").
-                    await self._enviar_git_status(websocket)
+                    await self._enviar_git_status(rt, websocket)
                 elif isinstance(message, CommitMessage):
-                    # Capa 9b: commit desde la web (no hay terminal en el
-                    # deploy). Autor = usuario autenticado (lo pone el server,
-                    # no el cliente). Sin push: el remoto es otra capa.
-                    if self.git is None:
+                    if rt.git is None:
                         await self._enviar_a(
-                            yo.client_id,
+                            rt, yo.client_id,
                             encode(GitResultMessage(False, "git no disponible")),
                         )
                     else:
                         msg = (message.message or "").strip()[:500]
                         if not msg:
                             await self._enviar_a(
-                                yo.client_id,
+                                rt, yo.client_id,
                                 encode(GitResultMessage(
                                     False, "escribí un mensaje de commit")),
                             )
                         else:
                             nombre, email = _autor_git(yo.client_id)
-                            async with self._git_lock:
+                            async with rt._git_lock:
                                 ok, detalle = await asyncio.to_thread(
-                                    self.git.commitear, msg, nombre, email
+                                    rt.git.commitear, msg, nombre, email
                                 )
                             await self._enviar_a(
-                                yo.client_id,
+                                rt, yo.client_id,
                                 encode(GitResultMessage(ok, detalle)),
                             )
                             if ok:
-                                # El repo cambió para todos: refrescar paneles.
-                                payload = await self._git_status_encoded()
+                                payload = await self._git_status_encoded(rt)
                                 if payload is not None:
-                                    await self._broadcast_todos(payload)
+                                    await self._broadcast_todos(rt, payload)
                 elif isinstance(message, CloneMessage):
-                    # Capa 10: traer un repo y REEMPLAZAR el workspace
-                    # compartido. Destructivo (el cliente confirmó). Creds
-                    # efímeras: las usa GitRepo y no se guardan en ningún lado.
-                    if self.git is None:
+                    if rt.git is None:
                         await self._enviar_a(
-                            yo.client_id,
+                            rt, yo.client_id,
                             encode(GitResultMessage(False, "git no disponible")),
                         )
                     else:
-                        async with self._git_lock:
+                        async with rt._git_lock:
                             ok, detalle = await asyncio.to_thread(
-                                self.git.clonar,
+                                rt.git.clonar,
                                 message.url, message.username, message.token,
                             )
                             if ok:
-                                # El workspace es otro: re-init a todos.
-                                await self._reiniciar_para_todos()
+                                await self._reiniciar_para_todos(rt)
                         await self._enviar_a(
-                            yo.client_id, encode(GitResultMessage(ok, detalle))
+                            rt, yo.client_id,
+                            encode(GitResultMessage(ok, detalle)),
                         )
                 elif isinstance(message, PushMessage):
-                    # Capa 10: empujar el workspace al remoto. Sin fusión: si
-                    # el remoto avanzó, GitRepo.push lo dice claro.
-                    if self.git is None:
+                    if rt.git is None:
                         await self._enviar_a(
-                            yo.client_id,
+                            rt, yo.client_id,
                             encode(GitResultMessage(False, "git no disponible")),
                         )
                     else:
-                        async with self._git_lock:
+                        async with rt._git_lock:
                             ok, detalle = await asyncio.to_thread(
-                                self.git.push,
+                                rt.git.push,
                                 message.username, message.token,
                                 message.url or None,
                             )
                         await self._enviar_a(
-                            yo.client_id, encode(GitResultMessage(ok, detalle))
+                            rt, yo.client_id,
+                            encode(GitResultMessage(ok, detalle)),
                         )
                         if ok:
-                            payload = await self._git_status_encoded()
+                            payload = await self._git_status_encoded(rt)
                             if payload is not None:
-                                await self._broadcast_todos(payload)
-                # Si llega un InitMessage/WelcomeMessage/LeaveMessage del
-                # cliente lo ignoramos: esos los origina solo el servidor.
+                                await self._broadcast_todos(rt, payload)
+                # Init/Welcome/Leave del cliente se ignoran: los origina el
+                # server. Mensajes de lobby acá tampoco aplican (ya hay equipo).
         finally:
-            self.clients.discard(websocket)
-            if yo is not None:
-                # Solo si llegó a autenticarse. Una conexión que se cerró en la
-                # compuerta de login nunca fue "alguien": no hay nada que limpiar.
-                self._ids.pop(websocket, None)
-                # Soltamos el mapa conexión->id solo si sigue apuntando a ESTA
-                # conexión: en una recarga la conexión nueva puede registrarse
-                # antes de que corra este finally, y no queremos que el cierre
-                # de la vieja borre el registro de la nueva (mismo usuario).
-                if self._conns.get(yo.client_id) is websocket:
-                    self._conns.pop(yo.client_id, None)
-                # El ownership NO se toca al desconectar: ahora es por usuario y
-                # persistido. El dueño lo sigue siendo aunque cierre la pestaña;
-                # lo recupera al volver a entrar como el mismo usuario. Solo la
-                # presencia es efímera.
-                ultimo = self.roster.quitar(yo.client_id)
-                # Avisamos del Leave solo si llegó a estar presente en algún
-                # archivo (si nunca abrió nada, nadie lo tenía pintado).
-                if ultimo is not None and ultimo.path is not None:
-                    await self._broadcast(
-                        websocket, encode(LeaveMessage(client_id=yo.client_id))
-                    )
-                logger.info(
-                    "usuario desconectado: %s (total: %d)",
-                    yo.client_id,
-                    len(self.clients),
+            rt.clients.discard(websocket)
+            rt._ids.pop(websocket, None)
+            # Soltamos conexión->id sólo si sigue apuntando a ESTA conexión:
+            # en una recarga la nueva puede registrarse antes de este finally.
+            if rt._conns.get(yo.client_id) is websocket:
+                rt._conns.pop(yo.client_id, None)
+            # Ownership NO se toca al desconectar (por usuario, persistido).
+            # Sólo la presencia es efímera.
+            ultimo = rt.roster.quitar(yo.client_id)
+            if ultimo is not None and ultimo.path is not None:
+                await self._broadcast(
+                    rt, websocket, encode(LeaveMessage(client_id=yo.client_id))
                 )
+            logger.info(
+                "usuario %s salió del equipo %s — %d en el equipo",
+                yo.client_id, team_id, len(rt.clients),
+            )
 
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
-        """Arranca el servidor WebSocket y lo deja escuchando para siempre.
-
-        El `await asyncio.Future()` es un truco para bloquear el coroutine
-        indefinidamente sin consumir CPU. Es lo que mantiene vivo el proceso
-        hasta que lo mates con Ctrl+C.
-        """
+        """Arranca el server WebSocket y lo deja escuchando para siempre."""
         async with serve(self.handle, host, port):
             logger.info("servidor escuchando en ws://%s:%d", host, port)
             await asyncio.Future()

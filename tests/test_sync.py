@@ -90,23 +90,65 @@ async def autenticar(ws, *, user=None, password="pw", registrar=True):
     return user, authok
 
 
-async def handshake(ws, *, user=None, password="pw", registrar=True) -> dict:
-    """autenticar + consumir init+welcome+ownership. Devuelve el welcome.
+# Capa 15: ahora entre auth y el workspace hay un GATE de equipo. Para que
+# los ~130 tests sigan valiendo sin reescribirlos uno por uno, el helper
+# coordina solo: el PRIMER cliente de un server crea el equipo (queda
+# admin); los siguientes se unen al MISMO equipo (el admin genera un código
+# de un solo uso por cada uno). Se coordina por puerto del server (único por
+# test gracias al fixture). Aislamiento real se prueba aparte, con servers
+# distintos.
+_coord: dict = {}
 
-    Capa 7: ahora hay un paso de auth ANTES del handshake. La mayoría de los
-    tests solo necesitan "estar dentro como alguien"; este helper lo resuelve.
-    `welcome["you"]["client_id"]` es el usuario (la identidad ya es real).
-    """
+
+@pytest.fixture(autouse=True)
+def _coord_limpio():
+    # Los puertos efímeros pueden reciclarse entre tests: limpiar evita que
+    # un test herede el "equipo" (y la conexión ya cerrada) de otro.
+    _coord.clear()
+    yield
+    _coord.clear()
+
+
+def _puerto(ws):
+    try:
+        return ws.remote_address[1]
+    except Exception:  # pragma: no cover
+        return "default"
+
+
+async def entrar_equipo(ws):
+    """Pasa el gate de equipo (capa 15). Primer cliente del server: crea el
+    equipo. Siguientes: el admin emite un código de un solo uso y este se
+    une. Deja la conexión justo en `team_ready` (lo consume) — lo que sigue
+    (init/welcome/ownership/admin_info[/git_status]) lo lee quien llame."""
+    lobby = json.loads(await ws.recv())
+    assert lobby["type"] == "lobby", f"esperaba lobby, llegó {lobby}"
+    port = _puerto(ws)
+    coord = _coord.get(port)
+    if coord is None:
+        await ws.send(json.dumps({"type": "create_team", "nombre": f"eq-{port}"}))
+        _coord[port] = {"ws": ws}
+    else:
+        admin_ws = coord["ws"]
+        await admin_ws.send(json.dumps({"type": "create_invite"}))
+        ic = await recv_tipo(admin_ws, "invite_created")
+        await ws.send(json.dumps({"type": "redeem_invite", "code": ic["code"]}))
+    tr = json.loads(await ws.recv())
+    assert tr["type"] == "team_ready", f"esperaba team_ready, llegó {tr}"
+
+
+async def handshake(ws, *, user=None, password="pw", registrar=True) -> dict:
+    """autenticar + gate de equipo + consumir init/welcome/ownership/
+    admin_info. Devuelve el welcome. El git_status (si hay git) viene DESPUÉS
+    y lo leen los tests de git ellos mismos."""
     await autenticar(ws, user=user, password=password, registrar=registrar)
+    await entrar_equipo(ws)
     init = json.loads(await ws.recv())
     assert init["type"] == "init"
     welcome = json.loads(await ws.recv())
     assert welcome["type"] == "welcome"
     ownership = json.loads(await ws.recv())
     assert ownership["type"] == "ownership"
-    # Capa 12: admin_info cierra el handshake fijo (init/welcome/ownership/
-    # admin_info), SIEMPRE, con o sin git. El git_status (si hay git) viene
-    # DESPUÉS y lo leen los tests de git ellos mismos: el helper no lo toca.
     admin_info = json.loads(await ws.recv())
     assert admin_info["type"] == "admin_info"
     return welcome
