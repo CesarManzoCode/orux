@@ -72,6 +72,26 @@ class UserStore:
         self._guardar()
         return u
 
+    def admin(self) -> str | None:
+        """El admin del workspace = el PRIMER usuario registrado.
+
+        Capa 12. Decisión deliberadamente mínima y sin migración: no se añade
+        ningún campo al JSON. `dict` (y `json`) preservan orden de inserción
+        en Python 3.7+, así que el primer key es, por construcción, quien se
+        registró primero — la persona que levantó el instance. En tu VPS es
+        tu propia cuenta, retroactivamente, sin tocar `users.json`.
+
+        None si no hay nadie registrado todavía. Promover/cambiar de admin
+        sería otra pieza chica (y otra capa): acá el admin es uno y fijo.
+        """
+        return next(iter(self._usuarios), None)
+
+    def usuarios(self) -> list[str]:
+        """Todos los usuarios registrados (orden estable para la UI del panel
+        admin). Es solo la lista de nombres; nunca sale de aquí un registro de
+        contraseña."""
+        return sorted(self._usuarios)
+
     def verificar(self, username: str, password: str) -> bool:
         """¿Usuario existe y la contraseña coincide? False si cualquiera falla."""
         registro = self._usuarios.get(normalizar(username))

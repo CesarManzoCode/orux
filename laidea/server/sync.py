@@ -73,6 +73,8 @@ from ..identity import (
     usuario_de_token,
 )
 from ..protocol import (
+    AdminAssignMessage,
+    AdminInfoMessage,
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
@@ -265,6 +267,21 @@ class SyncServer:
             )
         )
 
+    def _admin_info_encoded(self, usuario: str) -> str:
+        """Capa 12: `admin_info` para ESTE usuario ya serializado.
+
+        `is_admin` se decide acá (server), nunca lo dice el cliente. El
+        listado de usuarios es solo nombres (UserStore.usuarios no filtra
+        contraseñas). Lo usa el handshake; reutilizable si algún día se
+        decide refrescarlo (hoy: el admin recarga, decisión mínima).
+        """
+        return encode(
+            AdminInfoMessage(
+                is_admin=self.users.admin() == usuario,
+                users=self.users.usuarios(),
+            )
+        )
+
     async def _reiniciar_para_todos(self) -> None:
         """Tras un clone destructivo: el workspace es OTRO repo. Tira el estado
         compartido viejo y re-inicializa a todos los clientes autenticados.
@@ -416,6 +433,13 @@ class SyncServer:
             await websocket.send(
                 encode(OwnershipMessage(owners=self.ownership.snapshot()))
             )
+            # Capa 12: ¿es el admin del workspace? + lista de usuarios para
+            # el selector del panel. Una sola vez. Va ANTES del git_status: el
+            # git_status es opcional (solo si hay git) y varios tests lo leen
+            # ellos mismos tras el handshake; dejándolo último, el contrato
+            # "el handshake termina en algo fijo" lo cierra admin_info, que
+            # siempre se manda, con o sin git.
+            await websocket.send(self._admin_info_encoded(yo.client_id))
             # Capa 8: estado del repo git tras el handshake (si hay git).
             await self._enviar_git_status(websocket)
 
@@ -542,6 +566,36 @@ class SyncServer:
                     await self._broadcast_todos(
                         encode(OwnershipMessage(owners=self.ownership.snapshot()))
                     )
+                elif isinstance(message, AdminAssignMessage):
+                    # Capa 12: el admin del workspace reparte ownership en un
+                    # proyecto ya hecho (lo que faltaba para soltárselo a un
+                    # equipo open source). Solo el admin; un no-admin se
+                    # ignora en silencio (igual que toda acción no autorizada
+                    # en capas 4/5/9 — no se delata el porqué; el panel
+                    # tampoco se le pinta). `username` vacío = revocar
+                    # (reusa liberar). Con usuario, asignar REASIGNA aunque
+                    # ya tuviera dueño (el admin sí mueve zonas; claim no).
+                    # Solo a usuarios que existen: asignar a un fantasma
+                    # dejaría una zona de nadie alcanzable.
+                    if self.users.admin() == yo.client_id:
+                        aplicado = False
+                        if message.username:
+                            destino = normalizar(message.username)
+                            if self.users.existe(destino):
+                                self.ownership.asignar(message.path, destino)
+                                aplicado = True
+                        else:
+                            aplicado = self.ownership.liberar(message.path)
+                        if aplicado:
+                            # Mismo patrón que claim/delete: mapa entero a
+                            # todos (incluido el admin: su panel confirma).
+                            await self._broadcast_todos(
+                                encode(
+                                    OwnershipMessage(
+                                        owners=self.ownership.snapshot()
+                                    )
+                                )
+                            )
                 elif isinstance(message, ResolveMessage):
                     prop = self.proposals.get(message.proposal_id)
                     # Solo el dueño actual del archivo puede resolver. Si la

@@ -61,6 +61,20 @@ class Ownership:
             return True
         return actual == client_id
 
+    def asignar(self, path: str, user: str) -> None:
+        """Asigna `path` a `user` SIN condiciones. Persiste.
+
+        Capa 12: es la acción del admin del workspace. A diferencia de
+        `claim` (que respeta al dueño actual — la coordinación no roba zona
+        ajena), aquí el admin SÍ puede reasignar: en un proyecto open source
+        ya hecho, alguien con autoridad reparte las zonas desde un panel, que
+        es justo lo que faltaba para soltárselo a un equipo real. Sólo el
+        server, tras verificar que quien pide es `UserStore.admin()`, llama
+        esto; el modelo de datos en sí no sabe de permisos.
+        """
+        self._owners[path] = user
+        self._guardar()
+
     def liberar(self, path: str) -> bool:
         """Quita el dueño de `path` (se borró el archivo). Devuelve si cambió.
 

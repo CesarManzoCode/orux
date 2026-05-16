@@ -421,6 +421,55 @@ class PushMessage:
     type: Literal["push"] = "push"
 
 
+# --- Capa 12: admin del workspace + reparto de ownership ---
+#
+# El bloqueo real para soltárselo a un equipo open source ya hecho: el
+# ownership se auto-reclamaba por quien tocaba primero, lo cual en un
+# proyecto existente no organiza nada. Hace falta alguien con autoridad que
+# reparta las zonas desde un panel. Admin = el primer usuario registrado
+# (UserStore.admin(); decisión mínima sin migrar el JSON).
+
+
+@dataclass(frozen=True)
+class AdminInfoMessage:
+    """Servidor -> cliente: "¿sos admin? y esta es la gente registrada".
+
+    Va una vez tras el handshake (después de `ownership`, ANTES del
+    `git_status` opcional) a CADA cliente: así sabe si pinta el panel admin
+    y con qué usuarios poblar el selector. Cierra el handshake fijo —
+    siempre se manda, haya git o no. NO se re-difunde cuando alguien nuevo se registra: el admin
+    recarga para refrescar la lista (mismo criterio que `git_refresh` — que
+    quede algo viejo entre refrescos es aceptable, y evita inyectar mensajes
+    a mitad del stream de todos). `users` es solo nombres (jamás sale de
+    aquí un registro de contraseña). Un cliente no-admin igual lo recibe
+    (con `is_admin=False`): el contrato es simétrico, el panel se oculta en
+    el cliente y el server además ignora acciones admin de un no-admin.
+    """
+
+    is_admin: bool
+    users: list[str] = field(default_factory=list)
+    type: Literal["admin_info"] = "admin_info"
+
+
+@dataclass(frozen=True)
+class AdminAssignMessage:
+    """Cliente (admin) -> servidor: asigná/quitá el dueño de `path`.
+
+    `username` vacío = quitar dueño (revocar) — reusa `Ownership.liberar`,
+    no hace falta pieza nueva para revocar. Con usuario, `Ownership.asignar`
+    REASIGNA aunque ya tuviera dueño (el admin sí puede mover una zona; un
+    `claim` normal no roba). El servidor verifica que quien lo manda sea el
+    admin; si no, lo ignora en silencio (igual que el resto de acciones no
+    autorizadas en capas 4/5/9 — no se delata el porqué). Tras aplicarlo,
+    difunde el `OwnershipMessage` completo a todos, como cualquier cambio
+    de ownership.
+    """
+
+    path: str
+    username: str = ""
+    type: Literal["admin_assign"] = "admin_assign"
+
+
 # Union de todos los tipos posibles. `decode` los distingue por el campo `type`.
 # `PresenceState` y `Proposal` no entran: no son mensajes, son estado embebido.
 Message = Union[
@@ -446,6 +495,8 @@ Message = Union[
     GitResultMessage,
     CloneMessage,
     PushMessage,
+    AdminInfoMessage,
+    AdminAssignMessage,
 ]
 
 
@@ -545,4 +596,12 @@ def decode(raw: str) -> Message:
         return CloneMessage(url=data["url"], username=data["username"], token=data["token"])
     if kind == "push":
         return PushMessage(username=data["username"], token=data["token"], url=data.get("url", ""))
+    if kind == "admin_info":
+        return AdminInfoMessage(
+            is_admin=data["is_admin"], users=list(data.get("users", []))
+        )
+    if kind == "admin_assign":
+        return AdminAssignMessage(
+            path=data["path"], username=data.get("username", "")
+        )
     raise ValueError(f"tipo de mensaje desconocido: {kind!r}")

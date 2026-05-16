@@ -104,6 +104,11 @@ async def handshake(ws, *, user=None, password="pw", registrar=True) -> dict:
     assert welcome["type"] == "welcome"
     ownership = json.loads(await ws.recv())
     assert ownership["type"] == "ownership"
+    # Capa 12: admin_info cierra el handshake fijo (init/welcome/ownership/
+    # admin_info), SIEMPRE, con o sin git. El git_status (si hay git) viene
+    # DESPUÉS y lo leen los tests de git ellos mismos: el helper no lo toca.
+    admin_info = json.loads(await ws.recv())
+    assert admin_info["type"] == "admin_info"
     return welcome
 
 
@@ -1082,3 +1087,108 @@ async def test_push_desde_la_web(tmp_path) -> None:
         assert (verif / "nuevo.py").exists()
     finally:
         s.close(); await s.wait_closed()
+
+
+# --- Capa 12: admin del workspace + reparto de ownership ---
+#
+# El bloqueo real para soltárselo a un equipo open source ya hecho: el
+# ownership se auto-reclamaba por quien tocaba primero, lo cual en un
+# proyecto existente no organiza nada. Estos tests prueban el flujo end-to-end
+# sobre el WebSocket (el núcleo puro está en test_admin.py).
+
+
+async def test_admin_info_primer_usuario_es_admin(server_port: int) -> None:
+    # El primer registrado es admin; el resto no. admin_info cierra el
+    # handshake (lo consume el helper); aquí lo leemos a mano para mirarlo.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await autenticar(a, user="lider")
+        for _ in range(3):  # init, welcome, ownership
+            await a.recv()
+        info = json.loads(await a.recv())
+        assert info == {"type": "admin_info", "is_admin": True, "users": ["lider"]}
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await autenticar(b, user="otro")
+        for _ in range(3):
+            await b.recv()
+        info = json.loads(await b.recv())
+        assert info["type"] == "admin_info"
+        assert info["is_admin"] is False
+        # La lista de usuarios es estable y trae a todos (solo nombres).
+        assert info["users"] == ["lider", "otro"]
+
+
+async def test_admin_asigna_ownership_y_se_difunde(server_port: int) -> None:
+    # El admin reparte una zona a otro usuario; el mapa entero llega a todos.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a, user="lider")          # primer registrado = admin
+        await handshake(b, user="dev")            # crea al usuario "dev"
+        # El admin asigna core.py a dev (archivo que ni existe aún: el
+        # ownership es independiente del contenido — repartir un proyecto
+        # ya hecho es justo asignar antes de que nadie lo toque).
+        await a.send(json.dumps({
+            "type": "admin_assign", "path": "core.py", "username": "dev"}))
+        esperado = {"type": "ownership", "owners": {"core.py": "dev"}}
+        assert await recv_tipo(a, "ownership") == esperado
+        assert await recv_tipo(b, "ownership") == esperado
+
+
+async def test_admin_reasigna_aunque_ya_tenga_dueno(server_port: int) -> None:
+    # claim no roba (capa 4), pero el admin SÍ reasigna: si la zona quedó
+    # mal, la mueve. Esta es la diferencia que hace útil el panel.
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a, user="lider")
+        await handshake(b, user="dev")
+        # dev crea x.py y queda dueño automáticamente (capa 4).
+        await b.send(json.dumps({"type": "update", "path": "x.py", "content": "de dev"}))
+        await recv_tipo(a, "ownership"); await recv_tipo(b, "ownership")
+        # El admin reasigna x.py a lider (sí puede, a diferencia de claim).
+        await a.send(json.dumps({
+            "type": "admin_assign", "path": "x.py", "username": "lider"}))
+        esperado = {"type": "ownership", "owners": {"x.py": "lider"}}
+        assert await recv_tipo(a, "ownership") == esperado
+        assert await recv_tipo(b, "ownership") == esperado
+
+
+async def test_admin_revoca_con_username_vacio(server_port: int) -> None:
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await handshake(a, user="lider")
+        await a.send(json.dumps({
+            "type": "admin_assign", "path": "y.py", "username": "lider"}))
+        assert await recv_tipo(a, "ownership") == {
+            "type": "ownership", "owners": {"y.py": "lider"}}
+        # username vacío = revocar (reusa liberar; no hace falta pieza nueva).
+        await a.send(json.dumps({
+            "type": "admin_assign", "path": "y.py", "username": ""}))
+        assert await recv_tipo(a, "ownership") == {
+            "type": "ownership", "owners": {}}
+
+
+async def test_no_admin_no_puede_asignar(server_port: int) -> None:
+    # Un no-admin que manda admin_assign se ignora en silencio (igual que
+    # toda acción no autorizada en capas 4/5/9 — no se delata el porqué).
+    async with connect(f"ws://localhost:{server_port}") as a, connect(
+        f"ws://localhost:{server_port}"
+    ) as b:
+        await handshake(a, user="lider")          # admin
+        await handshake(b, user="colado")         # NO admin
+        await b.send(json.dumps({
+            "type": "admin_assign", "path": "z.py", "username": "colado"}))
+        # Nadie recibe ownership: la acción no aplicó.
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(a.recv(), timeout=0.3)
+
+
+async def test_admin_no_asigna_a_usuario_inexistente(server_port: int) -> None:
+    # Asignar a un fantasma dejaría una zona de nadie alcanzable: se ignora.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await handshake(a, user="lider")
+        await a.send(json.dumps({
+            "type": "admin_assign", "path": "w.py", "username": "no-existe"}))
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(a.recv(), timeout=0.3)
