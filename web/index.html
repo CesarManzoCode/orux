@@ -531,6 +531,40 @@
     #git .remacc button:hover { background: var(--elevated); }
     #git .remacc .no { color: var(--bad); }
     #git .remacc .no:hover { background: var(--bad-bg); }
+
+    /* Capa 12: panel admin. Solo lo ve el admin del workspace (el primer
+       usuario registrado). En un proyecto YA HECHO el ownership
+       auto-reclamado no organiza nada: alguien con autoridad reparte las
+       zonas. A un no-admin ni se le pinta. Va sobre el panel git, debajo
+       de la lista de archivos. */
+    #adminp {
+      margin-top: 0.8rem; border-top: 1px solid var(--border-soft);
+      padding-top: 0.8rem;
+    }
+    #adminp .cab {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      font-weight: 700; color: var(--faint); margin-bottom: 0.5rem;
+    }
+    #adminp .arch {
+      font-size: 12px; color: var(--text); font-family: var(--font-mono);
+      word-break: break-all; margin-bottom: 0.15rem;
+    }
+    #adminp .duenoact { font-size: 11px; color: var(--muted); margin-bottom: 0.5rem; }
+    #adminp .duenoact b { color: var(--accent); font-weight: 700; }
+    #adminp select {
+      width: 100%; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.4rem 0.5rem; font-family: inherit; font-size: 12px;
+      outline: none; margin-bottom: 0.4rem; transition: border-color var(--t);
+    }
+    #adminp select:focus { border-color: var(--accent); }
+    #adminp button {
+      width: 100%; border: none; border-radius: var(--r-sm);
+      padding: 0.42rem; background: var(--accent); color: #08130d;
+      font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    #adminp button:hover { filter: brightness(1.08); }
+    #adminp .vacio { font-size: 11px; color: var(--faint); }
   </style>
   <!--
     Capa 11: primera dependencia real (Prism.js), por el gatillo acordado: un
@@ -572,6 +606,7 @@
       <h2>archivos</h2>
       <button id="nuevo">+ nuevo archivo</button>
       <ul id="lista"></ul>
+      <div id="adminp"></div>
       <div id="git"></div>
     </aside>
     <main>
@@ -632,6 +667,7 @@
     const crearBtn = document.getElementById("crear");
     const salirEl = document.getElementById("salir");
     const gitEl = document.getElementById("git");
+    const adminEl = document.getElementById("adminp");
 
     function mostrarLogin(err) {
       loginEl.classList.add("on");
@@ -719,6 +755,14 @@
     // Remoto: url/usuario en memoria de SESIÓN (no localStorage) para no
     // retipear. El token NUNCA se guarda — ni acá ni en ningún lado.
     const gitRemoto = { url: "", user: "" };
+
+    // Capa 12: ¿soy el admin del workspace? + usuarios para el selector del
+    // panel. Lo decide el SERVER (admin_info), nunca el cliente; el cliente
+    // solo pinta. A un no-admin ni se le muestra el panel (y aunque forzara
+    // un admin_assign, el server lo ignora). La lista se refresca recargando
+    // (decisión mínima, mismo criterio que git_refresh).
+    let esAdmin = false;
+    let usuariosLista = [];
 
     // Nombre legible de un client_id. Si está presente lo sacamos del roster;
     // si soy yo, mi nombre; si no, lo reconstruimos del esquema del server
@@ -901,6 +945,7 @@
         Object.assign(owners, msg.owners);
         renderOwnership();
         renderPropuestas();
+        renderAdmin();  // refleja el dueño nuevo en el selector
       }
 
       if (msg.type === "proposal") {
@@ -917,6 +962,15 @@
         // Clave determinista source::affected: tecleo del autor -> reemplaza.
         impactos[msg.source_path + "::" + msg.affected_path] = msg;
         renderImpactos();
+      }
+
+      if (msg.type === "admin_info") {
+        // El server me dice si soy el admin del workspace (lo decide ÉL, no
+        // el cliente) y la lista de usuarios para el selector. Una sola vez
+        // tras el handshake; si entra gente nueva después, recargá.
+        esAdmin = !!msg.is_admin;
+        usuariosLista = msg.users || [];
+        renderAdmin();
       }
 
       if (msg.type === "git_status") {
@@ -1196,6 +1250,7 @@
       renderLista();
       renderPresencia();
       renderOwnership();
+      renderAdmin();  // el panel admin actúa sobre el archivo abierto
       // Abrir un archivo ya es "estar presente ahí": anúncialo.
       enviarPresencia();
     }
@@ -1237,6 +1292,77 @@
       if (!currentPath || ws.readyState !== WebSocket.OPEN) return;
       ws.send(JSON.stringify({ type: "claim", path: currentPath }));
     });
+
+    /*
+     * Capa 12: panel admin del workspace. Solo lo ve el admin (el primer
+     * usuario registrado; lo decide el SERVER vía admin_info). Reparte
+     * ownership del archivo abierto: en un proyecto ya hecho alguien con
+     * autoridad asigna las zonas — era lo que faltaba para soltárselo a un
+     * equipo open source (el ownership auto-reclamado no organizaba nada).
+     *
+     * Mínimo a propósito: actúa sobre el archivo ABIERTO, no en bloque ni
+     * por carpeta (eso sería otra capa). A diferencia de "reclamar", el
+     * admin SÍ reasigna aunque ya tenga dueño; "— sin dueño —" revoca. El
+     * server revalida que sos admin: aunque un no-admin forzara el mensaje,
+     * se ignora; y a un no-admin este panel ni se le pinta.
+     */
+    function renderAdmin() {
+      adminEl.innerHTML = "";
+      if (!esAdmin) return;
+
+      const cab = document.createElement("div");
+      cab.className = "cab";
+      cab.textContent = "admin · ownership";
+      adminEl.appendChild(cab);
+
+      if (!currentPath) {
+        const v = document.createElement("div");
+        v.className = "vacio";
+        v.textContent = "abrí un archivo para asignar su dueño.";
+        adminEl.appendChild(v);
+        return;
+      }
+
+      const arch = document.createElement("div");
+      arch.className = "arch";
+      arch.textContent = currentPath;
+      adminEl.appendChild(arch);
+
+      const dueño = owners[currentPath];
+      const da = document.createElement("div");
+      da.className = "duenoact";
+      da.innerHTML = dueño
+        ? "dueño actual: <b></b>"
+        : "sin dueño";
+      if (dueño) da.querySelector("b").textContent = nombreDe(dueño);
+      adminEl.appendChild(da);
+
+      const sel = document.createElement("select");
+      const opt0 = document.createElement("option");
+      opt0.value = "";
+      opt0.textContent = "— sin dueño —";
+      sel.appendChild(opt0);
+      for (const u of usuariosLista) {
+        const o = document.createElement("option");
+        o.value = u;
+        o.textContent = u;
+        if (u === dueño) o.selected = true;
+        sel.appendChild(o);
+      }
+      adminEl.appendChild(sel);
+
+      const btn = document.createElement("button");
+      btn.textContent = "aplicar";
+      btn.addEventListener("click", () => {
+        if (!currentPath || ws.readyState !== WebSocket.OPEN) return;
+        // username vacío = revocar (el server reusa liberar). El cambio
+        // vuelve como un ownership normal y re-renderiza todo.
+        ws.send(JSON.stringify({
+          type: "admin_assign", path: currentPath, username: sel.value,
+        }));
+      });
+      adminEl.appendChild(btn);
+    }
 
     /*
      * Diff por líneas, mínimo pero real: LCS clásico (programación dinámica)
