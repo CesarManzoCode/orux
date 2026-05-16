@@ -18,6 +18,13 @@ dependencies = [
     # grammar TSX cubre JS/TS/JSX/TSX. Verificación real del parser: VPS.
     "tree-sitter>=0.22",
     "tree-sitter-typescript>=0.23",
+    # Capa 17: pyright = Tier 0 (el análisis más profundo, resolución de
+    # tipos cross-módulo real para Python — mata los falsos positivos del
+    # heurístico). El paquete pip `pyright` es un wrapper que autoarranca un
+    # Node propio en el 1er uso; por eso el Dockerfile lo PRE-CALIENTA en el
+    # build (offline en runtime). NO obligatorio: si falta o falla, la
+    # jerarquía cae sola a tree-sitter/ast (sandbox sin pyright sigue verde).
+    "pyright>=1.1.350",
 ]
 
 [project.optional-dependencies]

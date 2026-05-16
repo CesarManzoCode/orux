@@ -30,11 +30,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
 
 from ..analysis import impacto, motivos as motivos_de
+from ..analysis.lsp import arrancar_pyright
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -147,6 +149,13 @@ class TeamRuntime:
         self.team_id = team_id
         self.workspace = Workspace(storage=storage)
         self.workspace.cargar_de_disco()
+        # Capa 17: dir del workspace en disco = rootUri de pyright. Sin
+        # storage (tests en memoria) no hay dir => nunca se arranca LSP, se
+        # usa la jerarquía de capa 16 (sandbox sigue verde).
+        self._ws_dir = str(storage.root) if storage is not None else None
+        self._lsp = None
+        self._lsp_intentado = False
+        self._lsp_lock = threading.Lock()
         self.clients: set[ServerConnection] = set()
         self.roster = Roster()
         self._ids: dict[ServerConnection, str] = {}
@@ -157,6 +166,33 @@ class TeamRuntime:
         # Serializa commit/clone/push de ESTE equipo (subprocess+fs sobre su
         # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
         self._git_lock = asyncio.Lock()
+
+    def lsp_sesion(self):
+        """Sesión pyright de ESTE equipo, tibia: se arranca UNA vez (lazy,
+        en el primer análisis) y se reusa toda la sesión. Llamar SIEMPRE
+        desde un hilo worker (el spawn+handshake es bloqueante). None si no
+        hay pyright/dir => el análisis degrada a capa 16. Cachear None evita
+        reintentar el spawn en cada tecla.
+        """
+        with self._lsp_lock:
+            if not self._lsp_intentado:
+                self._lsp_intentado = True
+                if self._ws_dir is not None:
+                    self._lsp = arrancar_pyright(self._ws_dir)
+            return self._lsp
+
+    def reciclar_lsp(self) -> None:
+        """Mata la sesión y fuerza re-arranque al próximo análisis. Para el
+        reinicio de capa 15 (clone destructivo cambia TODO el workspace: el
+        índice de pyright quedó obsoleto)."""
+        with self._lsp_lock:
+            if self._lsp is not None:
+                try:
+                    self._lsp.cerrar()
+                except Exception:  # noqa: BLE001
+                    pass
+            self._lsp = None
+            self._lsp_intentado = False
 
 
 class SyncServer:
@@ -293,18 +329,24 @@ class SyncServer:
         """
         # Capa 16: el análisis corre casi por tecla y antes era SÍNCRONO en
         # el event loop — bloqueaba presencia/locks/broadcasts de TODO el
-        # equipo mientras parseaba. Ahora va a un hilo (igual que git, ver
-        # `_git_status_encoded`), imprescindible al meter un parser C
-        # (tree-sitter) en este hot path. Seguro: `snapshot()` es una copia
-        # y `motivos` solo recibe strings -> cero mutación compartida.
-        afectados = await asyncio.to_thread(
-            impacto, rt.workspace.snapshot(), path, viejo, nuevo
-        )
+        # equipo. Ahora todo el trabajo (incl. el lazy-arranque de pyright,
+        # que hace spawn+handshake bloqueante) va a UN hilo: ni el parser C
+        # ni el subproceso LSP tocan el event loop. Capa 17: la sesión LSP
+        # del equipo (tibia) hace el fan-out resolución-real; si no hay
+        # (sandbox/sin pyright) o falla, `impacto`/`motivos` degradan solos
+        # a capa 16. Seguro: `snapshot()` es copia, todo lo demás strings.
+        snap = rt.workspace.snapshot()
+
+        def _analizar() -> tuple[dict, dict]:
+            ses = rt.lsp_sesion()
+            af = impacto(snap, path, viejo, nuevo, ses)
+            if not af:
+                return {}, {}
+            return af, motivos_de(path, viejo, nuevo, ses)
+
+        afectados, razones = await asyncio.to_thread(_analizar)
         if not afectados:
             return
-        # El POR QUÉ de cada símbolo (mismo cálculo que decidió avisar). Sin
-        # esto el aviso es adorno: "cambió X" y el dueño piensa "¿y a mí qué?".
-        razones = await asyncio.to_thread(motivos_de, path, viejo, nuevo)
         # Reagrupamos símbolo->archivos ==> archivo_afectado->símbolos.
         por_archivo: dict[str, list[str]] = {}
         for simbolo, archivos in afectados.items():
@@ -365,6 +407,7 @@ class SyncServer:
         sus clientes. La presencia (Roster) NO se toca."""
         rt.workspace.recargar()
         rt.ownership.reset()
+        rt.reciclar_lsp()  # capa 17: el índice de pyright quedó obsoleto
         await self._persistir_own(rt)  # el ownership viejo ya no aplica
         rt.proposals = Proposals()
         init = encode(InitMessage(files=rt.workspace.snapshot()))

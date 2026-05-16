@@ -21,6 +21,7 @@ from laidea.analysis.lsp import (
     ClienteLSP,
     ErrorLSP,
     SesionLSP,
+    arrancar_pyright,
     _leer_mensaje,
     enmarcar,
     path_a_uri,
@@ -358,3 +359,12 @@ def test_sesion_lsp_caida_degrada_a_capa16() -> None:
     )
     # y el de capa 16 sí encuentra auth.py por el token (sanity)
     assert impacto(ws, "models.py", viejo, nuevo) == {"crea": ["auth.py"]}
+
+
+def test_arrancar_pyright_sin_binario_degrada_a_None() -> None:
+    # En el sandbox no hay `pyright-langserver`: el contrato es devolver
+    # None (nunca explotar) para que la jerarquía caiga a capa 16. Si algún
+    # día el sandbox tuviera pyright, devolvería una SesionLSP — ambas son
+    # contractualmente válidas; lo que NO se permite es propagar excepción.
+    ses = arrancar_pyright("/tmp")
+    assert ses is None or isinstance(ses, SesionLSP)

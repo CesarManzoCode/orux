@@ -26,6 +26,10 @@ mapeo pyright→modelo y el ciclo de vida del demonio son pasos siguientes.
 from __future__ import annotations
 
 import json
+import os
+import select
+import subprocess
+import threading
 from typing import Protocol
 
 from .modelo import Simbolo
@@ -206,6 +210,9 @@ class ClienteLSP:
         except ErrorLSP:
             pass  # ya estaba muerto: no es error que importe
         self._vivo = False
+        cerrar_t = getattr(self._t, "cerrar", None)
+        if cerrar_t is not None:
+            cerrar_t()  # mata el subproceso (no aplica al transporte falso)
 
 
 # --- Mapeo pyright -> modelo común (puro, 100% sandbox-testeable) ----------
@@ -349,6 +356,11 @@ class SesionLSP:
         self._c = cliente
         self._raiz = raiz
         self._ver: dict[str, int] = {}
+        # El análisis corre en hilos worker (asyncio.to_thread), y un equipo
+        # teclea concurrente: varias llamadas pueden pegarle a ESTA sesión a
+        # la vez. ClienteLSP no es reentrante (casa respuesta por id); el
+        # lock serializa el acceso a pyright por equipo.
+        self._lock = threading.Lock()
 
     def disponible(self) -> bool:
         return self._c._vivo
@@ -363,11 +375,12 @@ class SesionLSP:
 
     def simbolos(self, path: str, fuente: str) -> dict[str, Simbolo] | None:
         uri = path_a_uri(self._raiz, path)
-        try:
-            self._sync(uri, fuente)
-            ds = self._c.document_symbol(uri)
-        except ErrorLSP:
-            return None
+        with self._lock:
+            try:
+                self._sync(uri, fuente)
+                ds = self._c.document_symbol(uri)
+            except ErrorLSP:
+                return None
         return simbolos_de_pyright(ds, fuente)
 
     def fan_out(
@@ -377,23 +390,30 @@ class SesionLSP:
         """{símbolo: set de OTROS paths que lo usan de verdad} o None si el
         server falló (=> degradar). Sincroniza TODO el workspace para que
         pyright resuelva imports cross-módulo (ése es el salto)."""
-        try:
-            for p, txt in workspace.items():
-                self._sync(path_a_uri(self._raiz, p), txt)
-            uri = path_a_uri(self._raiz, path)
-            self._sync(uri, nuevo)
-            ds = self._c.document_symbol(uri)
-            out: dict[str, set[str]] = {}
-            for s in syms:
-                pos = _posicion_nombre(ds, s)
-                if pos is None:
-                    out[s] = set()
-                    continue
-                refs = self._c.referencias(uri, pos[0], pos[1])
-                out[s] = paths_que_referencian(refs, self._raiz, path)
-            return out
-        except ErrorLSP:
-            return None
+        with self._lock:
+            try:
+                for p, txt in workspace.items():
+                    self._sync(path_a_uri(self._raiz, p), txt)
+                uri = path_a_uri(self._raiz, path)
+                self._sync(uri, nuevo)
+                ds = self._c.document_symbol(uri)
+                out: dict[str, set[str]] = {}
+                for s in syms:
+                    pos = _posicion_nombre(ds, s)
+                    if pos is None:
+                        out[s] = set()
+                        continue
+                    refs = self._c.referencias(uri, pos[0], pos[1])
+                    out[s] = paths_que_referencian(refs, self._raiz, path)
+                return out
+            except ErrorLSP:
+                return None
+
+    def cerrar(self) -> None:
+        """Mata la sesión y su subproceso. Se llama al reciclar el equipo
+        (capa 15: clone destructivo) o al disponerlo."""
+        with self._lock:
+            self._c.cerrar()
 
 
 def paths_que_referencian(
@@ -413,3 +433,67 @@ def paths_que_referencian(
         if p is not None and p != path_propio:
             out.add(p)
     return out
+
+
+# --- Subproceso pyright real: el ÚNICO I/O (verificado en VPS, no sandbox) -
+
+
+class _TransporteProceso:
+    """Transporte sobre stdin/stdout de un subproceso. Lectura con timeout:
+    un pyright colgado NO debe congelar el hilo de análisis para siempre
+    (modo producto). Si se vence o el proceso muere, leer() devuelve b"" y
+    el ClienteLSP lo convierte en ErrorLSP => el tier degrada."""
+
+    def __init__(self, proc: subprocess.Popen, timeout: float) -> None:
+        self._p = proc
+        self._timeout = timeout
+        self._of = proc.stdout.fileno()
+
+    def escribir(self, datos: bytes) -> None:
+        self._p.stdin.write(datos)
+        self._p.stdin.flush()
+
+    def leer(self, n: int) -> bytes:
+        if self._p.poll() is not None:
+            return b""  # el proceso murió
+        listos, _, _ = select.select([self._of], [], [], self._timeout)
+        if not listos:
+            return b""  # timeout: tratar como server caído (degradar)
+        return os.read(self._of, n)
+
+    def cerrar(self) -> None:
+        try:
+            self._p.kill()
+        except Exception:  # noqa: BLE001 - ya estaba muerto
+            pass
+
+
+def arrancar_pyright(
+    raiz: str, timeout: float = 15.0
+) -> SesionLSP | None:
+    """Arranca `pyright-langserver --stdio` sobre el workspace `raiz` y hace
+    el handshake. Devuelve la sesión lista, o None ante CUALQUIER fallo
+    (binario ausente —es el caso del sandbox—, spawn falla, handshake no
+    responde). None => la jerarquía cae sola a tree-sitter/ast: nunca
+    rompe, nunca propaga. El binario lo trae el paquete pip `pyright`.
+    """
+    try:
+        proc = subprocess.Popen(
+            ["pyright-langserver", "--stdio"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+        )
+    except (FileNotFoundError, OSError):
+        return None  # sin pyright (sandbox/sin internet): degradar limpio
+    try:
+        cliente = ClienteLSP(_TransporteProceso(proc, timeout))
+        cliente.iniciar("file://" + raiz.rstrip("/"))
+    except Exception:  # noqa: BLE001 - handshake falló => matar y degradar
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+    return SesionLSP(cliente, raiz)

@@ -19,6 +19,18 @@ COPY pyproject.toml README.md ./
 COPY laidea ./laidea
 RUN pip install --no-cache-dir .
 
+# Capa 17: el paquete pip `pyright` descarga un runtime Node la PRIMERA vez
+# que se invoca. Si eso pasara en runtime, el 1er análisis de cada deploy
+# necesitaría red y un cache escribible por el usuario no-root. Lo
+# PRE-CALENTAMOS acá (build, como root, con red): Node queda horneado en la
+# imagen y el server arranca offline y rápido. Cache en ruta propia,
+# legible por el usuario no-root. Si pyright no estuviera, el análisis
+# degrada a tree-sitter/ast (no es fatal) — por eso `|| true`.
+ENV PYRIGHT_PYTHON_CACHE_DIR=/opt/pyright
+RUN mkdir -p /opt/pyright \
+ && (pyright --version || true) \
+ && chmod -R a+rX /opt/pyright
+
 # Estado persistente (workspace=repo git, users, ownership, secret). Es un
 # VOLUME: vive fuera del contenedor para sobrevivir recrearlo. Propiedad del
 # usuario no-root para que pueda escribir.
