@@ -1207,6 +1207,45 @@ async def test_push_desde_la_web(tmp_path) -> None:
         s.close(); await s.wait_closed()
 
 
+async def test_push_a_main_es_elegible(tmp_path) -> None:
+    # Capa 21b: pushear a main DEBE seguir siendo posible — el usuario
+    # eligió "elegir rama", no "quitar main". rama="main" => va a main
+    # (clone default lo ve), no a la rama del equipo.
+    remoto = _remoto_bare(tmp_path)
+    ws = tmp_path / "ws"
+    srv = SyncServer(storage=DiskStorage(ws), git=GitRepo(ws))
+    s = await serve(srv.handle, "localhost", 0)
+    port = s.sockets[0].getsockname()[1]
+    try:
+        async with connect(f"ws://localhost:{port}") as a:
+            await handshake(a, user="ana@team.com")
+            await recv_tipo(a, "git_status")
+            await a.send(json.dumps({"type": "clone", "url": str(remoto),
+                                     "username": "u", "token": "t"}))
+            await recv_tipo(a, "init")
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+            await a.send(json.dumps({"type": "update",
+                                     "path": "d.py", "content": "x=1"}))
+            await asyncio.sleep(0.05)
+            await a.send(json.dumps({"type": "commit", "message": "c"}))
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+            await a.send(json.dumps({"type": "push", "username": "u",
+                                     "token": "t", "rama": "main"}))
+            assert (await recv_tipo(a, "git_result"))["ok"] is True
+        heads = _sp.run(
+            ["git", "ls-remote", "--heads", str(remoto)],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "refs/heads/main" in heads          # fue a main
+        assert "refs/heads/laidea/" not in heads   # NO a la rama del equipo
+        verif = tmp_path / "verif"
+        _sp.run(["git", "clone", "-q", "--branch", "main",
+                 str(remoto), str(verif)], check=True)
+        assert (verif / "d.py").exists()
+    finally:
+        s.close(); await s.wait_closed()
+
+
 # --- Capa 12: admin del workspace + reparto de ownership ---
 #
 # El bloqueo real para soltárselo a un equipo open source ya hecho: el

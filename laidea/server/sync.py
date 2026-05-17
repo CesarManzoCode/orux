@@ -927,17 +927,29 @@ class SyncServer:
                             encode(GitResultMessage(False, "git no disponible")),
                         )
                     else:
-                        # Capa 21: NUNCA a main — a la rama de ESTE equipo.
-                        # La integración es PR en GitHub (afuera): laidea
-                        # no fusiona (tesis). El team_id hace la rama única
-                        # y aislada por equipo, como todo lo demás.
-                        rama = f"laidea/{rt.team_id}"
+                        # Capa 21b: la rama destino la ELIGE el usuario.
+                        # Vacío = la rama de publicación del equipo (default
+                        # seguro: force-with-lease + PR; laidea es su único
+                        # escritor). Cualquier otra (p.ej. main) = push
+                        # normal SIN forzar (capa 10: non-ff honesto, jamás
+                        # pisa historia compartida). laidea decide force-o-no
+                        # por el destino; el usuario solo elige a dónde.
+                        rama_eq = f"laidea/{rt.team_id}"
+                        destino = (message.rama or "").strip() or rama_eq
                         async with rt._git_lock:
-                            ok, detalle, pr_url = await asyncio.to_thread(
-                                rt.git.push_a_rama,
-                                message.username, message.token, rama,
-                                message.url or None,
-                            )
+                            if destino == rama_eq:
+                                ok, detalle, pr_url = await asyncio.to_thread(
+                                    rt.git.push_a_rama,
+                                    message.username, message.token,
+                                    rama_eq, message.url or None,
+                                )
+                            else:
+                                ok, detalle = await asyncio.to_thread(
+                                    rt.git.push,
+                                    message.username, message.token,
+                                    message.url or None, destino,
+                                )
+                                pr_url = ""
                         await self._enviar_a(
                             rt, yo.client_id,
                             encode(GitResultMessage(ok, detalle, pr_url)),

@@ -230,3 +230,40 @@ def test_push_a_rama_idempotente_tras_reclone(tmp_path) -> None:
     r.commitear("c2", "ana", "ana@laidea.local")
     ok, detalle, _ = r.push_a_rama("u", "t", "laidea/eq1")
     assert ok is True, detalle  # force-with-lease lo permite (rama propia)
+
+
+def test_push_a_main_directo_sin_forzar(tmp_path) -> None:
+    # Capa 21b: pushear a main DEBE seguir siendo posible (directo, sin
+    # forzar). El usuario eligió "elegir rama", no "quitar main".
+    remoto = _remoto_local(tmp_path)
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    assert r.clonar(str(remoto), "u", "t")[0] is True
+    (ws / "directo.py").write_text("x = 1\n", encoding="utf-8")
+    assert r.commitear("c", "ana", "ana@laidea.local")[0] is True
+    # rama=None => HEAD => la rama actual (main del clone): va a main.
+    ok, detalle = r.push("u", "t")
+    assert ok is True, detalle
+    verif = tmp_path / "verif"
+    subprocess.run(["git", "clone", "-q", str(remoto), str(verif)],
+                   check=True)
+    # clone default = main: el archivo está (se pusheó a main, no a rama).
+    assert (verif / "directo.py").exists()
+
+
+def test_push_a_rama_nombrada_sin_forzar(tmp_path) -> None:
+    # push(rama="X") empuja a refs/heads/X SIN forzar (capa 21b: destino
+    # directo elegible). El force-with-lease vive SOLO en push_a_rama
+    # (la rama propia de laidea); a ramas ajenas nunca se fuerza.
+    remoto = _remoto_local(tmp_path)
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    r.clonar(str(remoto), "u", "t")
+    (ws / "f.py").write_text("1\n", encoding="utf-8")
+    r.commitear("c", "ana", "ana@laidea.local")
+    assert r.push("u", "t", None, "develop")[0] is True
+    heads = subprocess.run(
+        ["git", "ls-remote", "--heads", str(remoto)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "refs/heads/develop" in heads

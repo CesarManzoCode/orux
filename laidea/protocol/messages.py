@@ -446,6 +446,12 @@ class PushMessage:
     username: str
     token: str
     url: str = ""
+    # Capa 21b: rama destino ELEGIBLE. Vacío = la rama de publicación del
+    # equipo (default seguro, force-with-lease + PR). Cualquier otra (p.ej.
+    # "main") = push directo SIN forzar (capa 10: non-ff honesto, nunca
+    # pisa historia compartida). laidea decide force-vs-no según si es su
+    # propia rama; el usuario solo elige el destino.
+    rama: str = ""
     type: Literal["push"] = "push"
 
 
@@ -733,7 +739,10 @@ def decode(raw: str) -> Message:
     if kind == "clone":
         return CloneMessage(url=data["url"], username=data["username"], token=data["token"])
     if kind == "push":
-        return PushMessage(username=data["username"], token=data["token"], url=data.get("url", ""))
+        return PushMessage(
+            username=data["username"], token=data["token"],
+            url=data.get("url", ""), rama=data.get("rama", ""),
+        )
     if kind == "admin_info":
         return AdminInfoMessage(
             is_admin=data["is_admin"], users=list(data.get("users", []))

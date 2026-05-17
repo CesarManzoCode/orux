@@ -26,6 +26,7 @@ function PanelGit() {
   const [url, setUrl] = useState("");
   const [user, setUser] = useState("");
   const [tok, setTok] = useState("");
+  const [rama, setRama] = useState("");  // capa 21b: destino del push
 
   return (
     <div className="gitp">
@@ -73,6 +74,13 @@ function PanelGit() {
             <input placeholder="URL del repo (https://…)" value={url} onChange={(e) => setUrl(e.target.value)} />
             <input placeholder="usuario" value={user} onChange={(e) => setUser(e.target.value)} />
             <input type="password" placeholder="token (no se guarda)" value={tok} onChange={(e) => setTok(e.target.value)} />
+            {/* Capa 21b: destino del push. Vacío = rama del equipo (seguro,
+                abre PR). "main"/otra = push directo sin forzar. */}
+            <input
+              placeholder="rama destino (vacío = rama del equipo + PR)"
+              value={rama}
+              onChange={(e) => setRama(e.target.value)}
+            />
             <div className="remacc">
               <button className="no" onClick={() => {
                 if (!url.trim()) return;
@@ -80,7 +88,7 @@ function PanelGit() {
                 clonar(url.trim(), user.trim(), tok);
                 setTok("");
               }}>clonar (reemplaza)</button>
-              <button onClick={() => { pushear(user.trim(), tok, url.trim()); setTok(""); }}>push</button>
+              <button onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}>push</button>
             </div>
           </div>
         </>

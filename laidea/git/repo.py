@@ -245,13 +245,17 @@ class GitRepo:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def push(
-        self, usuario: str, token: str, url: str | None = None
+        self, usuario: str, token: str, url: str | None = None,
+        rama: str | None = None,
     ) -> tuple[bool, str]:
-        """Empuja el workspace a su remoto. `url` opcional re-apunta `origin`.
+        """Empuja el workspace a su remoto, SIN forzar. `url` opcional
+        re-apunta `origin`. `rama` opcional = destino (`HEAD:refs/heads/
+        <rama>`); None = `HEAD` (la rama actual, comportamiento capa 10).
 
-        No fusiona: si el remoto avanzó (non-fast-forward) el push se rechaza
-        y lo decimos claro — traer/mergear es la parte difícil diferida, no se
-        finge que anda. `origin` se setea SIN credenciales (van por askpass).
+        No fusiona NI fuerza: si el remoto avanzó (non-fast-forward) el push
+        se rechaza y lo decimos claro — traer/mergear es la parte difícil
+        diferida, no se finge que anda, y a `main`/ramas compartidas NUNCA
+        se pisa. `origin` se setea SIN credenciales (van por askpass).
         """
         if self._root is None:
             return (False, "git no disponible")
@@ -262,7 +266,10 @@ class GitRepo:
         rc_url, actual = self._run("remote", "get-url", "origin")
         if rc_url != 0 or not actual:
             return (False, "no hay remoto configurado (falta la URL)")
-        rc, out = self._git_cred(["push", "origin", "HEAD"], usuario, token)
+        destino = "HEAD" if rama is None else f"HEAD:refs/heads/{rama}"
+        rc, out = self._git_cred(
+            ["push", "origin", destino], usuario, token
+        )
         if rc == 0:
             return (True, "push hecho")
         bajo = out.lower()

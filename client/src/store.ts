@@ -286,8 +286,13 @@ export function gitRefresh() { send({ type: "git_refresh" }); }
 export function clonar(url: string, username: string, token: string) {
   send({ type: "clone", url, username, token });
 }
-export function pushear(username: string, token: string, url: string) {
-  send({ type: "push", username, token, url });
+export function pushear(
+  username: string, token: string, url: string, rama: string,
+) {
+  // rama vacía = la rama de publicación del equipo (default seguro: PR,
+  // el server fuerza-con-lease solo ahí). "main"/otra = push directo sin
+  // forzar. El server decide; el cliente solo manda a dónde.
+  send({ type: "push", username, token, url, rama });
 }
 export function nuevoArchivo(path: string) {
   // El server NO hace eco del update al emisor (capa 1, sin loop): si no
