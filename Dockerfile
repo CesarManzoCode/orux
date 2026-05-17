@@ -20,7 +20,7 @@ FROM python:3.12-slim AS base
 # multi-lenguaje): la imagen crece, pero la feature es real.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      git ca-certificates libatomic1 nodejs npm \
+      git ca-certificates libatomic1 nodejs npm curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Usuario no-root: no se corre el server como root en un servidor expuesto.
@@ -55,6 +55,31 @@ RUN mkdir -p /opt/pyright \
 RUN npm install -g --no-fund --no-audit \
       typescript@5.4.5 typescript-language-server@4.3.3 \
  && npm cache clean --force
+
+# Capa 20: Rust = rust-analyzer (binario oficial prearmado, glibc; slim es
+# bookworm = glibc, ok). NO necesita el toolchain Rust para documentSymbol/
+# references sobre el workspace. Liviano: un binario.
+RUN curl -fsSL -o /tmp/ra.gz \
+      https://github.com/rust-lang/rust-analyzer/releases/download/2024-05-13/rust-analyzer-x86_64-unknown-linux-gnu.gz \
+ && gunzip -c /tmp/ra.gz > /usr/local/bin/rust-analyzer \
+ && chmod a+rx /usr/local/bin/rust-analyzer \
+ && rm /tmp/ra.gz
+
+# Capa 20: Go = gopls. Honesto: a diferencia de rust-analyzer, gopls se
+# instala con `go install` y ADEMÁS necesita el toolchain Go en runtime
+# (ejecuta `go` para cargar paquetes). Por eso entra el SDK de Go entero
+# (es el costo real de Go, comparable en peso a una JVM). GOCACHE en /tmp
+# (escribible por el user no-root en runtime; misma lección que el cache de
+# pyright). PATH y dirs world-rx para que el usuario `laidea` lo use.
+ENV GO_VERSION=1.22.5 \
+    GOPATH=/opt/go \
+    GOCACHE=/tmp/go-build \
+    PATH=/usr/local/go/bin:/opt/go/bin:$PATH
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+      | tar -C /usr/local -xz \
+ && GOBIN=/opt/go/bin go install golang.org/x/tools/gopls@v0.15.3 \
+ && chmod -R a+rX /usr/local/go /opt/go \
+ && rm -rf /root/.cache/go-build
 
 # Estado persistente (workspace=repo git, users, ownership, secret). Es un
 # VOLUME: vive fuera del contenedor para sobrevivir recrearlo. Propiedad del

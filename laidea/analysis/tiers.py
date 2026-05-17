@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from . import javascript, python
+from . import go, javascript, python, rust
 from .modelo import Simbolo, cambios_que_importan_modelo
 
 
@@ -85,11 +85,19 @@ class _PythonAst:
         return python.referencias(source)
 
 
-# --- Tier 3: regex JS/TS (envuelve javascript.py, no lo reescribe) ---------
+# --- Tier 3: regex heurístico (envuelve un módulo por-lenguaje) -----------
+# Genérico: envuelve cualquier módulo con la superficie (definiciones_top,
+# referencias). javascript.py fue el primero; go.py/rust.py (capa 20) son
+# el MISMO patrón. detallado=False: sin parser no se aísla la firma -> el
+# modelo da el aviso honesto genérico. El fan-out real (LSP) NO depende de
+# esto; solo necesita que haya un símbolo que cambió para preguntar.
 
 
 class _Regex:
     nivel = 3
+
+    def __init__(self, mod) -> None:
+        self._mod = mod
 
     def disponible(self) -> bool:
         return True  # `re` es stdlib
@@ -97,7 +105,7 @@ class _Regex:
     def simbolos(self, source: str) -> dict[str, Simbolo] | None:
         # El heurístico no tiene "parsea o no": si no hay tops, dict vacío
         # (cero falsos positivos), nunca None — siempre es su propia opinión.
-        defs = javascript.definiciones_top(source)
+        defs = self._mod.definiciones_top(source)
         return {
             nombre: Simbolo(
                 nombre=nombre, tipo="?", fuente=region, detallado=False
@@ -106,14 +114,16 @@ class _Regex:
         }
 
     def referencias(self, source: str) -> set[str]:
-        return javascript.referencias(source)
+        return self._mod.referencias(source)
 
 
 # Registro: extensión -> (clave de lenguaje, [tiers ordenados por nivel]).
 # La clave de lenguaje evita cruzar lenguajes (un símbolo de models.ts no
 # afecta .py), igual que el viejo dispatcher.
 _PY = _PythonAst()
-_REGEX = _Regex()
+_REGEX = _Regex(javascript)
+_GO = _Regex(go)
+_RUST = _Regex(rust)
 
 
 def _treesitter_tier() -> Tier | None:
@@ -137,6 +147,10 @@ _POR_EXT: dict[str, tuple[str, list[Tier]]] = {
 }
 for _ext in ("js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"):
     _POR_EXT[_ext] = ("jsts", _JS_TIERS)
+# Capa 20: Go y Rust. Detección = regex coarse (su tree-sitter fino es
+# pulido futuro); el valor real es el fan-out LSP (gopls/rust-analyzer).
+_POR_EXT["go"] = ("go", [_GO])
+_POR_EXT["rs"] = ("rust", [_RUST])
 
 
 def lenguaje_de(path: str) -> str | None:
@@ -150,7 +164,7 @@ def lenguaje_de(path: str) -> str | None:
 # (typescript-language-server) — el cliente LSP era universal, sumarlo fue
 # enchufar. La detección de cambio sigue en la jerarquía de capa 16; el LSP
 # aporta SOLO el fan-out real (ver `cambios`/`archivos_afectados`).
-_LSP_LANGS = {"py", "jsts"}
+_LSP_LANGS = {"py", "jsts", "go", "rust"}
 
 
 def _usar_lsp(sesion, path: str) -> bool:

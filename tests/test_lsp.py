@@ -392,6 +392,50 @@ def test_jsts_usa_fan_out_real_via_tsserver_falso() -> None:
     assert af == {"crea": ["auth.ts"]}
 
 
+class _GoplsFalso(_PyrightFalso):
+    _DEF = re.compile(r"^func ([A-Za-z_]\w*)\(([^)]*)\)", re.M)
+
+
+class _RustAnalyzerFalso(_PyrightFalso):
+    _DEF = re.compile(r"^(?:pub )?fn ([A-Za-z_]\w*)\(([^)]*)\)", re.M)
+
+
+def test_go_fan_out_real_via_gopls_falso() -> None:
+    raiz = "/data/ws/eq1"
+    ws = {
+        "models.go": "func Crea(a string) string { return a }\n",
+        "auth.go": "y := 1\n",        # NO contiene el token 'Crea'
+        "reportes.go": "z := 2\n",    # NO contiene el token 'Crea'
+    }
+    srv = _GoplsFalso([path_a_uri(raiz, "auth.go")])
+    c = ClienteLSP(srv)
+    c.iniciar(path_a_uri(raiz, ""))
+    ses = SesionLSP(c, raiz)
+    viejo = ws["models.go"]
+    nuevo = "func Crea(a string, b int) string { return a }\n"
+    assert motivos("models.go", viejo, nuevo, ses) != {}  # detección coarse
+    af = impacto({**ws, "models.go": nuevo}, "models.go", viejo, nuevo, ses)
+    assert af == {"Crea": ["auth.go"]}  # fan-out real, sin el token
+
+
+def test_rust_fan_out_real_via_rust_analyzer_falso() -> None:
+    raiz = "/data/ws/eq1"
+    ws = {
+        "models.rs": "pub fn crea(a: String) -> String { a }\n",
+        "auth.rs": "let y = 1;\n",
+        "reportes.rs": "let z = 2;\n",
+    }
+    srv = _RustAnalyzerFalso([path_a_uri(raiz, "auth.rs")])
+    c = ClienteLSP(srv)
+    c.iniciar(path_a_uri(raiz, ""))
+    ses = SesionLSP(c, raiz)
+    viejo = ws["models.rs"]
+    nuevo = "pub fn crea(a: String, b: i32) -> String { a }\n"
+    assert motivos("models.rs", viejo, nuevo, ses) != {}
+    af = impacto({**ws, "models.rs": nuevo}, "models.rs", viejo, nuevo, ses)
+    assert af == {"crea": ["auth.rs"]}
+
+
 def test_arrancar_pyright_sin_binario_degrada_a_None() -> None:
     # En el sandbox no hay `pyright-langserver`: el contrato es devolver
     # None (nunca explotar) para que la jerarquía caiga a capa 16. Si algún

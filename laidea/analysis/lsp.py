@@ -487,6 +487,15 @@ _SERVIDORES: dict[str, tuple[list[str], ...]] = {
     "jsts": (
         ["typescript-language-server", "--stdio"],
     ),
+    # Capa 20: ambos hablan LSP por stdio sin args. `gopls serve` es el
+    # alias explícito por si la versión lo necesita.
+    "go": (
+        ["gopls"],
+        ["gopls", "serve"],
+    ),
+    "rust": (
+        ["rust-analyzer"],
+    ),
 }
 
 # Extensión -> languageId LSP. Importa porque tsserver trata distinto .ts
@@ -497,6 +506,8 @@ _LANG_ID = {
     "tsx": "typescriptreact",
     "js": "javascript", "mjs": "javascript", "cjs": "javascript",
     "jsx": "javascriptreact",
+    "go": "go",
+    "rs": "rust",
 }
 
 
