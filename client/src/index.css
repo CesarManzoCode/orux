@@ -236,6 +236,12 @@ button { font-family: inherit; }
   color: var(--warn); font-family: var(--font-mono);
   white-space: pre-wrap; word-break: break-word;
 }
+/* Capa 24: cadena del impacto transitivo (premium). */
+.imp-row .cadena {
+  margin-top: 0.4rem; font-size: 11px; line-height: 1.6;
+  color: var(--faint); word-break: break-word;
+}
+.imp-row .cadena .flecha { color: var(--accent); }
 .imp-row .acc { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
 .imp-row .acc button {
   border: 1px solid var(--border); border-radius: var(--r-sm);

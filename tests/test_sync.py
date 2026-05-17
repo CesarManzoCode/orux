@@ -818,6 +818,41 @@ _MODELS_V2 = "class Usuario:\n    def __init__(self):\n        self.activo = Tru
 _AUTH = "from models import Usuario\n\n\ndef login():\n    return Usuario()\n"
 
 
+async def test_impacto_transitivo_solo_en_premium(servidor) -> None:
+    # Capa 24: free = directo (cadena vacía, ya cubierto byte-idéntico por
+    # el resto de la suite). Premium = transitivo: el aviso trae la CADENA
+    # de hops. Mismo flujo que el directo + plan premium.
+    srv, port = servidor
+    async with connect(f"ws://localhost:{port}") as a, connect(
+        f"ws://localhost:{port}"
+    ) as b:
+        wa = await handshake(a)
+        await handshake(b)
+        tid = (await srv.teams.todos())[0]["id"]
+        await srv.teams.set_plan(tid, "premium")  # alguien pagó
+
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V1}))
+        await recv_tipo(b, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
+        await b.send(json.dumps({"type": "update", "path": "auth.py", "content": _AUTH}))
+        await recv_tipo(a, "update")
+        await recv_tipo(a, "ownership")
+        await recv_tipo(b, "ownership")
+
+        await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V2}))
+        await recv_tipo(b, "update")
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
+        aviso = await recv_tipo(b, "impact")
+        assert aviso["affected_path"] == "auth.py"
+        assert aviso["symbols"] == ["login"]          # el símbolo de B afectado
+        # La cadena: el cambio salió de models.py:Usuario y llegó a login.
+        assert aviso["cadena"] == ["models.py:Usuario", "auth.py:login"]
+        assert aviso["author_name"] == wa["you"]["name"]
+        assert "cuerpo" in aviso["motivos"][0]  # uso en cuerpo => terminal
+
+
 async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
     async with connect(f"ws://localhost:{server_port}") as a, connect(
         f"ws://localhost:{server_port}"

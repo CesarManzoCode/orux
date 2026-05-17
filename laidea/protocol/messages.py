@@ -286,6 +286,11 @@ class ImpactMessage:
     # "se eliminó X". Sin esto el dev piensa "¿y esto a mí qué?". Default
     # vacío: un server viejo sin motivos no rompe el decode del cliente.
     motivos: list[str] = field(default_factory=list)
+    # Capa 24: impacto transitivo. La CADENA de hops desde el cambio
+    # original hasta este archivo ("models.py:Usuario" -> "factory.py:
+    # make_user" -> …): el porqué de la onda, legible. Vacío = impacto
+    # DIRECTO (free / capas 17-21): byte-compat con clientes/tests viejos.
+    cadena: list[str] = field(default_factory=list)
     type: Literal["impact"] = "impact"
 
 
@@ -705,6 +710,7 @@ def decode(raw: str) -> Message:
             affected_path=data["affected_path"],
             symbols=list(data.get("symbols", [])),
             motivos=list(data.get("motivos", [])),
+            cadena=list(data.get("cadena", [])),
         )
     if kind == "register":
         return RegisterMessage(

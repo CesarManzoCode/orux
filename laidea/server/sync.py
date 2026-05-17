@@ -37,9 +37,10 @@ from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
 
-from ..analysis import impacto, motivos as motivos_de
+from ..analysis import impacto, motivos as motivos_de, tiers
 from ..analysis.lsp import arrancar_lsp
 from ..analysis.tiers import lenguaje_de
+from ..analysis.transitive import impacto_transitivo
 from ..plans import limites
 from ..git import GitRepo
 from ..identity import (
@@ -390,6 +391,58 @@ class SyncServer:
         # async, vive en el loop) y se pasa al hilo. Premium = sin tope.
         plan = await self.teams.plan(rt.team_id)
         cap_langs = limites(plan)["max_langs"]
+
+        # Capa 24: premium = impacto TRANSITIVO (la onda por interfaz
+        # contaminada). Free = exactamente el camino directo de capas
+        # 17-21, intacto y byte-idéntico (return antes de tocarlo).
+        if limites(plan)["impacto"] == "transitivo":
+            def _trans():
+                lang = lenguaje_de(path)
+                tier = tiers.tier_para(path)
+                if tier is None or lang is None:
+                    return {}, False
+                cambiados = list(tiers.cambios(path, viejo, nuevo))
+                if not cambiados:
+                    return {}, False
+
+                def _fan(s: str, origen: str) -> set[str]:
+                    # Aristas por nombre (capa 16): el filtro de ruido es
+                    # la contaminación de interfaz, no la arista. LSP-
+                    # preciso por hop = refinamiento futuro (caro × hops).
+                    return {
+                        f for f, c in snap.items()
+                        if f != origen and lenguaje_de(f) == lang
+                        and s in tier.referencias(c)
+                    }
+
+                return impacto_transitivo(
+                    snap, path, cambiados, fan_out=_fan,
+                    extraer=lambda c: tier.simbolos(c),
+                    lenguaje_de=lenguaje_de,
+                )
+
+            out, trunc = await asyncio.to_thread(_trans)
+            sufijo = (
+                " · análisis truncado (cambio muy amplio)" if trunc else ""
+            )
+            for af, items in out.items():
+                dueño = rt.ownership.owner(af)
+                if dueño is None or dueño == autor_id:
+                    continue
+                items = sorted(items, key=lambda d: (d["sym"],
+                                                     len(d["cadena"])))
+                await self._enviar_a(
+                    rt, dueño,
+                    encode(ImpactMessage(
+                        source_path=path,
+                        author_name=autor_nombre,
+                        affected_path=af,
+                        symbols=[d["sym"] for d in items],
+                        motivos=[d["motivo"] + sufijo for d in items],
+                        cadena=items[0]["cadena"],
+                    )),
+                )
+            return
 
         def _analizar() -> tuple[dict, dict]:
             ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)

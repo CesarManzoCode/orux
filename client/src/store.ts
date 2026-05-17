@@ -15,6 +15,9 @@ export interface Proposal {
 export interface Impact {
   source_path: string; author_name: string;
   affected_path: string; symbols: string[]; motivos: string[];
+  // Capa 24: cadena de hops del impacto transitivo (premium). Vacío =
+  // impacto directo (free). El server ya manda [] por defecto.
+  cadena?: string[];
 }
 export interface GitStatus {
   available: boolean; branch: string; changes: number; commits: string[];

@@ -65,6 +65,19 @@ function Impactos() {
                 <div className="por" key={i}>↳ {m.motivos[i]}</div>
               ) : null
             )}
+            {/* Capa 24: la cadena del impacto transitivo (premium). Hace
+                visible el PORQUÉ de la onda: de dónde salió y por dónde
+                llegó hasta tu archivo. Vacío en free = no se muestra. */}
+            {m.cadena && m.cadena.length > 1 && (
+              <div className="cadena">
+                {m.cadena.map((h, i) => (
+                  <span key={i}>
+                    {i > 0 && <span className="flecha"> → </span>}
+                    <code>{h}</code>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="acc">
             <button onClick={() => { if (m.affected_path in s.files) seleccionar(m.affected_path); }}>
