@@ -39,6 +39,15 @@ services:
     environment:
       - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
       - LAIDEA_ADMIN_TOKEN=${LAIDEA_ADMIN_TOKEN:-}
+    # /api/v1/health no requiere token (capa 23): healthcheck honesto.
+    # `curl` ya está en la imagen (capa 20). Unhealthy -> Docker reinicia.
+    healthcheck:
+      test: ["CMD-SHELL",
+             "curl -fsS http://localhost:8800/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   postgres:
     # Capa 15: la DB de metadatos (users/teams/members/invites/ownership).
