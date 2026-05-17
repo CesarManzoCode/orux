@@ -16,3 +16,6 @@ RUN npm run build
 # dominio); acá solo entran los estáticos compilados.
 FROM caddy:2
 COPY --from=build /client/dist /srv
+# Capa 23: panel de operador, página estática única (vanilla, sin build),
+# separada del cliente React. Caddy la sirve en /admin.
+COPY ops/admin.html /srv/admin/index.html

@@ -23,6 +23,13 @@ class PgUserStore:
             "SELECT 1 FROM users WHERE username=$1", normalizar(username)
         ))
 
+    async def usuarios(self) -> list[str]:
+        """Capa 23: todos los usuarios (consola de operador)."""
+        rows = await self._db.fetch(
+            "SELECT username FROM users ORDER BY username"
+        )
+        return [r["username"] for r in rows]
+
     async def registrar(self, username: str, password: str) -> str:
         u = normalizar(username)
         if not u:

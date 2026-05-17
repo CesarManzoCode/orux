@@ -83,6 +83,19 @@ class MemTeamStore:
         if team_id in self._equipos:
             self._equipos[team_id]["plan"] = plan
 
+    async def todos(self) -> list[dict]:
+        """Capa 23: TODOS los equipos (consola de operador). Distinto de
+        `equipos_de` (por-usuario): el operador ve la plataforma entera."""
+        out = [
+            {
+                "id": e["id"], "nombre": e["nombre"], "plan": e["plan"],
+                "miembros": len(self._miembros.get(tid, {})),
+            }
+            for tid, e in self._equipos.items()
+        ]
+        out.sort(key=lambda x: x["nombre"])
+        return out
+
     async def equipos_de(self, usuario: str) -> list[dict]:
         """Equipos del usuario, con su rol. Vacío = todavía no ve nada."""
         u = normalizar(usuario)

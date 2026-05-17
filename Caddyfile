@@ -11,6 +11,21 @@
 		reverse_proxy laidea:8765
 	}
 
+	# Capa 23: API interna de operador, su propio contenedor desacoplado.
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:8800
+	}
+
+	# Panel de operador: una página estática (separada del cliente React).
+	# Dockerfile.web la copia a /srv/admin/index.html.
+	@admin path /admin /admin/*
+	handle @admin {
+		root * /srv
+		rewrite * /admin/index.html
+		file_server
+	}
+
 	# Todo lo demás: el cliente React ya compilado (dist/ copiado a /srv
 	# por Dockerfile.web). try_files -> index.html: una SPA sirve la misma
 	# página para cualquier ruta (hoy no hay router, pero es lo correcto y

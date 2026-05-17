@@ -25,6 +25,14 @@ dependencies = [
     # build (offline en runtime). NO obligatorio: si falta o falla, la
     # jerarquía cae sola a tree-sitter/ast (sandbox sin pyright sigue verde).
     "pyright>=1.1.350",
+    # Capa 23: API interna de operador (servicio HTTP DESACOPLADO, otro
+    # contenedor). starlette = ASGI mínimo (routing+JSON), uvicorn = su
+    # server. Pure-Python wheels (sin compilador). Solo los importa el
+    # contenedor `api` vía uvicorn; el sandbox sin internet NO los importa
+    # (se testea `api/service.py`, no la cáscara) — mismo patrón que el
+    # resto de I/O verificada en VPS.
+    "starlette>=0.37",
+    "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]

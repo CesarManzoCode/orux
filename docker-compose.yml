@@ -21,6 +21,25 @@ services:
     volumes:
       - laidea-data:/data
 
+  api:
+    # Capa 23: API interna de OPERADOR, DESACOPLADA — su propio contenedor
+    # (misma imagen, otro comando). No comparte el loop ni el estado del
+    # server WS: opera solo sobre Postgres (datos durables). Un fallo acá
+    # NO toca la colaboración. No publica puertos (Caddy lo proxya en
+    # /api). LAIDEA_ADMIN_TOKEN viene del host (como LAIDEA_SITE_ADDRESS);
+    # SIN ese token la API queda cerrada (503), nunca abierta.
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    command: ["uvicorn", "laidea.api.app:app",
+              "--host", "0.0.0.0", "--port", "8800"]
+    expose:
+      - "8800"
+    environment:
+      - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
+      - LAIDEA_ADMIN_TOKEN=${LAIDEA_ADMIN_TOKEN:-}
+
   postgres:
     # Capa 15: la DB de metadatos (users/teams/members/invites/ownership).
     # No publica puertos: sólo alcanzable dentro de la red de compose, como
@@ -50,6 +69,7 @@ services:
     restart: unless-stopped
     depends_on:
       - laidea
+      - api
     ports:
       - "80:80"
       - "443:443"

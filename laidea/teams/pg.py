@@ -59,6 +59,20 @@ class PgTeamStore:
             "UPDATE teams SET plan=$2 WHERE id=$1", team_id, plan
         )
 
+    async def todos(self) -> list[dict]:
+        """Capa 23: TODOS los equipos con su plan y #miembros (operador)."""
+        rows = await self._db.fetch(
+            "SELECT t.id, t.nombre, t.plan, "
+            "count(m.username) AS miembros "
+            "FROM teams t LEFT JOIN team_members m ON m.team_id = t.id "
+            "GROUP BY t.id, t.nombre, t.plan ORDER BY t.nombre"
+        )
+        return [
+            {"id": r["id"], "nombre": r["nombre"], "plan": r["plan"],
+             "miembros": r["miembros"]}
+            for r in rows
+        ]
+
     async def equipos_de(self, usuario: str) -> list[dict]:
         rows = await self._db.fetch(
             "SELECT t.id, t.nombre, m.rol FROM team_members m "
