@@ -18,6 +18,7 @@ UN solo set de handlers, sin duplicar.
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 
@@ -116,23 +117,25 @@ def crear_app(users, teams) -> Starlette:
 
 
 # --- App de deploy: stores Postgres desde env (uvicorn carga esto) -------
+#
+# Starlette >=0.36 quitó on_startup/on_shutdown: el ciclo de vida va por un
+# `lifespan` (async context manager). Conectamos Postgres al entrar y lo
+# cerramos al salir; los stores quedan en app.state (un solo set de
+# handlers los lee de ahí).
 
-_db: Database | None = None
 
-
-async def _startup() -> None:
-    global _db
+@contextlib.asynccontextmanager
+async def _lifespan(app: Starlette):
     dsn = os.environ.get("LAIDEA_DB_DSN", "")
     if not dsn:
         raise RuntimeError("LAIDEA_DB_DSN requerido para la API de operador")
-    _db = await Database.conectar(dsn)
-    app.state.users = PgUserStore(_db)
-    app.state.teams = PgTeamStore(_db)
+    db = await Database.conectar(dsn)
+    app.state.users = PgUserStore(db)
+    app.state.teams = PgTeamStore(db)
+    try:
+        yield
+    finally:
+        await db.cerrar()
 
 
-async def _shutdown() -> None:
-    if _db is not None:
-        await _db.cerrar()
-
-
-app = Starlette(routes=_RUTAS, on_startup=[_startup], on_shutdown=[_shutdown])
+app = Starlette(routes=_RUTAS, lifespan=_lifespan)
