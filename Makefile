@@ -28,7 +28,7 @@ sh: ## Abre una shell en el contenedor del server
 	docker compose exec laidea sh
 
 test: ## Corre la suite de tests en local (no en docker)
-	python -m pytest -q
+	cd backend && python -m pytest -q
 
 dev: ## Server en local para desarrollo (sin docker)
-	python -m laidea.server
+	cd backend && python -m laidea.server

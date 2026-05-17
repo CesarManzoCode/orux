@@ -10,10 +10,12 @@ venv/
 .env
 .idea/
 .vscode/
-tests/
+backend/tests/
 web/
-client/node_modules/
-client/dist/
+frontend/ide/node_modules/
+frontend/ide/dist/
+frontend/landing/node_modules/
+frontend/landing/dist/
 workspace_data/
 .laidea/
 Dockerfile

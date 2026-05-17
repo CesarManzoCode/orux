@@ -28,8 +28,11 @@ RUN useradd --create-home --uid 10001 laidea
 
 WORKDIR /app
 # Instalamos primero solo los metadatos para cachear la capa de dependencias.
-COPY pyproject.toml README.md ./
-COPY laidea ./laidea
+# El backend vive en /backend (reorg de repo): contexto de build = raíz,
+# por eso las rutas llevan el prefijo. README.md sigue en la raíz (doc del
+# proyecto entero, no del paquete).
+COPY backend/pyproject.toml README.md ./
+COPY backend/laidea ./laidea
 RUN pip install --no-cache-dir .
 
 # Capa 17: el paquete pip `pyright` descarga un runtime Node la PRIMERA vez

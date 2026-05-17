@@ -16,7 +16,7 @@ make up                       # build + levanta server + Caddy
 make logs                     # seguir logs   |   make down para apagar
 ```
 
-Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local sigue igual: `make dev` + abrir `web/index.html` con Live Server (el cliente detecta dev y usa `ws://localhost:8765`).
+Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local: `make dev` (server desde `backend/`) + `cd frontend/ide && npm run dev` (el cliente detecta dev y usa `ws://localhost:8765`).
 
 ### Capa 7 — identidad real
 
@@ -52,26 +52,29 @@ Sincronización de un **workspace** completo entre múltiples clientes en tiempo
 
 ### Cómo correrlo
 
+El repo está separado en dos raíces (más orquestación en la raíz): el backend Python vive en `backend/`, el frontend en `frontend/`.
+
 ```bash
+cd backend
 pip install -e ".[dev]"
 python -m laidea.server
 ```
 
-Luego abre `web/index.html` en dos o tres pestañas del navegador y escribe en una. Las demás se sincronizan.
+El cliente del IDE (React) corre con `cd frontend/ide && npm install && npm run dev`. Las pestañas/clientes conectados se sincronizan en tiempo real.
 
 ### Tests
 
 ```bash
-pytest
+cd backend && pytest
 ```
 
 ### Estructura
 
-- `laidea/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
-- `laidea/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
-- `laidea/server/` — servidor WebSocket de sincronización.
-- `web/` — cliente HTML con árbol de archivos + textarea.
-- `tests/` — tests de protocolo, estado e integración.
+- `backend/laidea/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
+- `backend/laidea/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
+- `backend/laidea/server/` — servidor WebSocket de sincronización.
+- `backend/tests/` — tests de protocolo, estado e integración.
+- `frontend/ide/` — cliente React del IDE (era `client/`). `frontend/landing/` — landing de marketing. `frontend/ops/` — panel de operador.
 
 ---
 
