@@ -236,6 +236,15 @@ button { font-family: inherit; }
   color: var(--warn); font-family: var(--font-mono);
   white-space: pre-wrap; word-break: break-word;
 }
+/* Capa 24d: badge de severidad del aviso. */
+.imp-row .sev {
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 1px 6px; border-radius: 999px;
+  vertical-align: middle;
+}
+.imp-row .sev-alta { background: rgba(229,83,75,0.16); color: #e5534b; }
+.imp-row .sev-media { background: rgba(227,179,65,0.16); color: var(--warn); }
+.imp-row .sev-baja { background: rgba(154,160,173,0.14); color: var(--faint); }
 /* Capa 24: cadena del impacto transitivo (premium). */
 .imp-row .cadena {
   margin-top: 0.4rem; font-size: 11px; line-height: 1.6;

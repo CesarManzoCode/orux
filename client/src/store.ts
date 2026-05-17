@@ -18,6 +18,9 @@ export interface Impact {
   // Capa 24: cadena de hops del impacto transitivo (premium). Vacío =
   // impacto directo (free). El server ya manda [] por defecto.
   cadena?: string[];
+  // Capa 24d: severidad por símbolo (1:1 con symbols). Vacío en mensajes
+  // viejos -> el cliente asume "media".
+  severidades?: string[];
 }
 export interface GitStatus {
   available: boolean; branch: string; changes: number; commits: string[];

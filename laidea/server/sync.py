@@ -38,6 +38,7 @@ from secrets import token_hex
 from websockets.asyncio.server import ServerConnection, serve
 
 from ..analysis import impacto, motivos as motivos_de, tiers
+from ..analysis.modelo import severidad_de
 from ..analysis.lsp import arrancar_lsp
 from ..analysis.tiers import lenguaje_de
 from ..analysis.transitive import impacto_transitivo
@@ -453,6 +454,7 @@ class SyncServer:
                         affected_path=af,
                         symbols=[d["sym"] for d in items],
                         motivos=[d["motivo"] + sufijo for d in items],
+                        severidades=[severidad_de(d["motivo"]) for d in items],
                         cadena=items[0]["cadena"],
                     )),
                 )
@@ -488,6 +490,9 @@ class SyncServer:
                         affected_path=af,
                         symbols=syms,
                         motivos=[razones.get(s, "") for s in syms],
+                        severidades=[
+                            severidad_de(razones.get(s, "")) for s in syms
+                        ],
                     )
                 ),
             )

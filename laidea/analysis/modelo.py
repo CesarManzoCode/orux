@@ -140,3 +140,29 @@ def cambios_que_importan_modelo(
                     )
                 # superficie intacta, cuerpo cambió => silencio (a propósito)
     return motivos
+
+
+# Severidad del aviso (capa 24d). Clasifica por keywords de NUESTROS propios
+# motivos (los controlamos: determinista). ADITIVO — no cambia ningún
+# mensaje ni el shape de `cambios_que_importan_modelo`; solo lo interpreta
+# para priorizar el triage del dueño.
+#   alta  = rompe casi seguro (eliminado/firma/construcción/superficie/tipo-def)
+#   media = puede romper / revisá (tipo cambió, sin parser, se propaga)
+#   baja  = uso en cuerpo, la onda cortó ahí (probablemente no te afecta)
+_SEV_ALTA = (
+    "se eliminó o renombró",
+    "cambió la firma de",
+    "cambió cómo se construye",
+    "ya no expone",
+    "cambió de tipo de definición",
+)
+_SEV_BAJA = ("en su cuerpo — revisá",)
+
+
+def severidad_de(motivo: str) -> str:
+    """'alta' | 'media' | 'baja'. Desconocido => 'media' (no sub-avisar)."""
+    if any(k in motivo for k in _SEV_ALTA):
+        return "alta"
+    if any(k in motivo for k in _SEV_BAJA):
+        return "baja"
+    return "media"

@@ -183,3 +183,15 @@ def test_deps_interfaz_python() -> None:
     dc = _deps_interfaz(nt["Caja"])
     assert {"Base", "Producto", "Deposito"} <= dc
     assert "Secreto" not in dc  # método privado: no es interfaz pública
+
+
+def test_severidad_de() -> None:
+    from laidea.analysis.modelo import severidad_de
+    assert severidad_de("se eliminó o renombró «X» — el código...") == "alta"
+    assert severidad_de("cambió la firma de «f»: (a) → (a, b)") == "alta"
+    assert severidad_de("«C» ya no expone: v — quien lo usaba...") == "alta"
+    assert severidad_de("cambió «T» — su definición es su interfaz") == "media"
+    assert severidad_de("«x» cambió — sin parser de TS...") == "media"
+    assert severidad_de("«h» usa «S» (que cambió) en su cuerpo — revisá; "
+                        "la onda corta acá") == "baja"
+    assert severidad_de("algo raro no clasificado") == "media"  # no sub-avisa

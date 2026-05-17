@@ -43,9 +43,18 @@ function Propuestas() {
 
 // Avisos de impacto: "cambiaron algo que tu archivo usa" + POR QUÉ (lo que
 // lo volvió aviso real y no adorno).
+const _RANK: Record<string, number> = { alta: 3, media: 2, baja: 1 };
+const _sev = (m: { severidades?: string[] }, i: number) =>
+  (m.severidades && m.severidades[i]) || "media";
+
 function Impactos() {
   const s = useStore();
-  const lista = Object.entries(s.impacts);
+  // Capa 24d: alta primero — el dueño triagea lo que rompe seguro antes.
+  const lista = Object.entries(s.impacts).sort(([, a], [, b]) => {
+    const mx = (m: typeof a) =>
+      Math.max(0, ...m.symbols.map((_, i) => _RANK[_sev(m, i)] || 2));
+    return mx(b) - mx(a);
+  });
   if (lista.length === 0) return null;
   return (
     <div className="tray imp">
@@ -62,7 +71,12 @@ function Impactos() {
             </span>
             {m.symbols.map((_, i) =>
               m.motivos[i] ? (
-                <div className="por" key={i}>↳ {m.motivos[i]}</div>
+                <div className="por" key={i}>
+                  <span className={"sev sev-" + _sev(m, i)}>
+                    {_sev(m, i)}
+                  </span>{" "}
+                  ↳ {m.motivos[i]}
+                </div>
               ) : null
             )}
             {/* Capa 24: la cadena del impacto transitivo (premium). Hace

@@ -291,6 +291,10 @@ class ImpactMessage:
     # make_user" -> …): el porqué de la onda, legible. Vacío = impacto
     # DIRECTO (free / capas 17-21): byte-compat con clientes/tests viejos.
     cadena: list[str] = field(default_factory=list)
+    # Capa 24d: severidad por símbolo (1:1 con `symbols`): "alta"|"media"|
+    # "baja". El dueño prioriza el triage. Vacío = byte-compat con
+    # clientes/tests viejos (el cliente cae a "media").
+    severidades: list[str] = field(default_factory=list)
     type: Literal["impact"] = "impact"
 
 
@@ -711,6 +715,7 @@ def decode(raw: str) -> Message:
             symbols=list(data.get("symbols", [])),
             motivos=list(data.get("motivos", [])),
             cadena=list(data.get("cadena", [])),
+            severidades=list(data.get("severidades", [])),
         )
     if kind == "register":
         return RegisterMessage(
