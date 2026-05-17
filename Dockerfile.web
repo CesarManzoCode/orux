@@ -1,23 +1,31 @@
-# Cliente React: build en Node, servido por Caddy. Multi-stage para que la
-# imagen final NO lleve Node ni node_modules — solo Caddy + los estáticos
-# ya compilados. El build corre acá (en el VPS hay internet); el resultado
-# es estático, fiel a "git clone basta": el adoptante hace `make up` y listo.
+# Estáticos servidos por Caddy. Multi-stage: Node compila, la imagen final
+# solo lleva Caddy + lo compilado. El build corre en el VPS (hay internet);
+# fiel a "git clone basta": el adoptante hace `make up` y listo.
 
-FROM node:20-alpine AS build
+# --- IDE: cliente React (vive en /app, Vite base=/app/) ------------------
+FROM node:20-alpine AS client
 WORKDIR /client
-# Cacheamos la capa de dependencias: solo el manifiesto primero.
 COPY client/package.json client/package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY client/ ./
 RUN npm run build
 
-# Caddy sirve el dist/. El Caddyfile sigue viniendo por bind-mount en
-# docker-compose (para editarlo y para la sustitución de la variable de
-# dominio); acá solo entran los estáticos compilados.
+# --- Landing: proyecto React PROPIO, pesado/animado (vive en / ) ---------
+# Capa 23b (rehecha): la landing NO es estática minimal — es la cara del
+# producto (React + Framer Motion + gradientes). Build aparte: no infla el
+# bundle del IDE y se despliega independiente.
+FROM node:20-alpine AS landing
+WORKDIR /landing
+COPY landing/package.json landing/package-lock.json* ./
+RUN npm install --no-audit --no-fund
+COPY landing/ ./
+RUN npm run build
+
+# --- Caddy sirve todo --------------------------------------------------
+# El Caddyfile entra por bind-mount en docker-compose (edición + variable
+# de dominio); acá solo los estáticos. landing -> raíz; IDE -> /app;
+# panel de operador -> /admin (sin colisión: assets en rutas distintas).
 FROM caddy:2
-# Capa 23b: la app React vive en /app (dist a /srv/app, Vite base=/app/).
-COPY --from=build /client/dist /srv/app
-# El root es la carta de presentación (estática, vanilla, sin build).
-COPY ops/landing.html /srv/index.html
-# Panel de operador (vos), estático, separado del cliente. Caddy: /admin.
+COPY --from=landing /landing/dist /srv
+COPY --from=client /client/dist /srv/app
 COPY ops/admin.html /srv/admin/index.html
