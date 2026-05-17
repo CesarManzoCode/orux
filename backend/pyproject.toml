@@ -18,6 +18,13 @@ dependencies = [
     # grammar TSX cubre JS/TS/JSX/TSX. Verificación real del parser: VPS.
     "tree-sitter>=0.22",
     "tree-sitter-typescript>=0.23",
+    # Capa 25: grammars Go/Rust = misma historia que la de TS (wheels
+    # manylinux, sin compilador). Dan DETECCIÓN fina (firma/superficie) a
+    # Go/Rust, que en capa 20 sólo tenían fan-out LSP + regex coarse. NO
+    # obligatorias: si faltan, `tiers` cae sola a regex Tier 3 (sandbox sin
+    # internet sigue verde). Verificación real del parser: VPS.
+    "tree-sitter-go>=0.21",
+    "tree-sitter-rust>=0.21",
     # Capa 17: pyright = Tier 0 (el análisis más profundo, resolución de
     # tipos cross-módulo real para Python — mata los falsos positivos del
     # heurístico). El paquete pip `pyright` es un wrapper que autoarranca un

@@ -128,31 +128,41 @@ _GO = _Regex(go)
 _RUST = _Regex(rust)
 
 
-def _treesitter_tier() -> Tier | None:
-    """Tier 2 (tree-sitter) si su dependencia está; si no, None. Import
-    perezoso: el sandbox sin internet no lo tiene y no debe romper nada."""
+def _treesitter_tier(clase: str) -> Tier | None:
+    """Tier 2 (tree-sitter) para `clase` ('jsts'|'go'|'rust') si su grammar
+    está; si no, None. Import perezoso y ultra-defensivo: el sandbox sin
+    internet no lo tiene y NO debe romper nada (cae a regex como antes)."""
     try:
-        from .treesitter import TreeSitter
+        from . import treesitter
 
-        t = TreeSitter()
+        cls = {
+            "jsts": treesitter.TreeSitter,
+            "go": treesitter.TreeSitterGo,
+            "rust": treesitter.TreeSitterRust,
+        }[clase]
+        t = cls()
         return t if t.disponible() else None
     except Exception:
         return None
 
 
-_TS = _treesitter_tier()
+_TS_JS = _treesitter_tier("jsts")
+_TS_GO = _treesitter_tier("go")
+_TS_RUST = _treesitter_tier("rust")
 
-_JS_TIERS: list[Tier] = [t for t in (_TS, _REGEX) if t is not None]
+_JS_TIERS: list[Tier] = [t for t in (_TS_JS, _REGEX) if t is not None]
 
 _POR_EXT: dict[str, tuple[str, list[Tier]]] = {
     "py": ("py", [_PY]),
 }
 for _ext in ("js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts"):
     _POR_EXT[_ext] = ("jsts", _JS_TIERS)
-# Capa 20: Go y Rust. Detección = regex coarse (su tree-sitter fino es
-# pulido futuro); el valor real es el fan-out LSP (gopls/rust-analyzer).
-_POR_EXT["go"] = ("go", [_GO])
-_POR_EXT["rs"] = ("rust", [_RUST])
+# Capa 25 (cierre de brecha): Go y Rust ahora tienen detección FINA por
+# tree-sitter (firma/superficie), no sólo el regex coarse de capa 20. El
+# fan-out real sigue siendo LSP (gopls/rust-analyzer); regex queda de
+# fallback honesto si la grammar no carga (sandbox sin internet).
+_POR_EXT["go"] = ("go", [t for t in (_TS_GO, _GO) if t is not None])
+_POR_EXT["rs"] = ("rust", [t for t in (_TS_RUST, _RUST) if t is not None])
 
 
 def lenguaje_de(path: str) -> str | None:
