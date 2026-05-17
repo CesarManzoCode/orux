@@ -25,7 +25,7 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
 from laidea.git import GitRepo
-from laidea.server.sync import SyncServer
+from laidea.server.sync import SyncServer, TeamRuntime
 from laidea.state import DiskStorage
 
 # Capa 7: la app está cerrada. Cada test necesita usuarios; este contador da
@@ -1452,3 +1452,16 @@ async def test_no_miembro_no_puede_entrar_a_equipo_ajeno(server_port: int) -> No
             msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
             # Vuelve lobby con error, NO team_ready: no entró.
             assert msg["type"] == "lobby" and msg["error"]
+
+
+def test_evicta_lsp_ociosas_y_conserva_activas() -> None:
+    # Capa 20: la RAM escala con equipos ACTIVOS. Una sesión sin uso hace
+    # más del TTL se evicta (libera cientos de MB); una reciente se queda.
+    import time as _t
+    rt = TeamRuntime()
+    rt._lsp = {"py": None, "go": None}
+    ahora = _t.monotonic()
+    rt._lsp_uso = {"py": ahora - 5000, "go": ahora}  # py ocioso, go activo
+    assert rt.evictar_lsp_ociosas(1200) == ["py"]
+    assert list(rt._lsp) == ["go"]            # la activa sobrevive
+    assert rt.evictar_lsp_ociosas(1200) == []  # nada más que evictar

@@ -30,7 +30,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import os
 import threading
+import time
 from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -159,6 +161,7 @@ class TeamRuntime:
         # "jsts"->tsserver). Lazy: se arranca al 1er análisis de ESE
         # lenguaje y se cachea (incl. None = "no hay, no reintentar").
         self._lsp: dict[str, object] = {}
+        self._lsp_uso: dict[str, float] = {}  # lang -> last use (monotonic)
         self._lsp_lock = threading.Lock()
         # Capa 19: último contenido ANALIZADO por archivo (baseline del
         # checkpoint). El impacto ya no corre por tecla: el diff es
@@ -189,7 +192,34 @@ class TeamRuntime:
         with self._lsp_lock:
             if lang not in self._lsp:
                 self._lsp[lang] = arrancar_lsp(lang, self._ws_dir)
+            # Marca de último uso para el barrido de ociosas: el server vive
+            # mientras el equipo lo use; si no, se evicta y libera RAM.
+            self._lsp_uso[lang] = time.monotonic()
             return self._lsp[lang]
+
+    def evictar_lsp_ociosas(self, ttl: float) -> list[str]:
+        """Cierra las sesiones sin uso hace más de `ttl` segundos y las
+        olvida (el próximo análisis las re-arranca, degradando a tree-sitter
+        mientras reindexan — net de capa 17). Así la RAM escala con equipos
+        ACTIVOS, no totales. `ttl` se elige GENEROSO: tan largo que es casi
+        seguro que el equipo se fue, no que está pensando un rato. Devuelve
+        los lenguajes evictados (para loguear)."""
+        ahora = time.monotonic()
+        evictadas: list[str] = []
+        with self._lsp_lock:
+            for lang in list(self._lsp):
+                ses = self._lsp[lang]
+                if ahora - self._lsp_uso.get(lang, ahora) < ttl:
+                    continue
+                if ses is not None:
+                    try:
+                        ses.cerrar()
+                    except Exception:  # noqa: BLE001
+                        pass
+                del self._lsp[lang]
+                self._lsp_uso.pop(lang, None)
+                evictadas.append(lang)
+        return evictadas
 
     def reciclar_lsp(self) -> None:
         """Mata TODAS las sesiones y fuerza re-arranque al próximo análisis.
@@ -203,6 +233,7 @@ class TeamRuntime:
                     except Exception:  # noqa: BLE001
                         pass
             self._lsp = {}
+            self._lsp_uso = {}
 
 
 class SyncServer:
@@ -931,8 +962,32 @@ class SyncServer:
                 yo.client_id, team_id, len(rt.clients),
             )
 
+    async def _barrer_lsp_ociosas(self, ttl: float) -> None:
+        """Tarea de fondo: cada minuto evicta sesiones LSP sin uso hace más
+        de `ttl`. La RAM escala con equipos ACTIVOS, no totales (una sesión
+        LSP pesa cientos de MB; un equipo que editó 5 min y se fue no debe
+        seguir reteniéndola). El re-arranque al volver degrada a
+        tree-sitter mientras reindexa (net de capa 17): nunca se rompe.
+        """
+        while True:
+            await asyncio.sleep(60)
+            for tid, rt in list(self._runtimes.items()):
+                ev = rt.evictar_lsp_ociosas(ttl)
+                if ev:
+                    logger.info(
+                        "LSP evictadas por ociosas (%ds) equipo %s: %s",
+                        int(ttl), tid, ", ".join(ev),
+                    )
+
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
         """Arranca el server WebSocket y lo deja escuchando para siempre."""
+        # TTL GENEROSO a propósito (default 20 min): tan largo que evictar
+        # implica casi seguro que el equipo se fue, no que está pensando.
+        # Configurable por si el operador del VPS quiere ajustar RAM vs
+        # latencia-de-reentrada. Pagar el reindex ocasional << retener
+        # cientos de MB de equipos que ya no están.
+        ttl = float(os.environ.get("LAIDEA_LSP_IDLE_SEC", "1200"))
         async with serve(self.handle, host, port):
             logger.info("servidor escuchando en ws://%s:%d", host, port)
+            asyncio.create_task(self._barrer_lsp_ociosas(ttl))
             await asyncio.Future()
