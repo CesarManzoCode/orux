@@ -11,6 +11,9 @@ export function Lobby() {
   const [nombre, setNombre] = useState("");
   const [code, setCode] = useState("");
 
+  // Reusa el patrón .login-card (misma tarjeta que el login) y los
+  // patrones de botón del sistema (.primario/.secundario/.lazo) en vez
+  // de estilos inline sueltos: una sola fuente de verdad visual.
   return (
     <div className="login">
       <div className="login-card" style={{ width: 420 }}>
@@ -22,14 +25,17 @@ export function Lobby() {
 
         {s.equipos.length > 0 && (
           <>
-            <div className="h2" style={{ marginTop: 4 }}>tus equipos</div>
+            <div className="h2" style={{ marginTop: 4 }}>
+              tus equipos <span className="h2-num">{s.equipos.length}</span>
+            </div>
             {s.equipos.map((e) => (
               <button
                 key={e.id}
                 className="btn-nuevo"
                 onClick={() => seleccionarEquipo(e.id)}
               >
-                {e.nombre} <span style={{ color: "var(--faint)" }}>· {e.rol}</span>
+                <span style={{ flex: 1 }}>{e.nombre}</span>
+                <span style={{ color: "var(--faint)" }}>· {e.rol}</span>
               </button>
             ))}
           </>
@@ -44,7 +50,6 @@ export function Lobby() {
         />
         <button
           className="primario"
-          style={{ border: "none", borderRadius: "var(--r)", padding: "0.55rem", fontWeight: 650, cursor: "pointer", background: "var(--accent)", color: "#08130d" }}
           onClick={() => { if (nombre.trim()) crearEquipo(nombre.trim()); }}
         >
           crear (seré admin)
@@ -59,19 +64,13 @@ export function Lobby() {
         />
         <button
           className="secundario"
-          style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "0.55rem", fontWeight: 650, cursor: "pointer", background: "transparent", color: "var(--text)" }}
           onClick={() => { if (code.trim()) redimirInvite(code.trim()); }}
         >
           unirme
         </button>
 
         {s.equipoError && <div className="err">{s.equipoError}</div>}
-        <button
-          onClick={salir}
-          style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 12, marginTop: 4 }}
-        >
-          salir
-        </button>
+        <button className="lazo" onClick={salir}>salir</button>
       </div>
     </div>
   );

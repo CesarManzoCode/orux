@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FolderOpen } from "lucide-react";
 import { useStore } from "../useStore";
 import { seleccionar, borrar } from "../store";
 import { arbol, chipDe, inicial, type Nodo } from "../lang";
@@ -14,7 +15,16 @@ export function FileTree() {
   const paths = Object.keys(s.files);
 
   if (paths.length === 0) {
-    return <div className="row" style={{ color: "var(--faint)", fontStyle: "italic", cursor: "default" }}>sin archivos</div>;
+    // Estado vacío real: orienta hacia la acción, no parece roto.
+    return (
+      <div className="empty">
+        <div className="empty-ic"><FolderOpen size={20} /></div>
+        <div className="empty-tit">Workspace vacío</div>
+        <div className="empty-sub">
+          Todavía no hay archivos. Creá el primero con “nuevo archivo”.
+        </div>
+      </div>
+    );
   }
 
   const toggle = (ruta: string) => {

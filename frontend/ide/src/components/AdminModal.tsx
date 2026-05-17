@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Shield, X } from "lucide-react";
 import { useStore } from "../useStore";
 import { adminAsignarVarios, nombreDe } from "../store";
 import { arbol, archivosDe, chipDe, type Nodo } from "../lang";
@@ -95,8 +96,8 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
     <div className="ammodal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="amcard">
         <div className="amhead">
-          <span className="amtit">administración · ownership</span>
-          <button className="amx" title="cerrar" onClick={onClose}>✕</button>
+          <span className="amtit"><Shield size={15} /> administración · ownership</span>
+          <button className="amx" title="cerrar" onClick={onClose}><X size={15} /></button>
         </div>
         <div className="ambar">
           <label className="amsel">

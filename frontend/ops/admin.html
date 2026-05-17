@@ -8,46 +8,675 @@
   Capa 23: panel de OPERADOR (vos), NO el cliente del IDE. Vanilla, una
   página, sin build, separada de todo. Habla la API interna /api/v1 con un
   token de operador (Bearer). El token vive solo en sessionStorage (no se
-  persiste). Esto es la consola de cobro manual: alguien paga -> premium.
+  persiste). Esto es la consola de cobro manual: alguien paga → premium.
+
+  Diseño coherente con la identidad visual del producto (negros fríos,
+  acento verde esmeralda, tipografía system-ui). Sin dependencias externas.
 -->
 <style>
-  :root { color-scheme: dark; }
-  body { font: 14px/1.5 system-ui, sans-serif; background:#0e0f12;
-         color:#e6e6e6; margin:0; padding:24px; }
-  h1 { font-size:16px; margin:0 0 16px; }
-  input, button, select { font:inherit; padding:6px 8px; border-radius:6px;
-         border:1px solid #333; background:#17181c; color:#e6e6e6; }
-  button { cursor:pointer; }
-  table { border-collapse:collapse; width:100%; margin-top:12px; }
-  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid #222; }
-  .free { color:#9aa0ad; } .premium { color:#4cc38a; font-weight:600; }
-  .msg { margin:10px 0; min-height:18px; }
-  .err { color:#e5534b; } .ok { color:#4cc38a; }
-  .gate { max-width:360px; }
+/* ─── TOKENS DE DISEÑO ──────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* Fondos */
+  --bg-base:      #060709;
+  --bg-surface:   #0b0d11;
+  --bg-elevated:  #121419;
+  --bg-panel:     #181b22;
+
+  /* Bordes */
+  --border:       #2a2e38;
+  --border-sub:   #1d2027;
+
+  /* Texto */
+  --text-hi:      #edeef2;
+  --text-lo:      #8b909e;
+  --text-muted:   #565b68;
+
+  /* Acento esmeralda (gradiente 120 deg) */
+  --accent-a:     #4cc38a;
+  --accent-b:     #2fe6c6;
+  --accent-grad:  linear-gradient(120deg, #4cc38a, #2fe6c6);
+  --accent-weak:  rgba(76, 195, 138, .12);
+
+  /* Estados */
+  --ok:           #56d98a;
+  --err:          #f0707a;
+  --ok-bg:        rgba(86, 217, 138, .1);
+  --err-bg:       rgba(240, 112, 122, .1);
+
+  /* Radii */
+  --r-sm:  6px;
+  --r-md:  10px;
+  --r-lg:  14px;
+
+  /* Motion */
+  --t: 140ms ease;
+}
+
+/* ─── RESET MÍNIMO ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── BASE ──────────────────────────────────────────────────────────────── */
+body {
+  font: 14px/1.6 system-ui, -apple-system, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-hi);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ─── TIPOGRAFÍA ────────────────────────────────────────────────────────── */
+h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
+code, .mono {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  font-size: .85em;
+}
+
+/* ─── GATE (pantalla de login) ──────────────────────────────────────────── */
+#gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  padding: 40px 16px;
+  animation: fadeIn 200ms ease both;
+}
+
+.gate-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  /* patrón "isla": hairline superior de acento + sombra de elevación */
+  box-shadow:
+    0 0 0 1px var(--border-sub) inset,
+    0 1px 0 0 rgba(76, 195, 138, .18) inset,
+    0 8px 32px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+.gate-header {
+  padding: 28px 28px 20px;
+  border-bottom: 1px solid var(--border-sub);
+}
+
+.gate-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.gate-logo-mark {
+  width: 32px;
+  height: 32px;
+  background: var(--accent-grad);
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 15px;
+  color: #060709;
+  flex-shrink: 0;
+}
+
+.gate-logo-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.gate-logo-text strong {
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gate-logo-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.gate-header h2 {
+  font-size: 18px;
+  color: var(--text-hi);
+  margin-bottom: 4px;
+}
+
+.gate-header p {
+  font-size: 13px;
+  color: var(--text-lo);
+}
+
+.gate-body {
+  padding: 24px 28px 28px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-lo);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+/* ─── INPUTS / BUTTONS ──────────────────────────────────────────────────── */
+input[type="password"],
+input[type="text"] {
+  font: inherit;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  color: var(--text-hi);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+
+input[type="password"]:focus,
+input[type="text"]:focus {
+  border-color: var(--accent-a);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+input::placeholder { color: var(--text-muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--r-sm);
+  transition: opacity var(--t), box-shadow var(--t), background var(--t);
+  white-space: nowrap;
+}
+
+.btn:active { opacity: .8; }
+
+/* Botón primario — gradiente acento */
+.btn-primary {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--accent-grad);
+  color: #060709;
+  font-size: 14px;
+}
+
+.btn-primary:hover { box-shadow: 0 0 0 3px var(--accent-weak); }
+
+/* Botón secundario — borde sutil */
+.btn-secondary {
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  color: var(--text-hi);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+
+/* Botón de acción de plan — tamaño reducido */
+.btn-plan {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-panel);
+  color: var(--accent-a);
+  border: 1px solid rgba(76, 195, 138, .3);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t), box-shadow var(--t);
+  font-family: inherit;
+}
+
+.btn-plan:hover {
+  background: var(--accent-weak);
+  box-shadow: 0 0 0 2px rgba(76, 195, 138, .25);
+}
+
+.btn-plan.btn-plan-downgrade {
+  color: var(--text-lo);
+  border-color: var(--border);
+}
+
+.btn-plan.btn-plan-downgrade:hover {
+  background: var(--bg-elevated);
+  color: var(--text-hi);
+}
+
+/* ─── MENSAJES DE FEEDBACK ──────────────────────────────────────────────── */
+.msg {
+  min-height: 20px;
+  font-size: 13px;
+  border-radius: var(--r-sm);
+  transition: all var(--t);
+}
+
+.msg:empty { display: none; }
+
+.msg.ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+  border: 1px solid rgba(86, 217, 138, .2);
+  padding: 8px 12px;
+}
+
+.msg.err {
+  color: var(--err);
+  background: var(--err-bg);
+  border: 1px solid rgba(240, 112, 122, .2);
+  padding: 8px 12px;
+}
+
+/* Mensaje dentro del gate-body */
+#gmsg {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+/* ─── PANEL PRINCIPAL ───────────────────────────────────────────────────── */
+#panel {
+  width: 100%;
+  max-width: 980px;
+  padding: 0 16px 64px;
+  animation: fadeIn 200ms ease both;
+}
+
+/* Header del panel */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0 20px;
+  border-bottom: 1px solid var(--border-sub);
+  margin-bottom: 28px;
+}
+
+.panel-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-logo-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--accent-grad);
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: #060709;
+}
+
+.panel-brand-text strong {
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.panel-brand-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  display: block;
+  line-height: 1.2;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Aviso de sesión */
+.session-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: .03em;
+}
+
+/* Mensaje global del panel */
+#msg {
+  margin-bottom: 16px;
+}
+
+/* ─── SECCIONES ─────────────────────────────────────────────────────────── */
+.section {
+  margin-bottom: 36px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-lo);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.section-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-sub);
+  border-radius: 100px;
+  padding: 2px 8px;
+}
+
+/* ─── TABLA DE EQUIPOS ──────────────────────────────────────────────────── */
+.table-wrap {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: 0 1px 0 0 rgba(76, 195, 138, .08) inset;
+}
+
+table#teams {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+table#teams thead tr {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+table#teams th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+table#teams tbody tr {
+  border-bottom: 1px solid var(--border-sub);
+  transition: background var(--t);
+}
+
+table#teams tbody tr:last-child { border-bottom: none; }
+
+table#teams tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, .015);
+}
+
+table#teams tbody tr:hover {
+  background: var(--accent-weak);
+}
+
+table#teams td {
+  padding: 12px 16px;
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+/* Nombre del equipo — más prominente */
+.team-name {
+  font-weight: 600;
+  color: var(--text-hi);
+}
+
+/* ID en mono */
+.team-id {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-sub);
+  border-radius: 4px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+
+/* Badges de plan */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-radius: 100px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.badge-premium {
+  background: var(--accent-weak);
+  color: var(--accent-a);
+  border: 1px solid rgba(76, 195, 138, .3);
+}
+
+.badge-premium::before {
+  content: "★";
+  font-size: 9px;
+}
+
+.badge-free {
+  background: rgba(139, 144, 158, .1);
+  color: var(--text-muted);
+  border: 1px solid var(--border-sub);
+}
+
+/* Columna de miembros */
+.members-count {
+  color: var(--text-lo);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Columna acción */
+.col-action { width: 120px; }
+
+/* ─── SECCIÓN USUARIOS ──────────────────────────────────────────────────── */
+.users-wrap {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  box-shadow: 0 1px 0 0 rgba(76, 195, 138, .08) inset;
+}
+
+.users-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-sub);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-lo);
+  font-family: ui-monospace, monospace;
+  transition: border-color var(--t);
+}
+
+.user-chip:hover { border-color: var(--border); }
+
+.user-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-a);
+  flex-shrink: 0;
+}
+
+/* ─── EMPTY STATES ──────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+}
+
+.empty-state .empty-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: .4;
+}
+
+.empty-state p {
+  font-size: 13px;
+}
+
+/* ─── ANIMACIONES ───────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ─── RESPONSIVE ────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .panel-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  table#teams th:nth-child(2),
+  table#teams td:nth-child(2) { display: none; } /* ocultar columna ID en móvil */
+  .gate-header, .gate-body { padding-left: 20px; padding-right: 20px; }
+}
 </style>
 </head>
 <body>
-<h1>laidea · consola de operador</h1>
 
-<div id="gate" class="gate">
-  <p>Token de operador (no se guarda en disco):</p>
-  <input id="tok" type="password" placeholder="LAIDEA_ADMIN_TOKEN"
-         style="width:100%">
-  <p><button onclick="entrar()">entrar</button></p>
-  <div id="gmsg" class="msg"></div>
+<!-- ───────────────────────────────────────────────────────────────────────
+     GATE: pantalla de autenticación del operador
+─────────────────────────────────────────────────────────────────────────── -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-header">
+      <div class="gate-logo">
+        <div class="gate-logo-mark">L</div>
+        <div class="gate-logo-text">
+          <strong>laidea</strong>
+          <span>Consola de operador</span>
+        </div>
+      </div>
+      <h2>Acceso restringido</h2>
+      <p>Ingresá el token de operador para continuar. No se guarda en disco.</p>
+    </div>
+    <div class="gate-body">
+      <div class="field">
+        <label for="tok">Token de operador</label>
+        <input id="tok" type="password" placeholder="LAIDEA_ADMIN_TOKEN"
+               autocomplete="off" spellcheck="false">
+      </div>
+      <button class="btn btn-primary" onclick="entrar()">Entrar</button>
+      <div id="gmsg" class="msg"></div>
+    </div>
+  </div>
 </div>
 
+<!-- ───────────────────────────────────────────────────────────────────────
+     PANEL PRINCIPAL: visible solo tras autenticación exitosa
+─────────────────────────────────────────────────────────────────────────── -->
 <div id="panel" style="display:none">
+
+  <!-- Header de marca -->
+  <div class="panel-header">
+    <div class="panel-brand">
+      <div class="panel-logo-mark">L</div>
+      <div class="panel-brand-text">
+        <strong>laidea</strong>
+        <span>Consola de operador</span>
+      </div>
+    </div>
+    <div class="panel-actions">
+      <span class="session-badge">sesión activa (solo esta pestaña)</span>
+      <button class="btn btn-secondary" onclick="cargar()">↺ Recargar</button>
+    </div>
+  </div>
+
+  <!-- Mensaje de feedback global -->
   <div class="msg" id="msg"></div>
-  <button onclick="cargar()">recargar</button>
-  <h2 style="font-size:14px">Equipos</h2>
-  <table id="teams"><thead><tr>
-    <th>nombre</th><th>id</th><th>plan</th><th>miembros</th><th>acción</th>
-  </tr></thead><tbody></tbody></table>
-  <h2 style="font-size:14px">Usuarios</h2>
-  <div id="users"></div>
+
+  <!-- Sección: Equipos -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Equipos</span>
+      <span class="section-count" id="teams-count"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="teams">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>ID</th>
+            <th>Plan</th>
+            <th>Miembros</th>
+            <th class="col-action">Acción</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Sección: Usuarios -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Usuarios registrados</span>
+      <span class="section-count" id="users-count"></span>
+    </div>
+    <div class="users-wrap">
+      <div id="users"></div>
+    </div>
+  </div>
+
 </div>
 
+<!-- ───────────────────────────────────────────────────────────────────────
+     SCRIPT: lógica de API intacta. Contrato con el backend preservado.
+     NO modificar: endpoints, headers, nombres de funciones, sessionStorage.
+─────────────────────────────────────────────────────────────────────────── -->
 <script>
 const API = "/api/v1";
 function tok() { return sessionStorage.getItem("laidea_op") || ""; }
@@ -88,7 +717,7 @@ async function setPlan(id, plan) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan }),
     });
-    flash("equipo " + id + " -> " + plan, true);
+    flash("equipo " + id + " → " + plan, true);
     cargar();
   } catch (e) { flash("error: " + e.message, false); }
 }
@@ -96,26 +725,90 @@ async function setPlan(id, plan) {
 async function cargar() {
   try {
     const teams = await api("/teams");
+
+    /* ── Renderizar tabla de equipos ── */
     const tb = document.querySelector("#teams tbody");
     tb.innerHTML = "";
-    for (const t of teams) {
-      const otro = t.plan === "premium" ? "free" : "premium";
+
+    const countEl = document.getElementById("teams-count");
+    if (countEl) countEl.textContent = teams.length + " equipos";
+
+    if (teams.length === 0) {
+      /* Empty state: no hay equipos todavía */
       const tr = document.createElement("tr");
-      tr.innerHTML =
-        `<td>${t.nombre}</td><td><code>${t.id}</code></td>` +
-        `<td class="${t.plan}">${t.plan}</td><td>${t.miembros}</td>`;
-      const td = document.createElement("td");
-      const b = document.createElement("button");
-      b.textContent = "→ " + otro;
-      b.onclick = () => setPlan(t.id, otro);
-      td.appendChild(b); tr.appendChild(td); tb.appendChild(tr);
+      tr.innerHTML = `<td colspan="5">
+        <div class="empty-state">
+          <div class="empty-icon">◎</div>
+          <p>No hay equipos registrados aún.</p>
+        </div>
+      </td>`;
+      tb.appendChild(tr);
+    } else {
+      for (const t of teams) {
+        const otro = t.plan === "premium" ? "free" : "premium";
+        const esPremium = t.plan === "premium";
+
+        const tr = document.createElement("tr");
+
+        /* Nombre */
+        const tdNombre = document.createElement("td");
+        tdNombre.innerHTML = `<span class="team-name">${t.nombre}</span>`;
+
+        /* ID en mono */
+        const tdId = document.createElement("td");
+        tdId.innerHTML = `<span class="team-id">${t.id}</span>`;
+
+        /* Badge de plan */
+        const tdPlan = document.createElement("td");
+        tdPlan.innerHTML = esPremium
+          ? `<span class="badge badge-premium">Premium</span>`
+          : `<span class="badge badge-free">Free</span>`;
+
+        /* Miembros */
+        const tdMiembros = document.createElement("td");
+        tdMiembros.innerHTML = `<span class="members-count">${t.miembros}</span>`;
+
+        /* Botón de acción — mantiene setPlan(t.id, otro) intacto */
+        const tdAccion = document.createElement("td");
+        const b = document.createElement("button");
+        b.className = esPremium
+          ? "btn-plan btn-plan-downgrade"
+          : "btn-plan";
+        b.textContent = esPremium ? "→ Free" : "→ Premium";
+        b.onclick = () => setPlan(t.id, otro);
+        tdAccion.appendChild(b);
+
+        tr.appendChild(tdNombre);
+        tr.appendChild(tdId);
+        tr.appendChild(tdPlan);
+        tr.appendChild(tdMiembros);
+        tr.appendChild(tdAccion);
+        tb.appendChild(tr);
+      }
     }
+
+    /* ── Renderizar usuarios como chips ── */
     const us = await api("/users");
-    document.getElementById("users").textContent =
-      us.length + ": " + us.join(", ");
-  } catch (e) { flash("error: " + e.message, false); }
+
+    const usersCountEl = document.getElementById("users-count");
+    if (usersCountEl) usersCountEl.textContent = us.length + " usuarios";
+
+    const usersDiv = document.getElementById("users");
+    if (us.length === 0) {
+      usersDiv.innerHTML = `<div class="empty-state" style="padding:24px 0">
+        <p>No hay usuarios registrados.</p>
+      </div>`;
+    } else {
+      const chips = us.map(u =>
+        `<span class="user-chip">${u}</span>`
+      ).join("");
+      usersDiv.innerHTML = `<div class="users-chips">${chips}</div>`;
+    }
+
+  } catch (e) { flash("error al cargar datos: " + e.message, false); }
 }
 
+/* Auto-login si hay token en sessionStorage (recarga de pestaña) */
 if (tok()) entrar();
 </script>
 </body>

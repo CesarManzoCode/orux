@@ -31,7 +31,7 @@ export function ContextBar() {
       ) : (
         <>
           <span className="otag ajeno">de {nombreDe(due)}</span>
-          <span style={{ color: "var(--warn)", fontSize: 12 }}>
+          <span className="ctx-nota">
             lo que escribas se le propone a {nombreDe(due)} — no se aplica hasta que apruebe
           </span>
         </>

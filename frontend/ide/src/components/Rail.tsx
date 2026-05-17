@@ -26,9 +26,13 @@ export function Rail(props: {
         <GitBranch size={18} />
       </button>
       {s.esAdmin && (
-        <button title="administración" onClick={props.abrirAdmin}>
-          <Shield size={18} />
-        </button>
+        <>
+          {/* Separador: admin es otra categoría, no una vista más. */}
+          <span className="rail-sep" />
+          <button title="administración" onClick={props.abrirAdmin}>
+            <Shield size={18} />
+          </button>
+        </>
       )}
     </nav>
   );

@@ -1,69 +1,186 @@
 /*
- * Sistema de diseño "Islands Dark". Mismo lenguaje visual que ya estaba
- * validado, ahora en componentes. SIN animaciones a propósito (decisión
- * del usuario: que parezca terminado, no llamativo). El bloque del EDITOR
- * conserva su métrica exacta (line-height 22px, padding, gutter 52px):
- * el componente Editor depende de LINE_H=22 / PAD_TOP=20 sincronizados con
- * este CSS — tocarlo desalinea las capas de presencia/resaltado.
+ * ───────────────────────────────────────────────────────────────────────
+ * SISTEMA DE DISEÑO  ·  "Islands Dark" (evolución, no reemplazo)
+ * ───────────────────────────────────────────────────────────────────────
+ * Por qué un sistema y no parches: cada superficie del IDE comparte los
+ * mismos tokens (color, radio, sombra, motion) y los mismos PATRONES
+ * (.btn, .card/.isla, .field, .empty, .pill). Así la mejora es sistémica:
+ * tocás un token y todo el producto se mueve junto, coherente.
+ *
+ * CONTRATO SAGRADO DEL EDITOR: el componente Editor depende de
+ * LINE_H=22 / PAD_TOP=20 y del gutter de 52px sincronizados con ESTE CSS.
+ * El bloque "--- Editor ---" conserva su métrica EXACTA (line-height 22px,
+ * padding 20px 24px 20px 64px, gutter width 52px / font 14px / lh 22px,
+ * .ed-active y .marca height 22px). Solo se reestiliza el "chrome"
+ * alrededor (fondo, bordes, scrollbars, selección). NO tocar esos valores.
+ *
+ * Los NOMBRES de token NO cambian (el editor sagrado los referencia); se
+ * refinan valores y se SUMAN tokens nuevos (espaciado, tipografía, motion).
  */
 :root {
-  /* Identidad: NO es un IDE gris más. Negro frío con tinte azulado,
-     islas con elevación real y un acento verde→cian de marca usado con
-     intención (activo, presencia, foco). Sobrio, no llamativo. Los
-     NOMBRES de token no cambian (el editor sagrado los usa); solo se
-     refinan valores y se suman algunos. */
+  /* ── Color: negro frío azulado, islas con elevación. Refinado para
+       más profundidad entre capas (deep < bg < surface < surface-2 <
+       elevated) y mejor contraste de texto (AA sobre --surface). ── */
   --bg-deep: #060709; --bg: #0b0d11; --surface: #121419;
   --surface-2: #181b22; --elevated: #20242c;
   --border: #2a2e38; --border-soft: #1d2027;
   --text: #edeef2; --muted: #8b909e; --faint: #565b68;
+
+  /* ── Acento de marca: verde→cian, usado con INTENCIÓN (foco, presencia,
+       activo). Nunca decorativo. ── */
   --accent: #4cc38a; --accent-2: #2fe6c6;
   --accent-weak: rgba(76, 195, 138, 0.12);
+  --accent-soft: rgba(76, 195, 138, 0.18);
   --ok: #56d98a; --ok-bg: #123326; --warn: #e3b341; --warn-bg: #382e14;
   --bad: #f0707a; --bad-bg: #391a1f; --info: #6cb6ff; --vio: #b48bff;
+  --info-bg: #122636; --vio-bg: #241a36;
   --grad: linear-gradient(120deg, var(--accent), var(--accent-2));
   --hl: rgba(255, 255, 255, 0.055);   /* hairline superior de las islas */
+
+  /* ── Elevación: sombra real + hairline = "objeto táctil", no panel
+       plano. Tres niveles para jerarquía (isla < flotante < modal). ── */
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.55);
-  --ring: 0 0 0 2px rgba(76, 195, 138, 0.35);
-  --r: 8px; --r-sm: 5px; --r-isla: 12px;
+  --shadow-pop: 0 2px 6px rgba(0,0,0,.45), 0 18px 44px -16px rgba(0,0,0,.6);
+  --shadow-modal: 0 24px 70px -12px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.5);
+  --glow: 0 0 0 1px var(--accent-soft), 0 0 18px -4px rgba(76,195,138,.45);
+  --ring: 0 0 0 2px var(--bg), 0 0 0 4px rgba(76, 195, 138, 0.45);
+
+  /* ── Radii ── */
+  --r: 8px; --r-sm: 5px; --r-lg: 12px; --r-isla: 14px; --r-pill: 999px;
+
+  /* ── Spacing: escala 4px. Usar SIEMPRE estas variables, no números
+       sueltos — así el ritmo vertical es consistente en todo el IDE. ── */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+
+  /* ── Tipografía: escala modular, titulares apretados (-0.02/-0.03em,
+       lh 1.1), cuerpo aireado (1.5). ── */
+  --t-xs: 11px; --t-sm: 12px; --t-base: 13px; --t-md: 14px;
+  --t-lg: 16px; --t-xl: 20px; --t-2xl: 24px; --t-3xl: 32px;
+
+  /* ── Motion: estado/hover rápido y plano; ENTRADAS expresivas con
+       overshoot suave; press hunde 0.5–2px. ── */
   --tr: 140ms cubic-bezier(.4, 0, .2, 1);
+  --tr-slow: 240ms cubic-bezier(.4, 0, .2, 1);
+  --ease-in: cubic-bezier(.22, 1, .36, 1);
+  --dur-in: 420ms;
+
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
     Consolas, monospace;
 }
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body {
-  margin: 0; font-family: var(--font-ui); font-size: 13px;
+  margin: 0; font-family: var(--font-ui); font-size: var(--t-base);
+  line-height: 1.5;
   background: var(--bg-deep); color: var(--text);
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
-/* Backdrop ambiental ESTÁTICO (es un IDE: nada de animación): dos
-   resplandores muy tenues del acento dan profundidad sin distraer. */
+/* Backdrop ambiental ESTÁTICO (el IDE es quieto a propósito): dos
+   resplandores muy tenues de acento dan profundidad sin distraer. */
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
     radial-gradient(60vw 50vh at 12% -8%, rgba(76,195,138,.07), transparent 70%),
     radial-gradient(55vw 50vh at 100% 108%, rgba(47,230,198,.05), transparent 70%);
 }
-*::-webkit-scrollbar { width: 9px; height: 9px; }
+::selection { background: rgba(76, 195, 138, 0.26); }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb {
-  background: var(--border); border-radius: 6px;
+  background: var(--border); border-radius: var(--r-pill);
   border: 2px solid transparent; background-clip: padding-box;
+  transition: background var(--tr);
 }
-*::-webkit-scrollbar-thumb:hover { background: #3a3b43; background-clip: padding-box; }
-*::-webkit-scrollbar-track { background: transparent; }
-:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
-button { font-family: inherit; transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr); }
-button:active { transform: translateY(0.5px); }
+*::-webkit-scrollbar-thumb:hover { background: #3f424d; background-clip: padding-box; }
+*::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
 
-.app {
-  height: 100%; display: flex; flex-direction: column;
-  padding: 7px; gap: 7px;
+/* Foco visible REAL: doble anillo (negro + acento) que se ve sobre
+   cualquier fondo. Accesibilidad no negociable. */
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+
+/* ── PATRÓN: botones. Tres variantes con la misma física (hover sube,
+   press hunde). El primario es el único con gradiente de marca. ── */
+button { font-family: inherit; transition:
+  background var(--tr), color var(--tr), border-color var(--tr),
+  box-shadow var(--tr), transform var(--tr); }
+button:active { transform: translateY(1px); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--s-2); border-radius: var(--r); cursor: pointer;
+  font-family: inherit; font-size: var(--t-base); font-weight: 650;
+  padding: 0.62rem 0.95rem; border: 1px solid transparent;
+  line-height: 1; white-space: nowrap;
 }
-/* La "isla": objeto diseñado, NO panel plano de IDE. Elevación real
-   (sombra) + un hairline de luz arriba = se siente táctil y premium,
-   que es la diferencia de fondo con un IDE normal. */
+.btn-primario {
+  background: var(--grad); color: #04130c; font-weight: 750;
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset,
+    0 6px 18px -8px rgba(47,230,198,.6);
+}
+.btn-primario:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.btn-primario:active { transform: translateY(1px); filter: brightness(.98); }
+.btn-secundario {
+  background: var(--surface-2); color: var(--text);
+  border-color: var(--border);
+}
+.btn-secundario:hover { background: var(--elevated); border-color: #353a45; transform: translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--muted); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: 0.4; cursor: default; transform: none !important; filter: none !important; }
+
+/* ── PATRÓN: inputs. Foco = borde acento + halo suave (mismo lenguaje
+   que el ring de foco-teclado pero más íntimo dentro de formularios). ── */
+.field {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 0.65rem 0.8rem; font-size: var(--t-base);
+  font-family: inherit; outline: none; width: 100%;
+  transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.field::placeholder { color: var(--faint); }
+.field:hover { border-color: #353a45; }
+.field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+  background: var(--surface);
+}
+
+/* ── PATRÓN: estado vacío. Icono + título + subtítulo + (acción). Un
+   vacío con voz vale más que "sin datos": orienta y no parece roto. ── */
+.empty {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: var(--s-2); padding: var(--s-8) var(--s-5);
+  color: var(--muted); animation: fade-in var(--dur-in) var(--ease-in) both;
+}
+.empty .empty-ic {
+  width: 46px; height: 46px; border-radius: var(--r-lg);
+  display: grid; place-items: center; color: var(--faint);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  margin-bottom: var(--s-1);
+}
+.empty .empty-tit { font-size: var(--t-md); font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+.empty .empty-sub { font-size: var(--t-sm); color: var(--muted); max-width: 30ch; line-height: 1.55; }
+.empty.compacto { padding: var(--s-5) var(--s-4); }
+
+/* ── PATRÓN: pill / chip de estado genérico ── */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s-1);
+  padding: 0.2rem 0.6rem; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 650; line-height: 1;
+}
+
+/* Animaciones reutilizables. Stagger por variable --d (delay). */
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes pop-in  { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+.app { height: 100%; display: flex; flex-direction: column; padding: 7px; gap: 7px; }
+
+/* La "isla": objeto diseñado, no panel plano. Elevación real + hairline
+   de luz arriba = táctil y premium. El IDE entero entra con un rise
+   suave (una vez), después queda quieto. */
 .isla {
   background:
     linear-gradient(180deg, var(--hl), transparent 1.5px),
@@ -72,113 +189,148 @@ button:active { transform: translateY(0.5px); }
   border-radius: var(--r-isla);
   box-shadow: var(--shadow);
 }
+.app > .isla,
+.app > .layout > .isla { animation: fade-in 380ms var(--ease-in) both; }
+.app > .layout > .rail { animation-delay: 40ms; }
+.app > .layout > .sidebar { animation-delay: 70ms; }
+.app > .layout > .main { animation-delay: 100ms; }
+.app > .statusbar { animation-delay: 130ms; }
 
-/* --- Topbar --- */
+/* ── Topbar ── */
 .topbar { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.85rem; flex-shrink: 0; }
 .mark {
-  width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
   background: var(--grad); color: #04130c;
-  display: grid; place-items: center; font-size: 13px; font-weight: 900;
+  display: grid; place-items: center; font-size: var(--t-base); font-weight: 900;
   box-shadow: 0 0 0 1px rgba(76,195,138,.3), 0 4px 14px -4px rgba(47,230,198,.5);
 }
-.brand { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+.brand { font-size: var(--t-md); font-weight: 600; letter-spacing: -0.02em; }
 .brand b {
   font-weight: 800;
   background: var(--grad); -webkit-background-clip: text;
   background-clip: text; color: transparent;
 }
-.chev { color: var(--faint); font-size: 12px; }
+.chev { color: var(--faint); font-size: var(--t-sm); }
 /* El equipo como chip de "cabina", no texto suelto. */
 .proy {
-  color: var(--text); font-size: 12px; font-weight: 600;
-  font-family: var(--font-mono); padding: 3px 9px; border-radius: 999px;
+  color: var(--text); font-size: var(--t-sm); font-weight: 600;
+  font-family: var(--font-mono); padding: 3px 10px; border-radius: var(--r-pill);
   background: var(--surface-2); border: 1px solid var(--border-soft);
 }
 .spacer { flex: 1; }
 .status {
-  padding: 0.22rem 0.6rem; border-radius: 999px; font-size: 11px;
-  font-weight: 600; background: var(--surface-2); color: var(--muted);
-  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.24rem 0.65rem; border-radius: var(--r-pill); font-size: var(--t-xs);
+  font-weight: 650; background: var(--surface-2); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 0.42rem;
   border: 1px solid var(--border-soft);
 }
 .status::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: currentColor; box-shadow: 0 0 7px currentColor;
 }
+/* El punto "vivo" respira sutil SOLO cuando hay conexión sana: señal
+   ambiental de que el realtime está despierto. Se apaga con
+   prefers-reduced-motion. */
 .status.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.status.ok::before { animation: pulso 2.4s ease-in-out infinite; }
 .status.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+@keyframes pulso {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50% { box-shadow: 0 0 7px 1px currentColor; opacity: .7; }
+}
 .yo {
   color: var(--text); display: inline-flex; align-items: center;
-  gap: 0.4rem; font-size: 12px; font-weight: 600;
+  gap: 0.42rem; font-size: var(--t-sm); font-weight: 600;
 }
 .yo .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 7px currentColor; }
-/* Presencia del equipo, FIRST-CLASS: avatares vivos de quién está. Es
-   la señal visual de "esto es multiplayer", no un editor en solitario —
-   el diferenciador, no un detalle. */
-.peers { display: inline-flex; align-items: center; }
+.yo code {
+  font-family: var(--font-mono); background: var(--surface-2);
+  padding: 2px 7px; border-radius: var(--r-sm); border: 1px solid var(--border-soft);
+}
+/* Presencia del equipo, FIRST-CLASS: avatares vivos. Es LA señal de
+   "esto es multiplayer" — el diferenciador. Anillo de superficie para
+   separarlos y un realce vivo al pasar el mouse. */
+.peers { display: inline-flex; align-items: center; padding-left: 2px; }
 .peers .av {
-  width: 24px; height: 24px; border-radius: 50%; margin-left: -7px;
+  width: 25px; height: 25px; border-radius: 50%; margin-left: -8px;
   display: grid; place-items: center; font-size: 10px; font-weight: 800;
   color: #06120c; border: 2px solid var(--surface);
-  font-family: var(--font-ui); cursor: default; transition: transform var(--tr);
+  font-family: var(--font-ui); cursor: default;
+  transition: transform var(--tr), box-shadow var(--tr);
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,.6);
 }
 .peers .av:first-child { margin-left: 0; }
-.peers .av:hover { transform: translateY(-2px); z-index: 2; }
-.peers .av.mas {
-  background: var(--surface-2); color: var(--muted);
-  border-color: var(--surface);
+.peers .av:hover {
+  transform: translateY(-3px); z-index: 2;
+  box-shadow: 0 6px 14px -4px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.12);
 }
+.peers .av.mas { background: var(--surface-2); color: var(--muted); border-color: var(--surface); }
 .salir {
-  font-size: 11px; color: var(--muted); cursor: pointer;
-  padding: 0.2rem 0.55rem; border-radius: var(--r-sm);
+  font-size: var(--t-xs); color: var(--muted); cursor: pointer;
+  padding: 0.28rem 0.6rem; border-radius: var(--r-sm);
   border: 1px solid var(--border); background: transparent;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
 }
-.salir:hover { color: var(--text); background: var(--surface-2); }
+.salir:hover { color: var(--text); background: var(--surface-2); border-color: #353a45; }
 
-/* --- Layout: rail + sidebar + main --- */
-.layout { flex: 1; display: flex; min-height: 0; gap: 6px; }
+/* ── Layout: rail + sidebar + main ── */
+.layout { flex: 1; display: flex; min-height: 0; gap: 7px; }
 .rail {
-  width: 44px; flex-shrink: 0; display: flex; flex-direction: column;
-  align-items: center; gap: 4px; padding: 6px 0;
+  width: 46px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; padding: 8px 0;
 }
 .rail button {
-  width: 34px; height: 34px; border: none; border-radius: 9px;
+  width: 36px; height: 36px; border: none; border-radius: 10px;
   background: transparent; color: var(--faint); cursor: pointer;
   display: grid; place-items: center; position: relative;
 }
 .rail button:hover { background: var(--surface-2); color: var(--text); }
 .rail button.activo { background: var(--accent-weak); color: var(--accent); }
+/* La barra de "activo" cuelga del gradiente y emite glow: el item
+   seleccionado es lo único que brilla en el rail. */
 .rail button.activo::before {
-  content: ""; position: absolute; left: -7px; top: 7px; bottom: 7px;
+  content: ""; position: absolute; left: -8px; top: 8px; bottom: 8px;
   width: 3px; border-radius: 3px; background: var(--grad);
   box-shadow: 0 0 10px -1px var(--accent);
 }
+.rail .rail-sep { width: 20px; height: 1px; background: var(--border-soft); margin: 3px 0; }
 
 .sidebar {
-  width: 248px; flex-shrink: 0; padding: 0.85rem; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.6rem;
+  width: 252px; flex-shrink: 0; padding: 0.85rem; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.65rem;
 }
+/* Encabezado de sección: pequeño, ancho, en mayúsculas — estructura
+   sin gritar. Línea fina debajo para anclar la jerarquía. */
 .h2 {
-  margin: 0.15rem 0.1rem; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint);
+  margin: 0.15rem 0.1rem; font-size: 10px; font-weight: 750;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--faint);
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.h2 .h2-num {
+  font-family: var(--font-mono); color: var(--muted);
+  background: var(--surface-2); border-radius: var(--r-pill);
+  padding: 1px 6px; font-size: 9.5px; letter-spacing: 0;
 }
 .btn-nuevo {
   background: var(--surface-2); color: var(--text);
   border: 1px solid var(--border-soft); border-radius: var(--r-sm);
-  padding: 0.55rem 0.7rem; font-size: 12.5px; font-weight: 600;
-  cursor: pointer; text-align: left;
+  padding: 0.58rem 0.7rem; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; text-align: left; display: flex; align-items: center;
+  gap: 0.5rem; transition: background var(--tr), color var(--tr),
+  border-color var(--tr), transform var(--tr);
 }
 .btn-nuevo:hover {
   background: var(--accent-weak); border-color: rgba(76,195,138,.4);
-  color: var(--accent);
+  color: var(--accent); transform: translateY(-1px);
 }
+.btn-nuevo svg { flex-shrink: 0; }
 
 .tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .row {
   display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.42rem 0.55rem; border-radius: var(--r-sm); cursor: pointer;
+  padding: 0.44rem 0.55rem; border-radius: var(--r-sm); cursor: pointer;
   font-size: 12.5px; color: var(--muted);
-  transition: background var(--tr), color var(--tr);
+  transition: background var(--tr), color var(--tr), box-shadow var(--tr);
 }
 .row:hover { background: var(--surface-2); color: var(--text); }
 .row.activo {
@@ -186,7 +338,10 @@ button:active { transform: translateY(0.5px); }
   box-shadow: inset 2.5px 0 0 var(--accent);
 }
 .row.dir { color: var(--text); }
-.row.dir .twist { width: 0.8em; flex-shrink: 0; color: var(--faint); font-size: 10px; }
+.row.dir .twist {
+  width: 0.85em; flex-shrink: 0; color: var(--faint); font-size: 10px;
+  transition: transform var(--tr); display: inline-block;
+}
 .row.dir .name { font-weight: 600; }
 .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .chip {
@@ -205,122 +360,166 @@ button:active { transform: translateY(0.5px); }
 .chip.t-md { background: #1f2026; color: #9aa0ad; }
 .chip.t-cfg { background: #251f2e; color: #b58bd0; }
 .badges { display: flex; gap: 3px; flex-shrink: 0; }
+/* El badge de presencia respira muy leve: alguien está EN ese archivo
+   ahora mismo. Es vida, no adorno. */
 .badge {
   width: 17px; height: 17px; border-radius: 50%; font-size: 9px;
   line-height: 17px; text-align: center; color: #0d0e11;
   font-weight: 800; box-shadow: 0 0 0 2px var(--surface);
+  animation: badge-vivo 2.6s ease-in-out infinite;
+}
+@keyframes badge-vivo {
+  0%, 100% { box-shadow: 0 0 0 2px var(--surface); }
+  50% { box-shadow: 0 0 0 2px var(--surface), 0 0 8px -1px currentColor; }
 }
 .delx {
   border: none; background: transparent; color: var(--faint);
-  cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 4px;
+  cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 5px;
   border-radius: var(--r-sm); opacity: 0; display: flex;
+  transition: opacity var(--tr), color var(--tr), background var(--tr);
 }
-.row:hover .delx { opacity: 1; }
+.row:hover .delx, .row:focus-within .delx { opacity: 1; }
 .delx:hover { color: var(--bad); background: var(--bad-bg); }
 
-/* --- Main --- */
+/* ── Main ── */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .tabs {
   display: flex; align-items: stretch; gap: 4px; padding: 6px 6px 0;
   background: var(--bg); border-bottom: 1px solid var(--border-soft);
-  min-height: 36px;
+  min-height: 38px;
 }
-.tabs .vacio { color: var(--faint); font-size: 12px; padding: 0.5rem 0.6rem; }
+.tabs .vacio {
+  color: var(--faint); font-size: var(--t-sm); padding: 0.55rem 0.7rem;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+}
+.tabs .vacio svg { opacity: .7; }
 .tab {
   display: flex; align-items: center; gap: 0.45rem; position: relative;
-  padding: 0.45rem 0.55rem 0.45rem 0.65rem; background: var(--surface);
+  padding: 0.5rem 0.55rem 0.5rem 0.7rem; background: var(--surface);
   color: var(--text); border: 1px solid var(--border-soft);
   border-bottom: none; border-radius: 8px 8px 0 0; font-size: 12.5px;
-  font-family: var(--font-mono); max-width: 240px;
+  font-family: var(--font-mono); max-width: 260px;
+  animation: pop-in 220ms var(--ease-in) both;
 }
 /* La pestaña abierta "cuelga" del acento: ata el archivo a su contenido. */
 .tab::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
   border-radius: 2px 2px 0 0; background: var(--grad);
+  box-shadow: 0 0 10px -2px var(--accent);
 }
 .tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Capa 19: dot de "sin marcar" (cambios desde el último Ctrl+S). Color de
-   aviso suave, no alarmante: es un recordatorio del reflejo, no un error. */
+/* Capa 19: dot de "sin marcar" (cambios desde el último Ctrl+S). Aviso
+   suave, no alarmante: recordatorio del reflejo, no un error. */
 .tab .dot-sinmarcar {
-  color: var(--warn); font-size: 10px; line-height: 1;
+  color: var(--warn); font-size: 9px; line-height: 1;
   flex-shrink: 0; cursor: default;
 }
 .tab .tabx {
   border: none; background: transparent; color: var(--faint);
-  cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 3px;
-  border-radius: 4px; flex-shrink: 0;
+  cursor: pointer; font-size: 12px; line-height: 1; padding: 3px 4px;
+  border-radius: 4px; flex-shrink: 0; display: flex;
+  transition: color var(--tr), background var(--tr);
 }
 .tab .tabx:hover { color: var(--bad); background: var(--bad-bg); }
 .ctxbar {
-  padding: 0.45rem 1rem; border-bottom: 1px solid var(--border-soft);
-  background: var(--surface); font-size: 12px; color: var(--muted);
-  display: flex; align-items: center; gap: 0.8rem; min-height: 34px;
+  padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-soft);
+  background: var(--surface); font-size: var(--t-sm); color: var(--muted);
+  display: flex; align-items: center; gap: 0.7rem; min-height: 36px;
+  flex-wrap: wrap;
 }
 .aqui { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.aqui .quien { font-size: 11px; padding: 0.12rem 0.5rem; border-radius: 999px; color: #0d0e11; font-weight: 700; }
-.otag { padding: 0.14rem 0.55rem; border-radius: 999px; font-weight: 700; font-size: 11px; }
+.aqui .quien {
+  font-size: var(--t-xs); padding: 0.16rem 0.55rem; border-radius: var(--r-pill);
+  color: #0d0e11; font-weight: 750; display: inline-flex; align-items: center; gap: 5px;
+}
+.aqui .quien::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(0,0,0,.45);
+}
+.otag {
+  padding: 0.16rem 0.6rem; border-radius: var(--r-pill); font-weight: 700;
+  font-size: var(--t-xs); display: inline-flex; align-items: center; gap: 5px;
+}
+.otag::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .otag.tuyo { background: var(--ok-bg); color: var(--ok); }
 .otag.ajeno { background: var(--warn-bg); color: var(--warn); }
+.ctx-nota { color: var(--warn); font-size: var(--t-sm); }
 .reclamar {
   background: var(--surface-2); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.22rem 0.65rem; font-size: 11px; font-weight: 600; cursor: pointer;
+  padding: 0.26rem 0.7rem; font-size: var(--t-xs); font-weight: 650; cursor: pointer;
+  transition: background var(--tr), border-color var(--tr), transform var(--tr);
 }
-.reclamar:hover { background: var(--elevated); }
+.reclamar:hover { background: var(--accent-weak); border-color: rgba(76,195,138,.4); color: var(--accent); transform: translateY(-1px); }
 
-/* --- Bandejas: aviso / propuestas / impacto --- */
-.aviso { padding: 0.55rem 1rem; font-size: 12px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--border-soft); }
-.tray { border-bottom: 1px solid var(--border-soft); background: var(--surface); }
+/* ── Bandejas: aviso / propuestas / impacto ── */
+.aviso { padding: 0.6rem 1rem; font-size: var(--t-sm); background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--border-soft); }
+.tray {
+  border-bottom: 1px solid var(--border-soft); background: var(--surface);
+  animation: fade-in 300ms var(--ease-in) both;
+}
 .tray h3 {
-  margin: 0; padding: 0.5rem 1rem; font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.13em; font-weight: 700; color: var(--muted);
+  margin: 0; padding: 0.55rem 1rem; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.14em; font-weight: 750; color: var(--muted);
   background: var(--bg); border-bottom: 1px solid var(--border-soft);
   display: flex; align-items: center; gap: 0.5rem;
 }
 /* Marcador de "feed de señal": las bandejas (propuestas/impacto) son EL
    diferenciador; se ven intencionales, no una lista de debug. */
 .tray h3::before {
-  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: var(--grad);
 }
+.tray h3 .cuenta {
+  margin-left: auto; font-family: var(--font-mono); letter-spacing: 0;
+  background: var(--surface-2); color: var(--muted);
+  padding: 1px 8px; border-radius: var(--r-pill); font-size: 10px;
+}
 .tray.imp h3 { color: var(--accent); }
-.tray.imp h3::before { box-shadow: 0 0 8px var(--accent); }
-.prop { padding: 0.8rem 1rem; border-top: 1px solid var(--border-soft); }
+.tray.imp h3::before { box-shadow: 0 0 9px var(--accent); }
+.prop { padding: 0.85rem 1rem; border-top: 1px solid var(--border-soft); animation: fade-in 260ms var(--ease-in) both; }
 .prop:first-of-type { border-top: none; }
-.prop .cab { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.55rem; }
+.prop .cab { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
+.prop .quien { font-size: 12.5px; }
 .prop .quien b { color: var(--warn); font-weight: 700; }
-.prop .acc { margin-left: auto; display: flex; gap: 0.4rem; }
-.prop button { border: none; border-radius: var(--r-sm); padding: 0.3rem 0.8rem; font-size: 12px; font-weight: 700; cursor: pointer; }
+.prop .acc { margin-left: auto; display: flex; gap: 0.45rem; }
+.prop button {
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 0.34rem 0.85rem; font-size: var(--t-sm); font-weight: 700;
+  cursor: pointer; transition: background var(--tr), transform var(--tr), filter var(--tr);
+}
+.prop button:hover { transform: translateY(-1px); filter: brightness(1.12); }
 .prop .ok { background: var(--ok-bg); color: var(--ok); }
 .prop .no { background: var(--bad-bg); color: var(--bad); }
 .diff {
-  margin: 0; font-family: var(--font-mono); font-size: 12px;
+  margin: 0; font-family: var(--font-mono); font-size: var(--t-sm);
   line-height: 1.55; white-space: pre-wrap; max-height: 220px;
   overflow: auto; border: 1px solid var(--border-soft);
   border-radius: var(--r-sm); background: var(--bg);
 }
 .diff div { padding: 0 0.6rem; }
-.diff .add { background: rgba(86, 217, 138, 0.1); color: var(--ok); }
-.diff .del { background: rgba(240, 112, 122, 0.1); color: var(--bad); }
+.diff .add { background: rgba(86, 217, 138, 0.12); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
+.diff .del { background: rgba(240, 112, 122, 0.12); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
 .diff .eq { color: var(--faint); }
 .imp-row {
-  padding: 0.65rem 1rem; border-top: 1px solid var(--border-soft);
+  padding: 0.7rem 1rem; border-top: 1px solid var(--border-soft);
   display: flex; align-items: flex-start; gap: 0.75rem;
   font-size: 12.5px; color: var(--text);
+  animation: fade-in 260ms var(--ease-in) both;
 }
 .imp-row:first-of-type { border-top: none; }
 .imp-row .izq { flex: 1; min-width: 0; }
 .imp-row b { color: var(--info); font-weight: 650; }
 .imp-row code { background: var(--bg); color: var(--accent); padding: 1px 5px; border-radius: var(--r-sm); font-family: var(--font-mono); font-size: 11.5px; }
 .imp-row .por {
-  margin-top: 0.35rem; font-size: 12px; line-height: 1.45;
+  margin-top: 0.4rem; font-size: var(--t-sm); line-height: 1.45;
   color: var(--warn); font-family: var(--font-mono);
   white-space: pre-wrap; word-break: break-word;
 }
 /* Capa 24d: badge de severidad del aviso. */
 .imp-row .sev {
   font-size: 9.5px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.06em; padding: 1px 6px; border-radius: 999px;
+  letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--r-pill);
   vertical-align: middle;
 }
 .imp-row .sev-alta { background: rgba(229,83,75,0.16); color: #e5534b; }
@@ -328,27 +527,41 @@ button:active { transform: translateY(0.5px); }
 .imp-row .sev-baja { background: rgba(154,160,173,0.14); color: var(--faint); }
 /* Capa 24: cadena del impacto transitivo (premium). */
 .imp-row .cadena {
-  margin-top: 0.4rem; font-size: 11px; line-height: 1.6;
+  margin-top: 0.45rem; font-size: var(--t-xs); line-height: 1.6;
   color: var(--faint); word-break: break-word;
 }
 .imp-row .cadena .flecha { color: var(--accent); }
 .imp-row .acc { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
 .imp-row .acc button {
   border: 1px solid var(--border-soft); border-radius: var(--r-sm);
-  padding: 0.28rem 0.7rem; font-size: 12px; font-weight: 600;
+  padding: 0.3rem 0.7rem; font-size: var(--t-sm); font-weight: 600;
   cursor: pointer; background: var(--surface-2); color: var(--info);
+  transition: background var(--tr), border-color var(--tr), transform var(--tr);
 }
 .imp-row .acc button:hover {
   border-color: rgba(108,182,255,.4); background: rgba(108,182,255,.1);
+  transform: translateY(-1px);
 }
 
-/* --- Editor (MÉTRICA SAGRADA: no tocar valores) --- */
+/* ── Editor (MÉTRICA SAGRADA: NO tocar valores de geometría) ──
+   line-height 22, padding 20px 24px 20px 64px, gutter 52px / font 14 /
+   lh 22, .ed-active y .marca 22px. Solo se reestiliza el chrome. */
 .editorwrap { flex: 1; position: relative; display: flex; min-height: 0; background: var(--surface); }
 .editorwrap.off { background: var(--bg); }
+/* Estado vacío del editor (sin archivo): mensaje centrado por encima
+   del textarea deshabilitado. No es "roto", es una invitación. */
+.editorwrap.off::after {
+  content: "Ningún archivo abierto · elegí uno en la izquierda o creá uno nuevo";
+  position: absolute; inset: 0; display: grid; place-items: center;
+  text-align: center; padding: 2rem; color: var(--faint);
+  font-size: var(--t-base); pointer-events: none; white-space: pre-wrap;
+  letter-spacing: -0.005em;
+}
 .ed-active {
   position: absolute; left: 52px; right: 0; height: 22px;
-  background: rgba(255, 255, 255, 0.035); z-index: 0;
+  background: rgba(76, 195, 138, 0.05); z-index: 0;
   pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(76,195,138,.05);
 }
 .ed-hl {
   position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
@@ -362,15 +575,18 @@ button:active { transform: translateY(0.5px); }
 .marca { position: absolute; left: 0; right: 0; height: 22px; }
 .marca .tinte { position: absolute; inset: 0; opacity: 0.16; }
 .marca .raya { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
+/* Etiqueta de presencia: pequeña cápsula con el nombre. Más legible y
+   con micro-sombra para despegar del código sin tapar nada. */
 .marca .etiqueta {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  font-size: 10px; padding: 1px 7px; border-radius: 999px; color: #0d0e11;
+  font-size: 10px; padding: 1px 8px; border-radius: var(--r-pill); color: #0d0e11;
   font-weight: 800; white-space: nowrap; font-family: var(--font-ui);
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,.6);
 }
 .ed-ta {
   flex: 1; position: relative; z-index: 1; background: transparent;
   color: transparent; -webkit-text-fill-color: transparent;
-  caret-color: var(--text); border: none; font-family: var(--font-mono);
+  caret-color: var(--accent); border: none; font-family: var(--font-mono);
   font-size: 14px; line-height: 22px; padding: 20px 24px 20px 64px;
   resize: none; outline: none; white-space: pre; overflow: auto; tab-size: 4;
 }
@@ -379,7 +595,8 @@ button:active { transform: translateY(0.5px); }
 .ed-gutter {
   position: absolute; left: 0; top: 0; bottom: 0; width: 52px;
   overflow: hidden; pointer-events: none; z-index: 3;
-  background: var(--surface); border-right: 1px solid var(--border-soft);
+  background: linear-gradient(90deg, var(--bg), var(--surface));
+  border-right: 1px solid var(--border-soft);
   font-family: var(--font-mono); font-size: 14px; line-height: 22px;
 }
 .ed-gutter-scroll { padding: 20px 10px 0 0; text-align: right; color: var(--faint); white-space: pre; }
@@ -399,22 +616,22 @@ button:active { transform: translateY(0.5px); }
 .token.deleted { color: var(--bad); }
 .token.inserted { color: var(--ok); }
 
-/* --- Status bar --- */
+/* ── Status bar ── */
 .statusbar {
-  flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.3rem 0.85rem; font-size: 11px; color: var(--muted);
-  min-height: 26px;
+  flex-shrink: 0; display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.34rem 0.9rem; font-size: var(--t-xs); color: var(--muted);
+  min-height: 28px;
 }
 .statusbar .sb { display: inline-flex; align-items: center; gap: 0.35rem; }
-.statusbar .sep { color: var(--faint); }
-.statusbar .pt { width: 7px; height: 7px; border-radius: 50%; }
+.statusbar .sep { color: var(--faint); opacity: .6; }
+.statusbar .pt { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
 .statusbar .vivo {
   width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 7px var(--accent);
+  box-shadow: 0 0 7px var(--accent); animation: pulso 2.4s ease-in-out infinite;
 }
 .statusbar b { color: var(--text); font-weight: 600; }
 
-/* --- Login --- */
+/* ── Login / tarjeta de auth (patrón reusado por Lobby) ── */
 .login {
   position: fixed; inset: 0; z-index: 50; display: flex;
   align-items: center; justify-content: center; padding: 1rem;
@@ -422,38 +639,66 @@ button:active { transform: translateY(0.5px); }
 }
 .login-card {
   width: 340px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1.6rem; display: flex;
-  flex-direction: column; gap: 0.7rem; box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  border-radius: var(--r-isla); padding: 1.7rem; display: flex;
+  flex-direction: column; gap: 0.65rem; box-shadow: var(--shadow-modal);
+  animation: rise-in var(--dur-in) var(--ease-in) both;
 }
-.login-card .marca { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-.login-card .marca b { color: var(--accent); }
-.login-card p { margin: 0 0 0.4rem; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.login-card .marca { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.login-card .marca b {
+  font-weight: 800;
+  background: var(--grad); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
+.login-card p { margin: 0 0 0.5rem; font-size: var(--t-sm); color: var(--muted); line-height: 1.55; }
 .login-card input {
   background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 0.65rem 0.8rem; font-size: 13px;
-  outline: none;
+  border-radius: var(--r); padding: 0.7rem 0.85rem; font-size: var(--t-base);
+  outline: none; font-family: inherit;
+  transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
 }
-.login-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-.login-card .fila { display: flex; gap: 0.5rem; margin-top: 0.2rem; }
+.login-card input::placeholder { color: var(--faint); }
+.login-card input:hover { border-color: #353a45; }
+.login-card input:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
+  background: var(--surface);
+}
+.login-card .fila { display: flex; gap: 0.55rem; margin-top: 0.35rem; }
 .login-card button {
   flex: 1; border: 1px solid transparent; border-radius: var(--r);
-  padding: 0.6rem; font-size: 13px; font-weight: 650; cursor: pointer;
+  padding: 0.65rem; font-size: var(--t-base); font-weight: 700; cursor: pointer;
+  transition: background var(--tr), border-color var(--tr),
+  transform var(--tr), filter var(--tr);
 }
-.login-card .primario { background: var(--accent); color: #08130d; }
-.login-card .secundario { background: transparent; color: var(--text); border-color: var(--border); }
-.login-card .err { font-size: 12px; color: var(--bad); min-height: 1.1em; }
+.login-card .primario {
+  background: var(--grad); color: #04130c; font-weight: 750;
+  box-shadow: 0 6px 18px -8px rgba(47,230,198,.55);
+}
+.login-card .primario:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.login-card .primario:active { transform: translateY(1px); }
+.login-card .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.login-card .secundario:hover { background: var(--elevated); border-color: #353a45; transform: translateY(-1px); }
+.login-card .err {
+  font-size: var(--t-sm); color: var(--bad); min-height: 1.1em;
+  display: flex; align-items: center; gap: 6px;
+}
+.login-card .err:not(:empty)::before {
+  content: "!"; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--bad-bg); color: var(--bad); display: grid;
+  place-items: center; font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.login-card .lazo {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: var(--t-sm); margin-top: 0.3rem; align-self: flex-start;
+  padding: 4px 2px; transition: color var(--tr);
+}
+.login-card .lazo:hover { color: var(--text); }
 
-/* --- Landing (capa 25): split con relato + compuerta ---
-   Dos áreas de color a propósito: el panel de marca (acento, vivo) vs.
-   el de auth (negro frío). Es lo ÚNICO con animación en todo el
-   producto — el IDE sigue quieto. */
+/* ── Landing (capa 25): split con relato + compuerta ── */
 .landing {
   position: fixed; inset: 0; z-index: 50;
   display: grid; grid-template-columns: 1.05fr 0.95fr;
   background: var(--bg-deep); overflow: hidden;
 }
-
-/* --- Lado relato: área de color de marca --- */
 .landing-pitch {
   position: relative; overflow: hidden;
   display: flex; align-items: center;
@@ -465,8 +710,6 @@ button:active { transform: translateY(0.5px); }
     var(--bg);
   border-right: 1px solid var(--border-soft);
 }
-/* Aurora ambiental que deriva LENTO. Profundidad sin distraer; el panel
-   se siente vivo aunque nadie toque nada. */
 .landing-pitch .lp-aurora {
   position: absolute; inset: -30%; pointer-events: none; z-index: 0;
   background:
@@ -481,10 +724,10 @@ button:active { transform: translateY(0.5px); }
 }
 .landing-pitch .lp-inner {
   position: relative; z-index: 1; max-width: 460px;
-  animation: landing-in .6s cubic-bezier(.22,1,.36,1) both;
+  animation: rise-in .6s var(--ease-in) both;
 }
 .lp-marca {
-  font-size: 24px; font-weight: 700; letter-spacing: -0.03em;
+  font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.03em;
   color: var(--text); margin-bottom: 1.6rem;
 }
 .lp-marca b {
@@ -507,9 +750,9 @@ button:active { transform: translateY(0.5px); }
 }
 .lp-puntos { list-style: none; margin: 0 0 2rem; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .lp-puntos li {
-  font-size: 13px; line-height: 1.55; color: var(--muted);
+  font-size: var(--t-base); line-height: 1.55; color: var(--muted);
   padding-left: 1.4rem; position: relative;
-  animation: landing-in .55s cubic-bezier(.22,1,.36,1) both;
+  animation: rise-in .55s var(--ease-in) both;
 }
 .lp-puntos li::before {
   content: ""; position: absolute; left: 0; top: 0.42em;
@@ -524,11 +767,11 @@ button:active { transform: translateY(0.5px); }
 }
 .lp-presencia {
   display: inline-flex; align-items: center; gap: 0;
-  animation: landing-in .55s .42s cubic-bezier(.22,1,.36,1) both;
+  animation: rise-in .55s .42s var(--ease-in) both;
 }
 .lp-presencia .pp {
   width: 30px; height: 30px; border-radius: 50%; margin-left: -8px;
-  display: grid; place-items: center; font-size: 12px; font-weight: 800;
+  display: grid; place-items: center; font-size: var(--t-sm); font-weight: 800;
   color: #06120c; border: 2px solid var(--bg);
   animation: lp-pulse 2.6s ease-in-out infinite;
 }
@@ -536,30 +779,20 @@ button:active { transform: translateY(0.5px); }
 .lp-presencia .pp:nth-child(2) { animation-delay: .35s; }
 .lp-presencia .pp:nth-child(3) { animation-delay: .7s; }
 .lp-presencia .pp-txt {
-  margin-left: 0.8rem; font-size: 12px; font-weight: 600;
+  margin-left: 0.8rem; font-size: var(--t-sm); font-weight: 600;
   color: var(--muted);
 }
 @keyframes lp-pulse {
   0%, 100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(76,195,138,0); }
   45%      { transform: translateY(-3px); box-shadow: 0 0 0 6px rgba(76,195,138,.10); }
 }
-
-/* --- Lado auth: negro frío, la tarjeta entra --- */
 .landing-auth {
   display: flex; align-items: center; justify-content: center;
   padding: clamp(1.5rem, 4vw, 3rem);
   background: radial-gradient(800px 500px at 70% 0%, rgba(76,195,138,.05), transparent 60%), var(--bg-deep);
 }
-.landing-auth .login-card {
-  animation: landing-in .6s .12s cubic-bezier(.22,1,.36,1) both;
-}
+.landing-auth .login-card { animation: rise-in .6s .12s var(--ease-in) both; }
 
-@keyframes landing-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Pantallas angostas: apilado, el relato se condensa pero no desaparece. */
 @media (max-width: 860px) {
   .landing { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .landing-pitch { padding: 2.2rem 1.6rem; border-right: none; border-bottom: 1px solid var(--border-soft); }
@@ -569,110 +802,185 @@ button:active { transform: translateY(0.5px); }
   .lp-tesis { margin-bottom: 0; }
 }
 
-/* El IDE es quieto a propósito; quien pide quietud, la tiene. */
-@media (prefers-reduced-motion: reduce) {
-  .landing-pitch .lp-aurora,
-  .lp-inner, .lp-puntos li, .lp-presencia, .lp-presencia .pp,
-  .landing-auth .login-card { animation: none; }
+/* Responsive del IDE: en pantallas medianas el rail/sidebar se
+   condensan; nada se rompe ni desaparece — solo se ajusta el ritmo. */
+@media (max-width: 1080px) {
+  .sidebar { width: 216px; }
+}
+@media (max-width: 880px) {
+  .app { padding: 4px; gap: 4px; }
+  .layout { gap: 4px; }
+  .sidebar { width: 184px; }
+  .topbar { gap: 0.5rem; }
+  .topbar .proy { display: none; }
 }
 
-/* --- Panel git --- */
-.gitp { display: flex; flex-direction: column; gap: 0.5rem; }
+/* El IDE es quieto a propósito; quien pide quietud, la tiene. Apaga
+   TODA animación de entrada/ambiente/pulso del producto entero. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Panel git ── */
+.gitp { display: flex; flex-direction: column; gap: 0.55rem; }
 .gitp .cab {
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
-  font-weight: 700; color: var(--faint);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+  font-weight: 750; color: var(--faint);
 }
 .gitp .cab button, .gitp .remacc button {
   background: var(--surface-2); color: var(--muted);
   border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.12rem 0.5rem; font-size: 10px; font-weight: 600; cursor: pointer;
+  padding: 0.16rem 0.55rem; font-size: 10px; font-weight: 650; cursor: pointer;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
 }
-.gitp .rama { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+.gitp .cab button:hover { background: var(--elevated); color: var(--text); }
+.gitp .estado {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm); padding: 0.5rem 0.6rem;
+}
+.gitp .rama { font-size: var(--t-sm); color: var(--muted); font-family: var(--font-mono); }
 .gitp .rama b { color: var(--accent); font-weight: 700; }
-.gitp .cambios { font-size: 11px; color: var(--warn); font-weight: 600; }
+.gitp .cambios {
+  font-size: var(--t-xs); color: var(--warn); font-weight: 650;
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+}
+.gitp .cambios::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .gitp .cambios.limpio { color: var(--faint); font-weight: 500; }
 .gitp ol {
-  list-style: none; margin: 0; padding: 0; font-size: 11px;
+  list-style: none; margin: 0; padding: 0; font-size: var(--t-xs);
   color: var(--muted); font-family: var(--font-mono); display: flex;
-  flex-direction: column; gap: 3px; max-height: 120px; overflow: auto;
+  flex-direction: column; gap: 4px; max-height: 124px; overflow: auto;
 }
-.gitp ol li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gitp ol li {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-left: 12px; position: relative;
+}
+.gitp ol li::before {
+  content: ""; position: absolute; left: 2px; top: 0.5em;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--border);
+}
 .gitp input {
   background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 0.4rem 0.55rem; font-size: 12px;
+  border-radius: var(--r-sm); padding: 0.45rem 0.55rem; font-size: var(--t-sm);
   outline: none; width: 100%;
+  transition: border-color var(--tr), box-shadow var(--tr);
 }
-.gitp .commitbox { display: flex; gap: 0.35rem; }
+.gitp input::placeholder { color: var(--faint); }
+.gitp input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.gitp .commitbox { display: flex; gap: 0.4rem; }
 .gitp .commitbox button {
-  border: none; border-radius: var(--r-sm); padding: 0.4rem 0.7rem;
-  background: var(--accent); color: #08130d; font-size: 12px;
-  font-weight: 700; cursor: pointer; flex-shrink: 0;
+  border: none; border-radius: var(--r-sm); padding: 0.45rem 0.75rem;
+  background: var(--grad); color: #04130c; font-size: var(--t-sm);
+  font-weight: 750; cursor: pointer; flex-shrink: 0;
+  transition: filter var(--tr), transform var(--tr);
 }
-.gitp .res { font-size: 11px; }
-.gitp .res.ok { color: var(--ok); }
-.gitp .res.bad { color: var(--bad); }
+.gitp .commitbox button:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.gitp .res {
+  font-size: var(--t-xs); padding: 0.45rem 0.6rem; border-radius: var(--r-sm);
+  animation: fade-in 240ms var(--ease-in) both;
+}
+.gitp .res.ok { color: var(--ok); background: var(--ok-bg); }
+.gitp .res.bad { color: var(--bad); background: var(--bad-bg); }
 .gitp .res .prlink {
-  display: block; margin-top: 4px; color: var(--accent);
-  font-weight: 600; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
+  color: var(--accent); font-weight: 700; text-decoration: none;
 }
 .gitp .res .prlink:hover { text-decoration: underline; }
 .gitp .remoto {
-  margin-top: 0.4rem; padding-top: 0.6rem;
+  margin-top: 0.4rem; padding-top: 0.65rem;
   border-top: 1px solid var(--border-soft); display: flex;
-  flex-direction: column; gap: 0.35rem;
+  flex-direction: column; gap: 0.4rem;
 }
-.gitp .remtit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--faint); }
-.gitp .remacc { display: flex; gap: 0.35rem; }
-.gitp .remacc button { flex: 1; padding: 0.38rem; }
+.gitp .remtit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 750; color: var(--faint); }
+.gitp .remacc { display: flex; gap: 0.4rem; }
+.gitp .remacc button { flex: 1; padding: 0.42rem; }
+.gitp .remacc button:hover { background: var(--elevated); color: var(--text); }
 .gitp .remacc .no { color: var(--bad); }
+.gitp .remacc .no:hover { background: var(--bad-bg); border-color: rgba(240,112,122,.4); color: var(--bad); }
 
-/* --- Modal admin (reparto masivo) --- */
+/* ── Modal admin (reparto masivo) ── */
 .ammodal {
-  position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.55);
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center; padding: 2.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
 }
 .amcard {
   width: 760px; max-width: 100%; max-height: 100%; display: flex;
   flex-direction: column; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--r-isla);
-  box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+  box-shadow: var(--shadow-modal);
+  animation: rise-in 280ms var(--ease-in) both;
 }
 .amhead {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border-soft);
+  padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border-soft);
 }
-.amtit { font-size: 13px; font-weight: 700; }
-.amx { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0.2rem 0.45rem; border-radius: var(--r-sm); }
+.amtit {
+  font-size: var(--t-base); font-weight: 750;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.amtit svg { color: var(--accent); }
+.amx {
+  border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 14px; padding: 0.25rem 0.5rem; border-radius: var(--r-sm);
+  display: flex; transition: background var(--tr), color var(--tr);
+}
 .amx:hover { background: var(--surface-2); color: var(--text); }
 .ambar {
-  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-  padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+  padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--border-soft);
+  background: var(--bg);
 }
-.ambar .amsel { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+.ambar .amsel { font-size: var(--t-sm); color: var(--muted); display: flex; align-items: center; gap: 0.45rem; }
 .ambar select {
-  background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 0.35rem 0.5rem; font-size: 12px; outline: none;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 0.38rem 0.55rem; font-size: var(--t-sm);
+  outline: none; font-family: inherit;
+  transition: border-color var(--tr), box-shadow var(--tr);
 }
-.ambar .amcount { font-size: 12px; color: var(--text); font-weight: 600; }
+.ambar select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+.ambar .amcount { font-size: var(--t-sm); color: var(--text); font-weight: 650; }
 .ambar button {
   border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.35rem 0.7rem; font-size: 12px; font-weight: 600;
+  padding: 0.38rem 0.75rem; font-size: var(--t-sm); font-weight: 650;
   cursor: pointer; background: var(--surface-2); color: var(--text);
+  transition: background var(--tr), border-color var(--tr),
+  transform var(--tr), filter var(--tr);
 }
-.ambar button:hover:not(:disabled) { background: var(--elevated); }
-.ambar button:disabled { opacity: 0.45; cursor: default; }
-.ambar .amgo { background: var(--accent); color: #08130d; border-color: transparent; font-weight: 700; }
+.ambar button:hover:not(:disabled) { background: var(--elevated); transform: translateY(-1px); }
+.ambar button:disabled { opacity: 0.4; cursor: default; }
+.ambar .amgo {
+  background: var(--grad); color: #04130c; border-color: transparent; font-weight: 750;
+}
+.ambar .amgo:hover:not(:disabled) { filter: brightness(1.07); }
 .ambar .amno { color: var(--bad); }
+.ambar .amno:hover:not(:disabled) { background: var(--bad-bg); border-color: rgba(240,112,122,.4); }
 .amtree { flex: 1; overflow: auto; padding: 0.5rem 0.6rem; font-family: var(--font-mono); font-size: 12.5px; }
-.amrow { display: flex; align-items: center; gap: 0.5rem; padding: 0.22rem 0.4rem; border-radius: var(--r-sm); cursor: pointer; }
+.amrow {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.26rem 0.4rem;
+  border-radius: var(--r-sm); cursor: pointer; transition: background var(--tr);
+}
 .amrow:hover { background: var(--surface-2); }
 .amrow input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
 .amrow .amname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .amrow.file .amname { color: var(--muted); }
 .amrow.dir .amname { color: var(--text); font-weight: 600; }
 .amrow .amtw { width: 0.9em; color: var(--faint); flex-shrink: 0; }
-.amrow .ammeta { color: var(--faint); font-size: 11px; margin-left: auto; }
-.amrow .amowner { margin-left: auto; font-size: 11px; color: var(--accent); font-family: var(--font-ui); flex-shrink: 0; }
+.amrow .ammeta { color: var(--faint); font-size: var(--t-xs); margin-left: auto; }
+.amrow .amowner {
+  margin-left: auto; font-size: var(--t-xs); color: var(--accent);
+  font-family: var(--font-ui); flex-shrink: 0;
+  background: var(--accent-weak); padding: 1px 8px; border-radius: var(--r-pill);
+}
 .amvacio { color: var(--faint); padding: 1rem; font-family: var(--font-ui); }
-.amfoot { padding: 0.6rem 1.1rem; border-top: 1px solid var(--border-soft); font-size: 11.5px; color: var(--muted); min-height: 2.4em; }
+.amfoot {
+  padding: 0.7rem 1.1rem; border-top: 1px solid var(--border-soft);
+  font-size: 11.5px; color: var(--muted); min-height: 2.4em;
+  display: flex; align-items: center; background: var(--bg);
+}

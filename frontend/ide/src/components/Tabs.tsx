@@ -1,3 +1,4 @@
+import { FileQuestion, X } from "lucide-react";
 import { useStore } from "../useStore";
 import { cerrarArchivo } from "../store";
 import { chipDe } from "../lang";
@@ -7,7 +8,11 @@ import { chipDe } from "../lang";
 export function Tabs() {
   const s = useStore();
   if (!s.currentPath) {
-    return <div className="tabs"><span className="vacio">sin archivo abierto</span></div>;
+    return (
+      <div className="tabs">
+        <span className="vacio"><FileQuestion size={14} /> sin archivo abierto</span>
+      </div>
+    );
   }
   const c = chipDe(s.currentPath);
   const nombre = s.currentPath.split("/").pop();
@@ -28,7 +33,7 @@ export function Tabs() {
             ●
           </span>
         )}
-        <button className="tabx" title="cerrar" onClick={cerrarArchivo}>✕</button>
+        <button className="tabx" title="cerrar" onClick={cerrarArchivo}><X size={12} /></button>
       </div>
     </div>
   );

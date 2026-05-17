@@ -13,7 +13,7 @@ function Propuestas() {
   if (mias.length === 0) return null;
   return (
     <div className="tray">
-      <h3>propuestas para vos ({mias.length})</h3>
+      <h3>propuestas para vos <span className="cuenta">{mias.length}</span></h3>
       {mias.map((p) => {
         const filas = diffLineas(s.files[p.path] ?? "", p.content);
         return (
@@ -58,7 +58,7 @@ function Impactos() {
   if (lista.length === 0) return null;
   return (
     <div className="tray imp">
-      <h3>impacto en tus archivos ({lista.length})</h3>
+      <h3>impacto en tus archivos <span className="cuenta">{lista.length}</span></h3>
       {lista.map(([clave, m]) => (
         <div className="imp-row" key={clave}>
           <div className="izq">
