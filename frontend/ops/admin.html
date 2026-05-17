@@ -642,6 +642,7 @@ table#teams td {
     <div class="panel-actions">
       <span class="session-badge">sesión activa (solo esta pestaña)</span>
       <button class="btn btn-secondary" onclick="cargar()">↺ Recargar</button>
+      <button class="btn btn-secondary" onclick="salir()">Salir</button>
     </div>
   </div>
 
@@ -734,6 +735,18 @@ async function entrar() {
     gm.className = "msg err";
     gm.textContent = "no autorizado: " + e.message;
   }
+}
+
+// Cerrar sesión: borra el token de sesión y vuelve al login. Antes no
+// existía -> el token quedaba en sessionStorage hasta cerrar la pestaña.
+function salir() {
+  sessionStorage.removeItem("laidea_op");
+  document.getElementById("panel").style.display = "none";
+  document.getElementById("msg").textContent = "";
+  document.getElementById("gmsg").textContent = "";
+  const pwd = document.getElementById("pwd");
+  if (pwd) pwd.value = "";
+  document.getElementById("gate").style.display = "";
 }
 
 // Auto-login al recargar la pestaña: si hay token de sesión, se valida

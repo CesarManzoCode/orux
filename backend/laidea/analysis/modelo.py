@@ -156,6 +156,10 @@ def cambios_que_importan_modelo(
 #   baja  = uso en cuerpo, la onda cortó ahí (probablemente no te afecta)
 _SEV_ALTA = (
     "se eliminó o renombró",
+    # Capa 26: el aviso de rename ("se renombró «x» → «y» …") rompe a quien
+    # usa el miembro -> es ALTA, no "media". No reclasifica nada más: la
+    # cadena genérica "se eliminó o renombró" ya era alta por sí sola.
+    "se renombró",
     "cambió la firma de",
     "cambió cómo se construye",
     "ya no expone",
