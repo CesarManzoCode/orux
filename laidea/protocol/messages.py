@@ -412,6 +412,11 @@ class GitResultMessage:
 
     ok: bool
     detail: str
+    # Capa 21: en un push OK a la rama del equipo, link "abrir PR" de
+    # GitHub (vacío si no es GitHub o no aplica). laidea NO crea el PR
+    # —eso es API+scope, y "integración, no reemplazo"—: empuja la rama y
+    # te da el link; el humano lo abre y GitHub hace el merge/review.
+    pr_url: str = ""
     type: Literal["git_result"] = "git_result"
 
 
@@ -721,7 +726,10 @@ def decode(raw: str) -> Message:
     if kind == "commit":
         return CommitMessage(message=data["message"])
     if kind == "git_result":
-        return GitResultMessage(ok=data["ok"], detail=data["detail"])
+        return GitResultMessage(
+            ok=data["ok"], detail=data["detail"],
+            pr_url=data.get("pr_url", ""),
+        )
     if kind == "clone":
         return CloneMessage(url=data["url"], username=data["username"], token=data["token"])
     if kind == "push":

@@ -274,6 +274,78 @@ class GitRepo:
             )
         return (False, _detalle_remoto(out))
 
+    def push_a_rama(
+        self, usuario: str, token: str, rama: str, url: str | None = None
+    ) -> tuple[bool, str, str]:
+        """Capa 21: empuja el workspace a `refs/heads/<rama>` (la rama de
+        ESTE equipo, p.ej. `laidea/<team_id>`), NUNCA a `main`. Devuelve
+        (ok, detalle, url_pr).
+
+        La rama es de PUBLICACIÓN: laidea es su único escritor; los humanos
+        integran vía PR DESDE ella en GitHub (la tesis: integración, no
+        reemplazo — laidea no fusiona). Por eso `--force-with-lease` con
+        `fetch` previo: el workspace del equipo es la fuente de verdad
+        (tras un clone destructivo la historia local cambia y un push
+        normal sería non-ff para siempre); el lease igual RECHAZA si
+        alguien commiteó a mano esa rama (no se debe: PR desde ella, no
+        commits en ella) y se dice claro. No fusiona nada.
+        """
+        if self._root is None:
+            return (False, "git no disponible", "")
+        self.asegurar()
+        if url:
+            self._run("remote", "remove", "origin")
+            self._run("remote", "add", "origin", url)
+        rc_url, actual = self._run("remote", "get-url", "origin")
+        if rc_url != 0 or not actual:
+            return (False, "no hay remoto configurado (falta la URL)", "")
+        # Fetch best-effort: siembra el remote-tracking para que el lease
+        # tenga base. 1ª vez la rama no existe -> falla inocuo y el push
+        # la crea. Su salida no nos importa (la decide el push).
+        self._git_cred(["fetch", "origin", rama], usuario, token)
+        rc, out = self._git_cred(
+            ["push", "--force-with-lease", "origin",
+             f"HEAD:refs/heads/{rama}"],
+            usuario, token,
+        )
+        if rc == 0:
+            return (True, f"rama «{rama}» actualizada en el remoto",
+                    _url_pr(actual, rama))
+        bajo = out.lower()
+        if "stale info" in bajo or "force-with-lease" in bajo or (
+            "rejected" in bajo and "fetch first" in bajo
+        ):
+            return (
+                False,
+                f"alguien commiteó a mano en «{rama}»: esa rama es de "
+                f"publicación, no se commitea ahí — se abre PR desde ella",
+                "",
+            )
+        return (False, _detalle_remoto(out), "")
+
+
+def _url_pr(remote_url: str, rama: str) -> str:
+    """URL de 'abrir PR desde esta rama' en GitHub, o "" si el remoto no es
+    GitHub / no se pudo parsear. Solo extrae owner/repo (no toca el token;
+    capa 10 ya guarda `origin` sin credenciales). Soporta SSH y HTTPS.
+    """
+    u = remote_url.strip()
+    if u.endswith(".git"):
+        u = u[:-4]
+    owner_repo = ""
+    if u.startswith("git@github.com:"):
+        owner_repo = u[len("git@github.com:"):]
+    elif u.startswith(("https://github.com/", "http://github.com/")):
+        owner_repo = u.split("github.com/", 1)[1]
+    elif u.startswith("ssh://git@github.com/"):
+        owner_repo = u[len("ssh://git@github.com/"):]
+    partes = [p for p in owner_repo.split("/") if p]
+    if len(partes) < 2:
+        return ""  # no es github.com o URL rara: sin link, sin inventar
+    owner, repo = partes[0], partes[1]
+    # GitHub redirige /pull/new/<rama> a la página de crear PR de esa rama.
+    return f"https://github.com/{owner}/{repo}/pull/new/{rama}"
+
 
 def _detalle_remoto(salida: str) -> str:
     """Última línea útil de un error de git remoto, ya scrubeada por

@@ -376,6 +376,11 @@ button { font-family: inherit; }
 .gitp .res { font-size: 11px; }
 .gitp .res.ok { color: var(--ok); }
 .gitp .res.bad { color: var(--bad); }
+.gitp .res .prlink {
+  display: block; margin-top: 4px; color: var(--accent);
+  font-weight: 600; text-decoration: none;
+}
+.gitp .res .prlink:hover { text-decoration: underline; }
 .gitp .remoto {
   margin-top: 0.4rem; padding-top: 0.6rem;
   border-top: 1px solid var(--border-soft); display: flex;

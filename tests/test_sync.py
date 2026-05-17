@@ -1183,9 +1183,25 @@ async def test_push_desde_la_web(tmp_path) -> None:
             await a.send(json.dumps({"type": "commit", "message": "agrega nuevo"}))
             assert (await recv_tipo(a, "git_result"))["ok"] is True
             await a.send(json.dumps({"type": "push", "username": "u", "token": "t", "url": ""}))
-            assert (await recv_tipo(a, "git_result"))["ok"] is True
+            res = await recv_tipo(a, "git_result")
+            assert res["ok"] is True
+            # Capa 21: el remoto local NO es GitHub -> sin link de PR, no
+            # se inventa. El detalle nombra la rama de publicación.
+            assert res["pr_url"] == ""
+            assert "laidea/" in res["detail"]
+        # NO se pushea a main: el commit vive en la rama del equipo
+        # `laidea/<team_id>`. Lo verificamos sobre el remoto bare.
+        heads = _sp.run(
+            ["git", "ls-remote", "--heads", str(remoto)],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        rama = next(
+            ln.split("refs/heads/")[1]
+            for ln in heads.splitlines() if "refs/heads/laidea/" in ln
+        )
         verif = tmp_path / "verif"
-        _sp.run(["git", "clone", "-q", str(remoto), str(verif)], check=True)
+        _sp.run(["git", "clone", "-q", "--branch", rama,
+                 str(remoto), str(verif)], check=True)
         assert (verif / "nuevo.py").exists()
     finally:
         s.close(); await s.wait_closed()

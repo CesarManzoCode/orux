@@ -52,7 +52,21 @@ function PanelGit() {
             <button onClick={() => { if (msg.trim()) { commitear(msg.trim()); setMsg(""); } }}>commit</button>
           </div>
           {s.gitResult && (
-            <div className={"res " + (s.gitResult.ok ? "ok" : "bad")}>{s.gitResult.detail}</div>
+            <div className={"res " + (s.gitResult.ok ? "ok" : "bad")}>
+              {s.gitResult.detail}
+              {/* Capa 21: laidea pusheó la rama del equipo; el PR lo
+                  abre el humano en GitHub (integración, no reemplazo). */}
+              {s.gitResult.pr_url && (
+                <a
+                  className="prlink"
+                  href={s.gitResult.pr_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  abrir PR en GitHub →
+                </a>
+              )}
+            </div>
           )}
           <div className="remoto">
             <div className="remtit">remoto</div>

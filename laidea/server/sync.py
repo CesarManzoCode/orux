@@ -927,15 +927,20 @@ class SyncServer:
                             encode(GitResultMessage(False, "git no disponible")),
                         )
                     else:
+                        # Capa 21: NUNCA a main — a la rama de ESTE equipo.
+                        # La integración es PR en GitHub (afuera): laidea
+                        # no fusiona (tesis). El team_id hace la rama única
+                        # y aislada por equipo, como todo lo demás.
+                        rama = f"laidea/{rt.team_id}"
                         async with rt._git_lock:
-                            ok, detalle = await asyncio.to_thread(
-                                rt.git.push,
-                                message.username, message.token,
+                            ok, detalle, pr_url = await asyncio.to_thread(
+                                rt.git.push_a_rama,
+                                message.username, message.token, rama,
                                 message.url or None,
                             )
                         await self._enviar_a(
                             rt, yo.client_id,
-                            encode(GitResultMessage(ok, detalle)),
+                            encode(GitResultMessage(ok, detalle, pr_url)),
                         )
                         if ok:
                             payload = await self._git_status_encoded(rt)

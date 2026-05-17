@@ -36,7 +36,7 @@ export interface State {
   // vivo); el Ctrl+S solo dispara el análisis de impacto.
   dirty: Record<string, boolean>;
   git: GitStatus | null;
-  gitResult: { ok: boolean; detail: string } | null;
+  gitResult: { ok: boolean; detail: string; pr_url: string } | null;
   esAdmin: boolean;
   usuarios: string[];
   proyecto: string;
@@ -201,7 +201,7 @@ function onMessage(raw: string) {
       set({ git: m });
       break;
     case "git_result":
-      set({ gitResult: { ok: m.ok, detail: m.detail } });
+      set({ gitResult: { ok: m.ok, detail: m.detail, pr_url: m.pr_url || "" } });
       break;
   }
 }

@@ -169,3 +169,64 @@ def test_push_sin_remoto_falla(tmp_path) -> None:
     r.asegurar()
     ok, detalle = r.push("u", "t")
     assert ok is False and "remoto" in detalle
+
+
+# --- Capa 21: push a la rama del equipo + link de PR ---------------------
+
+from laidea.git.repo import _url_pr  # noqa: E402
+
+
+def test_url_pr_github_ssh_y_https() -> None:
+    assert _url_pr("git@github.com:acme/app.git", "laidea/ef6a") == \
+        "https://github.com/acme/app/pull/new/laidea/ef6a"
+    assert _url_pr("https://github.com/acme/app", "laidea/x") == \
+        "https://github.com/acme/app/pull/new/laidea/x"
+    assert _url_pr("ssh://git@github.com/acme/app.git", "r") == \
+        "https://github.com/acme/app/pull/new/r"
+
+
+def test_url_pr_no_github_es_vacio() -> None:
+    # No se inventa link para remotos que no son GitHub (gitlab, bare local).
+    assert _url_pr("git@gitlab.com:acme/app.git", "r") == ""
+    assert _url_pr("/tmp/repo-bare", "r") == ""
+    assert _url_pr("", "r") == ""
+
+
+def test_push_a_rama_no_toca_main(tmp_path) -> None:
+    remoto = _remoto_local(tmp_path)
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    assert r.clonar(str(remoto), "u", "t")[0] is True
+    (ws / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
+    assert r.commitear("c", "ana", "ana@laidea.local")[0] is True
+    ok, detalle, pr = r.push_a_rama("u", "t", "laidea/eq1")
+    assert ok is True, detalle
+    assert pr == ""  # remoto local, no github
+    # El commit está en la rama del equipo, NO en la default (main).
+    heads = subprocess.run(
+        ["git", "ls-remote", "--heads", str(remoto)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "refs/heads/laidea/eq1" in heads
+    verif = tmp_path / "verif"
+    subprocess.run(["git", "clone", "-q", "--branch", "laidea/eq1",
+                    str(remoto), str(verif)], check=True)
+    assert (verif / "nuevo.py").exists()
+
+
+def test_push_a_rama_idempotente_tras_reclone(tmp_path) -> None:
+    # La rama es de publicación: re-pushear tras un clone destructivo
+    # (historia local nueva) NO debe quedar bloqueado por non-ff.
+    remoto = _remoto_local(tmp_path)
+    ws = tmp_path / "ws"
+    r = GitRepo(ws)
+    r.clonar(str(remoto), "u", "t")
+    (ws / "a.py").write_text("1\n", encoding="utf-8")
+    r.commitear("c1", "ana", "ana@laidea.local")
+    assert r.push_a_rama("u", "t", "laidea/eq1")[0] is True
+    # Clone destructivo: historia local distinta.
+    r.clonar(str(remoto), "u", "t")
+    (ws / "b.py").write_text("2\n", encoding="utf-8")
+    r.commitear("c2", "ana", "ana@laidea.local")
+    ok, detalle, _ = r.push_a_rama("u", "t", "laidea/eq1")
+    assert ok is True, detalle  # force-with-lease lo permite (rama propia)
