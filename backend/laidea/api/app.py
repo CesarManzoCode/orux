@@ -10,16 +10,20 @@ Montado en `/api/v1` (lo pidió el usuario; versionar el path ahora es
 gratis). NO es API pública: token de OPERADOR de plataforma (vos), rol
 distinto del admin-de-equipo de capa 12/15.
 
-Seguridad (una vez): sin `LAIDEA_ADMIN_TOKEN` la API queda CERRADA (503),
-nunca abierta. El token se compara en tiempo constante. Los stores viven
-en `app.state` (deploy: Postgres en startup; tests: inyectados directo) —
-UN solo set de handlers, sin duplicar.
+Seguridad (una vez): el operador es una CUENTA ya registrada
+(`LAIDEA_ADMIN_USER`) que entra con su usuario+contraseña normales y
+recibe un token de SESIÓN firmado (HMAC; secreto `LAIDEA_ADMIN_TOKEN` que
+NUNCA sale del server — solo firma/verifica). Antes el cliente mandaba el
+secreto crudo en cada request; ahora no transmite ningún secreto. Sin
+`LAIDEA_ADMIN_USER` o sin `LAIDEA_ADMIN_TOKEN` la API queda CERRADA (503),
+nunca abierta. La lógica (PBKDF2 + firmar/validar) vive en `service.py` y
+se prueba 100% en sandbox; acá solo HTTP. Los stores viven en `app.state`
+(deploy: Postgres en startup; tests: inyectados) — UN set de handlers.
 """
 
 from __future__ import annotations
 
 import contextlib
-import hmac
 import os
 
 from starlette.applications import Starlette
@@ -32,22 +36,51 @@ from ..db.stores import PgUserStore
 from ..teams import PgTeamStore
 from . import service
 
-_TOKEN = os.environ.get("LAIDEA_ADMIN_TOKEN", "")
+# Quién es el operador (una cuenta registrada) y el secreto de FIRMA de sus
+# tokens de sesión (nunca se manda al cliente). Faltando cualquiera: 503.
+_ADMIN_USER = os.environ.get("LAIDEA_ADMIN_USER", "")
+_SECRET = os.environ.get("LAIDEA_ADMIN_TOKEN", "")
 
 
 def _gate(req: Request) -> JSONResponse | None:
-    """None = pasa. Sin token configurado: cerrado (503). Mal token: 401."""
-    if not _TOKEN:
+    """None = pasa. Sin configurar: cerrado (503). Token de sesión inválido
+    o no es el operador: 401. La validación (firma HMAC + que el usuario
+    SEA el operador) la hace `service.operador_de_token` (pura, testeada)."""
+    if not _ADMIN_USER or not _SECRET:
         return JSONResponse(
-            {"error": "API de operador no configurada "
-                      "(falta LAIDEA_ADMIN_TOKEN)"}, status_code=503,
+            {"error": "API de operador no configurada (falta "
+                      "LAIDEA_ADMIN_USER / LAIDEA_ADMIN_TOKEN)"},
+            status_code=503,
         )
     cab = req.headers.get("authorization", "")
     pre = "Bearer "
-    ok = cab.startswith(pre) and hmac.compare_digest(cab[len(pre):], _TOKEN)
-    return None if ok else JSONResponse(
-        {"error": "no autorizado"}, status_code=401
+    tok = cab[len(pre):] if cab.startswith(pre) else ""
+    if service.operador_de_token(tok, _ADMIN_USER, _SECRET) is not None:
+        return None
+    return JSONResponse({"error": "no autorizado"}, status_code=401)
+
+
+async def _login(req: Request) -> JSONResponse:
+    """POST {username, password} -> {token}. La compuerta real: verifica
+    credenciales (PBKDF2 vía el store) y que sea el operador; si OK emite
+    un token de sesión firmado. 401 genérico si algo falla (no filtra qué
+    cuenta es el operador). 503 si no está configurado."""
+    if not _ADMIN_USER or not _SECRET:
+        return JSONResponse(
+            {"error": "API de operador no configurada"}, status_code=503
+        )
+    try:
+        body = await req.json()
+    except Exception:  # noqa: BLE001 - body no-JSON
+        return JSONResponse({"error": "body JSON inválido"},
+                            status_code=400)
+    token = await service.login_operador(
+        req.app.state.users, _ADMIN_USER, _SECRET,
+        str(body.get("username", "")), str(body.get("password", "")),
     )
+    if token is None:
+        return JSONResponse({"error": "no autorizado"}, status_code=401)
+    return JSONResponse({"token": token})
 
 
 async def _health(_req: Request) -> JSONResponse:
@@ -100,6 +133,7 @@ async def _plan(req: Request) -> JSONResponse:
 
 _RUTAS = [
     Route("/api/v1/health", _health),
+    Route("/api/v1/login", _login, methods=["POST"]),
     Route("/api/v1/users", _usuarios),
     Route("/api/v1/teams", _teams),
     Route("/api/v1/teams/{tid}", _detalle),

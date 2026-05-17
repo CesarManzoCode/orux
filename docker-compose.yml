@@ -26,8 +26,9 @@ services:
     # (misma imagen, otro comando). No comparte el loop ni el estado del
     # server WS: opera solo sobre Postgres (datos durables). Un fallo acá
     # NO toca la colaboración. No publica puertos (Caddy lo proxya en
-    # /api). LAIDEA_ADMIN_TOKEN viene del host (como LAIDEA_SITE_ADDRESS);
-    # SIN ese token la API queda cerrada (503), nunca abierta.
+    # /api). Auth por CUENTA: LAIDEA_ADMIN_USER (el usuario operador) +
+    # LAIDEA_ADMIN_TOKEN (secreto de FIRMA, nunca sale del server) vienen
+    # del host; sin cualquiera la consola queda cerrada (503).
     build: .
     restart: unless-stopped
     depends_on:
@@ -38,6 +39,7 @@ services:
       - "8800"
     environment:
       - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
+      - LAIDEA_ADMIN_USER=${LAIDEA_ADMIN_USER:-}
       - LAIDEA_ADMIN_TOKEN=${LAIDEA_ADMIN_TOKEN:-}
     # /api/v1/health no requiere token (capa 23): healthcheck honesto.
     # `curl` ya está en la imagen (capa 20). Unhealthy -> Docker reinicia.

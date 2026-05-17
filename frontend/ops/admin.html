@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>laidea · operador</title>
 <!--
-  Capa 23: panel de OPERADOR (vos), NO el cliente del IDE. Vanilla, una
-  página, sin build, separada de todo. Habla la API interna /api/v1 con un
-  token de operador (Bearer). El token vive solo en sessionStorage (no se
-  persiste). Esto es la consola de cobro manual: alguien paga → premium.
+  Capa 23 (+ auth por cuenta): panel de OPERADOR (vos), NO el cliente del
+  IDE. Vanilla, una página, sin build, separada de todo. Entrás con TU
+  cuenta ya registrada (usuario+contraseña, el mismo login del IDE); el
+  server (LAIDEA_ADMIN_USER) verifica que sos el operador y emite un token
+  de SESIÓN firmado. Ese token (no un secreto compartido) vive solo en
+  sessionStorage. Esto es la consola de cobro manual: alguien paga → premium.
 
   Diseño coherente con la identidad visual del producto (negros fríos,
   acento verde esmeralda, tipografía system-ui). Sin dependencias externas.
@@ -601,13 +603,21 @@ table#teams td {
         </div>
       </div>
       <h2>Acceso restringido</h2>
-      <p>Ingresá el token de operador para continuar. No se guarda en disco.</p>
+      <p>Entrá con tu cuenta de operador (el mismo usuario y contraseña con
+         los que iniciás sesión). La sesión vive solo en esta pestaña.</p>
     </div>
     <div class="gate-body">
       <div class="field">
-        <label for="tok">Token de operador</label>
-        <input id="tok" type="password" placeholder="LAIDEA_ADMIN_TOKEN"
-               autocomplete="off" spellcheck="false">
+        <label for="usr">Usuario</label>
+        <input id="usr" type="text" placeholder="tu usuario"
+               autocomplete="username" spellcheck="false"
+               onkeydown="if(event.key==='Enter')entrar()">
+      </div>
+      <div class="field">
+        <label for="pwd">Contraseña</label>
+        <input id="pwd" type="password" placeholder="tu contraseña"
+               autocomplete="current-password"
+               onkeydown="if(event.key==='Enter')entrar()">
       </div>
       <button class="btn btn-primary" onclick="entrar()">Entrar</button>
       <div id="gmsg" class="msg"></div>
@@ -674,8 +684,9 @@ table#teams td {
 </div>
 
 <!-- ───────────────────────────────────────────────────────────────────────
-     SCRIPT: lógica de API intacta. Contrato con el backend preservado.
-     NO modificar: endpoints, headers, nombres de funciones, sessionStorage.
+     SCRIPT: auth ahora por cuenta (POST /api/v1/login -> token de sesión).
+     El resto del contrato se preserva: api()/setPlan()/cargar(), Bearer,
+     sessionStorage("laidea_op"), endpoints /teams /users /teams/:id/plan.
 ─────────────────────────────────────────────────────────────────────────── -->
 <script>
 const API = "/api/v1";
@@ -691,17 +702,48 @@ async function api(path, opts) {
   return r.json();
 }
 
+function _abrirPanel() {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("panel").style.display = "";
+  cargar();
+}
+
+// Login por CUENTA: usuario+contraseña -> el server valida (PBKDF2) y que
+// seas el operador, y devuelve un token de SESIÓN firmado. Solo ese token
+// (no un secreto) se guarda en sessionStorage; de ahí en más todo va con
+// Bearer, igual que antes (api()/setPlan/cargar intactos).
 async function entrar() {
-  const t = document.getElementById("tok").value.trim();
-  sessionStorage.setItem("laidea_op", t);
+  const username = document.getElementById("usr").value.trim();
+  const password = document.getElementById("pwd").value;
+  const gm = document.getElementById("gmsg");
   try {
-    await api("/teams");                       // valida el token
-    document.getElementById("gate").style.display = "none";
-    document.getElementById("panel").style.display = "";
-    cargar();
+    const r = await fetch(API + "/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) {
+      throw new Error((await r.json().catch(() => ({}))).error
+                       || ("HTTP " + r.status));
+    }
+    const { token } = await r.json();
+    sessionStorage.setItem("laidea_op", token);
+    document.getElementById("pwd").value = "";   // no dejar la pass en el DOM
+    _abrirPanel();
   } catch (e) {
-    document.getElementById("gmsg").className = "msg err";
-    document.getElementById("gmsg").textContent = "no autorizado: " + e.message;
+    gm.className = "msg err";
+    gm.textContent = "no autorizado: " + e.message;
+  }
+}
+
+// Auto-login al recargar la pestaña: si hay token de sesión, se valida
+// contra /teams; si caducó/lo rotaron, se descarta y se muestra el login.
+async function _reanudar() {
+  try {
+    await api("/teams");
+    _abrirPanel();
+  } catch (_e) {
+    sessionStorage.removeItem("laidea_op");
   }
 }
 
@@ -808,8 +850,8 @@ async function cargar() {
   } catch (e) { flash("error al cargar datos: " + e.message, false); }
 }
 
-/* Auto-login si hay token en sessionStorage (recarga de pestaña) */
-if (tok()) entrar();
+/* Auto-login si hay token de sesión guardado (recarga de pestaña) */
+if (tok()) _reanudar();
 </script>
 </body>
 </html>
