@@ -443,6 +443,139 @@ button:active { transform: translateY(0.5px); }
 .login-card .secundario { background: transparent; color: var(--text); border-color: var(--border); }
 .login-card .err { font-size: 12px; color: var(--bad); min-height: 1.1em; }
 
+/* --- Landing (capa 25): split con relato + compuerta ---
+   Dos áreas de color a propósito: el panel de marca (acento, vivo) vs.
+   el de auth (negro frío). Es lo ÚNICO con animación en todo el
+   producto — el IDE sigue quieto. */
+.landing {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; grid-template-columns: 1.05fr 0.95fr;
+  background: var(--bg-deep); overflow: hidden;
+}
+
+/* --- Lado relato: área de color de marca --- */
+.landing-pitch {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center;
+  padding: clamp(2rem, 6vw, 5.5rem);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.03), transparent 40%),
+    radial-gradient(120% 90% at 0% 0%, rgba(76,195,138,.16), transparent 55%),
+    radial-gradient(120% 90% at 100% 100%, rgba(47,230,198,.12), transparent 55%),
+    var(--bg);
+  border-right: 1px solid var(--border-soft);
+}
+/* Aurora ambiental que deriva LENTO. Profundidad sin distraer; el panel
+   se siente vivo aunque nadie toque nada. */
+.landing-pitch .lp-aurora {
+  position: absolute; inset: -30%; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(40% 40% at 30% 35%, rgba(76,195,138,.20), transparent 60%),
+    radial-gradient(35% 35% at 70% 65%, rgba(47,230,198,.16), transparent 60%);
+  filter: blur(28px); opacity: .9;
+  animation: lp-drift 22s ease-in-out infinite alternate;
+}
+@keyframes lp-drift {
+  0%   { transform: translate3d(-4%, -3%, 0) scale(1.05); }
+  100% { transform: translate3d(5%, 4%, 0) scale(1.15); }
+}
+.landing-pitch .lp-inner {
+  position: relative; z-index: 1; max-width: 460px;
+  animation: landing-in .6s cubic-bezier(.22,1,.36,1) both;
+}
+.lp-marca {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.03em;
+  color: var(--text); margin-bottom: 1.6rem;
+}
+.lp-marca b {
+  font-weight: 800;
+  background: var(--grad); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
+.lp-tag {
+  margin: 0 0 1.1rem; font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.12; font-weight: 800; letter-spacing: -0.03em;
+  color: var(--text);
+}
+.lp-tag span {
+  background: var(--grad); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
+.lp-tesis {
+  margin: 0 0 1.8rem; font-size: 14.5px; line-height: 1.65;
+  color: var(--muted); max-width: 40ch;
+}
+.lp-puntos { list-style: none; margin: 0 0 2rem; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.lp-puntos li {
+  font-size: 13px; line-height: 1.55; color: var(--muted);
+  padding-left: 1.4rem; position: relative;
+  animation: landing-in .55s cubic-bezier(.22,1,.36,1) both;
+}
+.lp-puntos li::before {
+  content: ""; position: absolute; left: 0; top: 0.42em;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--grad); box-shadow: 0 0 10px -1px var(--accent);
+}
+.lp-puntos b { color: var(--text); font-weight: 700; }
+.lp-puntos code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  background: var(--surface-2); color: var(--accent);
+  padding: 1px 5px; border-radius: 4px;
+}
+.lp-presencia {
+  display: inline-flex; align-items: center; gap: 0;
+  animation: landing-in .55s .42s cubic-bezier(.22,1,.36,1) both;
+}
+.lp-presencia .pp {
+  width: 30px; height: 30px; border-radius: 50%; margin-left: -8px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 800;
+  color: #06120c; border: 2px solid var(--bg);
+  animation: lp-pulse 2.6s ease-in-out infinite;
+}
+.lp-presencia .pp:first-child { margin-left: 0; animation-delay: 0s; }
+.lp-presencia .pp:nth-child(2) { animation-delay: .35s; }
+.lp-presencia .pp:nth-child(3) { animation-delay: .7s; }
+.lp-presencia .pp-txt {
+  margin-left: 0.8rem; font-size: 12px; font-weight: 600;
+  color: var(--muted);
+}
+@keyframes lp-pulse {
+  0%, 100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(76,195,138,0); }
+  45%      { transform: translateY(-3px); box-shadow: 0 0 0 6px rgba(76,195,138,.10); }
+}
+
+/* --- Lado auth: negro frío, la tarjeta entra --- */
+.landing-auth {
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  background: radial-gradient(800px 500px at 70% 0%, rgba(76,195,138,.05), transparent 60%), var(--bg-deep);
+}
+.landing-auth .login-card {
+  animation: landing-in .6s .12s cubic-bezier(.22,1,.36,1) both;
+}
+
+@keyframes landing-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Pantallas angostas: apilado, el relato se condensa pero no desaparece. */
+@media (max-width: 860px) {
+  .landing { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .landing-pitch { padding: 2.2rem 1.6rem; border-right: none; border-bottom: 1px solid var(--border-soft); }
+  .lp-marca { margin-bottom: 1rem; }
+  .lp-tag { font-size: clamp(24px, 7vw, 32px); }
+  .lp-puntos, .lp-presencia { display: none; }
+  .lp-tesis { margin-bottom: 0; }
+}
+
+/* El IDE es quieto a propósito; quien pide quietud, la tiene. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-pitch .lp-aurora,
+  .lp-inner, .lp-puntos li, .lp-presencia, .lp-presencia .pp,
+  .landing-auth .login-card { animation: none; }
+}
+
 /* --- Panel git --- */
 .gitp { display: flex; flex-direction: column; gap: 0.5rem; }
 .gitp .cab {
