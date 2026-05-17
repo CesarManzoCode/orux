@@ -36,7 +36,8 @@ from secrets import token_hex
 from websockets.asyncio.server import ServerConnection, serve
 
 from ..analysis import impacto, motivos as motivos_de
-from ..analysis.lsp import arrancar_pyright
+from ..analysis.lsp import arrancar_lsp
+from ..analysis.tiers import lenguaje_de
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -153,8 +154,10 @@ class TeamRuntime:
         # storage (tests en memoria) no hay dir => nunca se arranca LSP, se
         # usa la jerarquía de capa 16 (sandbox sigue verde).
         self._ws_dir = str(storage.root) if storage is not None else None
-        self._lsp = None
-        self._lsp_intentado = False
+        # Capa 18: una sesión LSP POR LENGUAJE ("py"->pyright,
+        # "jsts"->tsserver). Lazy: se arranca al 1er análisis de ESE
+        # lenguaje y se cachea (incl. None = "no hay, no reintentar").
+        self._lsp: dict[str, object] = {}
         self._lsp_lock = threading.Lock()
         self.clients: set[ServerConnection] = set()
         self.roster = Roster()
@@ -167,32 +170,32 @@ class TeamRuntime:
         # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
         self._git_lock = asyncio.Lock()
 
-    def lsp_sesion(self):
-        """Sesión pyright de ESTE equipo, tibia: se arranca UNA vez (lazy,
-        en el primer análisis) y se reusa toda la sesión. Llamar SIEMPRE
-        desde un hilo worker (el spawn+handshake es bloqueante). None si no
-        hay pyright/dir => el análisis degrada a capa 16. Cachear None evita
-        reintentar el spawn en cada tecla.
+    def lsp_sesion(self, lang: str | None):
+        """Sesión LSP de ESTE equipo para `lang`, tibia: se arranca UNA vez
+        (lazy, en el 1er análisis de ese lenguaje) y se reusa. Llamar
+        SIEMPRE desde un hilo worker (spawn+handshake es bloqueante). None
+        si el lenguaje no tiene server / no hay dir => degrada a capa 16.
+        Cachear None evita reintentar el spawn en cada tecla.
         """
+        if lang is None or self._ws_dir is None:
+            return None
         with self._lsp_lock:
-            if not self._lsp_intentado:
-                self._lsp_intentado = True
-                if self._ws_dir is not None:
-                    self._lsp = arrancar_pyright(self._ws_dir)
-            return self._lsp
+            if lang not in self._lsp:
+                self._lsp[lang] = arrancar_lsp(lang, self._ws_dir)
+            return self._lsp[lang]
 
     def reciclar_lsp(self) -> None:
-        """Mata la sesión y fuerza re-arranque al próximo análisis. Para el
-        reinicio de capa 15 (clone destructivo cambia TODO el workspace: el
-        índice de pyright quedó obsoleto)."""
+        """Mata TODAS las sesiones y fuerza re-arranque al próximo análisis.
+        Para el reinicio de capa 15 (clone destructivo cambia TODO el
+        workspace: el índice de cada server quedó obsoleto)."""
         with self._lsp_lock:
-            if self._lsp is not None:
-                try:
-                    self._lsp.cerrar()
-                except Exception:  # noqa: BLE001
-                    pass
-            self._lsp = None
-            self._lsp_intentado = False
+            for ses in self._lsp.values():
+                if ses is not None:
+                    try:
+                        ses.cerrar()
+                    except Exception:  # noqa: BLE001
+                        pass
+            self._lsp = {}
 
 
 class SyncServer:
@@ -338,7 +341,7 @@ class SyncServer:
         snap = rt.workspace.snapshot()
 
         def _analizar() -> tuple[dict, dict]:
-            ses = rt.lsp_sesion()
+            ses = rt.lsp_sesion(lenguaje_de(path))
             af = impacto(snap, path, viejo, nuevo, ses)
             if not af:
                 return {}, {}

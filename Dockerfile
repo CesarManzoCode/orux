@@ -12,9 +12,15 @@ FROM python:3.12-slim AS base
 # NO la trae -> el log lo gritó: "node: error while loading shared
 # libraries: libatomic.so.1". Sin ella pyright no arranca y el análisis
 # degrada mudo a capa 16. Una sola lib, sin recomendados.
+#
+# `nodejs`/`npm` (capa 18): a diferencia de pyright (su paquete pip trae su
+# propio Node), `typescript-language-server` —el Tier 0 de JS/TS— es npm y
+# necesita Node instalado. python:3.12-slim no lo trae. Es el precio honesto
+# de darle resolución real a los devs de TS (el gatillo original del
+# multi-lenguaje): la imagen crece, pero la feature es real.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      git ca-certificates libatomic1 \
+      git ca-certificates libatomic1 nodejs npm \
  && rm -rf /var/lib/apt/lists/*
 
 # Usuario no-root: no se corre el server como root en un servidor expuesto.
@@ -40,6 +46,15 @@ ENV PYRIGHT_PYTHON_CACHE_DIR=/opt/pyright
 RUN mkdir -p /opt/pyright \
  && (pyright --version || true) \
  && chown -R laidea:laidea /opt/pyright
+
+# Capa 18: typescript-language-server + su tsserver (paquete `typescript`),
+# global. Versiones fijas (reproducible). A diferencia de pyright-python NO
+# necesita un cache escribible en runtime (es un global npm normal, los
+# binarios quedan en /usr/local/bin, world-exec). Si fallara, el análisis
+# de JS/TS degrada a tree-sitter/regex (no fatal).
+RUN npm install -g --no-fund --no-audit \
+      typescript@5.4.5 typescript-language-server@4.3.3 \
+ && npm cache clean --force
 
 # Estado persistente (workspace=repo git, users, ownership, secret). Es un
 # VOLUME: vive fuera del contenedor para sobrevivir recrearlo. Propiedad del
