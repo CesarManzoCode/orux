@@ -33,6 +33,11 @@ PLANES: dict[str, dict] = {
         "jvm": False,           # Java/Kotlin (servers JVM caros) = premium
         "warm": False,          # idle-eviction agresivo; premium siempre tibio
         "conocimiento": False,  # distribución de conocimiento = premium
+        # Capa 26: rename seguro coordinado. Free = solo el aviso de texto
+        # accionable ("se renombró X→Y, actualizá los usos"); premium = la
+        # propagación automática como propuesta capa 4 (1-clic aprobar/
+        # rechazar). Free real (sabe qué y dónde), premium automatiza la mano.
+        "rename": False,
     },
     "premium": {
         "max_devs": INF,
@@ -42,6 +47,7 @@ PLANES: dict[str, dict] = {
         "jvm": True,
         "warm": True,
         "conocimiento": True,
+        "rename": True,
     },
 }
 
@@ -75,6 +81,12 @@ def permite_workspace(plan: str, workspaces_actuales: int) -> bool:
 
 def permite_jvm(plan: str) -> bool:
     return limites(plan)["jvm"]
+
+
+def permite_rename(plan: str) -> bool:
+    """Capa 26: ¿este plan aplica el rename automático (propuesta capa 4) o
+    solo da el aviso de texto? Free = solo texto; premium = lo aplica."""
+    return limites(plan)["rename"]
 
 
 def impacto_modo(plan: str) -> str:

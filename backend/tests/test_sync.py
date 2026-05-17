@@ -1579,3 +1579,105 @@ def test_cap_de_lenguajes_del_plan_en_el_gate_lsp() -> None:
     # registrado aunque en sandbox el server no exista -> None).
     assert rt.lsp_sesion("rust", cap_langs=float("inf")) is None
     assert "rust" in rt._lsp           # pasó el gate (lo intentó)
+
+
+# --- Capa 26: rename seguro coordinado (premium) -------------------------
+# El fan-out real (pyright/tsserver) es VPS; en sandbox `impacto` degrada a
+# token-scan, suficiente para fijar el flujo end-to-end: detección sobre el
+# baseline de capa 19 + entrega como propuesta capa 4 VERBATIM (premium) o
+# aviso de texto accionable (free). Cero protocolo/cliente nuevo.
+
+
+async def _esperar_update(ws, path: str, timeout: float = 4) -> None:
+    """Lee hasta el broadcast de `update` de `path` (descarta ownership/
+    otros). Cuando llega, el server YA aplicó esa edición: ordena las dos
+    conexiones de forma determinista."""
+    while True:
+        m = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+        if m.get("type") == "update" and m.get("path") == path:
+            return
+
+
+async def _sembrar_rename(sync_server, u1, u2):
+    """u1 (dueño de models.py) deja `class C` con `variable` checkpointeado;
+    u2 (dueño de auth.py) usa `x.variable`; u1 renombra variable->name y
+    hace Ctrl+S. Deja todo listo para que el server propague."""
+    await handshake(u1)            # u1 crea el equipo (admin)
+    await handshake(u2)            # u2 se une al mismo equipo
+    tid = (await sync_server.teams.todos())[0]["id"]
+
+    await u1.send(json.dumps({
+        "type": "update", "path": "models.py",
+        "content": "class C:\n    variable = 1\n",
+    }))
+    await _esperar_update(u2, "models.py")
+    # Checkpoint: el baseline de capa 19 avanza a la versión con `variable`.
+    await u1.send(json.dumps({"type": "save", "path": "models.py"}))
+
+    await u2.send(json.dumps({
+        "type": "update", "path": "auth.py",
+        "content": "from models import C\nx = C()\nprint(x.variable)\n",
+    }))
+    await _esperar_update(u1, "auth.py")
+
+    # Rename + checkpoint: baseline(variable) -> ahora(name) = rename.
+    await u1.send(json.dumps({
+        "type": "update", "path": "models.py",
+        "content": "class C:\n    name = 1\n",
+    }))
+    await u1.send(json.dumps({"type": "save", "path": "models.py"}))
+    return tid
+
+
+async def test_capa26_premium_propaga_rename_como_propuesta(servidor) -> None:
+    sync_server, port = servidor
+    async with connect(f"ws://localhost:{port}") as u1, connect(
+        f"ws://localhost:{port}"
+    ) as u2:
+        # Premium se setea antes del save que dispara la propagación.
+        await handshake(u1)
+        await handshake(u2)
+        tid = (await sync_server.teams.todos())[0]["id"]
+        await sync_server.teams.set_plan(tid, "premium")
+
+        await u1.send(json.dumps({
+            "type": "update", "path": "models.py",
+            "content": "class C:\n    variable = 1\n",
+        }))
+        await _esperar_update(u2, "models.py")
+        await u1.send(json.dumps({"type": "save", "path": "models.py"}))
+        await u2.send(json.dumps({
+            "type": "update", "path": "auth.py",
+            "content": "from models import C\nx = C()\nprint(x.variable)\n",
+        }))
+        await _esperar_update(u1, "auth.py")
+        await u1.send(json.dumps({
+            "type": "update", "path": "models.py",
+            "content": "class C:\n    name = 1\n",
+        }))
+        await u1.send(json.dumps({"type": "save", "path": "models.py"}))
+
+        # Premium: a u2 (dueño de auth.py) le llega una PROPUESTA capa 4
+        # con el codemod ya aplicado y el contexto en el nombre del autor.
+        msg = await recv_tipo(u2, "proposal", timeout=5)
+        p = msg["proposal"]
+        assert p["path"] == "auth.py"
+        assert "x.name" in p["content"]
+        assert "x.variable" not in p["content"]
+        assert "rename variable→name" in p["author_name"]
+
+
+async def test_capa26_free_da_solo_el_aviso_de_texto(servidor) -> None:
+    sync_server, port = servidor
+    async with connect(f"ws://localhost:{port}") as u1, connect(
+        f"ws://localhost:{port}"
+    ) as u2:
+        # Plan free por defecto: NO se aplica nada solo; aviso accionable.
+        await _sembrar_rename(sync_server, u1, u2)
+
+        msg = await recv_tipo(u2, "impact", timeout=5)
+        assert msg["affected_path"] == "auth.py"
+        assert "C" in msg["symbols"]
+        motivo = msg["motivos"][msg["symbols"].index("C")]
+        assert "se renombró" in motivo
+        assert "actualizá los usos" in motivo

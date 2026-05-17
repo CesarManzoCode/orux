@@ -42,7 +42,13 @@ from ..analysis.modelo import severidad_de
 from ..analysis.lsp import arrancar_lsp
 from ..analysis.tiers import lenguaje_de
 from ..analysis.transitive import impacto_transitivo
-from ..plans import limites
+from ..analysis.rename import (
+    Rename,
+    aplicar_rename,
+    detectar_rename,
+    texto_sugerencia,
+)
+from ..plans import limites, permite_rename
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -371,8 +377,15 @@ class SyncServer:
         nuevo: str,
         autor_id: str,
         autor_nombre: str,
+        rename: Rename | None = None,
     ) -> None:
         """Capa 6: avisa al dueño de cada archivo afectado por este cambio.
+
+        Capa 26: `rename` (free) = se detectó un rename de miembro confiable
+        pero el plan NO aplica el codemod; el aviso de ESE símbolo se
+        reescribe al texto accionable ("se renombró X→Y, actualizá los
+        usos"). `rename=None` => comportamiento byte-idéntico a capa 6/24
+        (todos los tests previos siguen valiendo sin tocarse).
 
         "Sin clickear, lo hace solo" (README). Reglas: si el afectado no
         tiene dueño no hay a quién avisar; si el dueño es el propio autor no
@@ -475,6 +488,11 @@ class SyncServer:
         afectados, razones = await asyncio.to_thread(_analizar)
         if not afectados:
             return
+        # Capa 26 (free): el cambio ES un rename confiable pero el plan no
+        # lo aplica solo. Se cambia el "por qué" de ESE símbolo por el
+        # qué-hacer concreto; el resto del aviso (a quién, byte-idéntico).
+        if rename is not None and rename.clase in razones:
+            razones = {**razones, rename.clase: texto_sugerencia(rename)}
         # Reagrupamos símbolo->archivos ==> archivo_afectado->símbolos.
         por_archivo: dict[str, list[str]] = {}
         for simbolo, archivos in afectados.items():
@@ -501,6 +519,71 @@ class SyncServer:
                     )
                 ),
             )
+
+    async def _propagar_rename(
+        self,
+        rt: TeamRuntime,
+        path: str,
+        viejo: str,
+        nuevo: str,
+        ren: Rename,
+        autor_id: str,
+        autor_nombre: str,
+    ) -> None:
+        """Capa 26 (premium): propaga un rename de miembro detectado a quien
+        usa la clase, como **propuesta tentativa de capa 4 VERBATIM** — la
+        misma ventana aprobar/rechazar que ya conocen. Cero UX/protocolo
+        nuevo: la feature entra por la puerta que ya existe.
+
+        Reusa el fan-out de capas 17-21 (`impacto`) para saber QUÉ archivos
+        usan la clase de verdad: con sesión LSP viva es resolución real
+        (mata falsos positivos); sin ella degrada a token-scan, igual que
+        TODO el análisis. El dueño REVISA el diff y aprueba/rechaza: no es
+        auto-commit a ciegas — la aprobación es la red de seguridad que
+        hace seguro un codemod heurístico (la tesis trabajando a favor).
+        """
+        snap = rt.workspace.snapshot()
+        plan = await self.teams.plan(rt.team_id)
+        cap_langs = limites(plan)["max_langs"]
+
+        def _afectados() -> dict[str, list[str]]:
+            ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
+            return impacto(snap, path, viejo, nuevo, ses)
+
+        afectados = await asyncio.to_thread(_afectados)
+        for af in afectados.get(ren.clase, []):
+            if af == path:
+                continue  # el origen ya tiene el rename (lo hizo el autor)
+            contenido = snap.get(af)
+            if contenido is None:
+                continue
+            propuesto = aplicar_rename(contenido, ren.viejo, ren.nuevo)
+            if propuesto == contenido:
+                continue  # el acceso no aparece textual acá: nada que hacer
+            dueño = rt.ownership.owner(af)
+            etiqueta = f"{autor_nombre} · rename {ren.viejo}→{ren.nuevo}"
+            if dueño is None or dueño == autor_id:
+                # Sin dueño o propio: se aplica directo (igual que un
+                # update de capa 4 sin dueño). El baseline avanza: el
+                # codemod ya es un punto coherente, no re-avisar sobre él.
+                rt.workspace.update(af, propuesto)
+                rt._analizado[af] = propuesto
+                await self._broadcast_todos(
+                    rt, encode(UpdateMessage(path=af, content=propuesto))
+                )
+            else:
+                # Dueño ajeno: propuesta capa 4 VERBATIM. La etiqueta lleva
+                # el contexto -> el dueño ve "Ana · rename x→y propone
+                # cambios a af" + el diff, con la MISMA UI de siempre.
+                prop = rt.proposals.put(
+                    path=af,
+                    author_id=autor_id,
+                    author_name=etiqueta,
+                    content=propuesto,
+                )
+                await self._enviar_a(
+                    rt, dueño, encode(ProposalMessage(proposal=prop))
+                )
 
     async def _git_status_encoded(self, rt: TeamRuntime) -> str | None:
         """Estado git del equipo, serializado, o None si no hay git."""
@@ -808,10 +891,38 @@ class SyncServer:
                     if actual is not None:
                         base = rt._analizado.get(message.path, "")
                         rt._analizado[message.path] = actual
-                        await self._notificar_impacto(
-                            rt, message.path, base, actual,
-                            yo.client_id, yo.name,
-                        )
+
+                        # Capa 26: ¿este checkpoint ES un rename de miembro
+                        # confiable? La detección usa los Simbolo del tier
+                        # (parseo) -> a un hilo (no bloquear el loop).
+                        def _det(b=base, a=actual, p=message.path):
+                            t = tiers.tier_para(p)
+                            if t is None:
+                                return None
+                            sa = t.simbolos(b)
+                            sd = t.simbolos(a)
+                            if sa is None or sd is None:
+                                return None
+                            return detectar_rename(sa, sd)
+
+                        ren = await asyncio.to_thread(_det)
+                        plan = await self.teams.plan(rt.team_id)
+                        if ren is not None and permite_rename(plan):
+                            # Premium: se propaga como propuesta capa 4. El
+                            # aviso genérico de ese símbolo lo reemplaza la
+                            # propuesta accionable (no se manda además).
+                            await self._propagar_rename(
+                                rt, message.path, base, actual,
+                                ren, yo.client_id, yo.name,
+                            )
+                        else:
+                            # Free (o sin rename): impacto normal; si hubo
+                            # rename confiable, el "por qué" se vuelve el
+                            # texto accionable (premium lo aplica por vos).
+                            await self._notificar_impacto(
+                                rt, message.path, base, actual,
+                                yo.client_id, yo.name, rename=ren,
+                            )
                 elif isinstance(message, DeleteMessage):
                     # Sólo borra el dueño, o cualquiera si no tiene dueño.
                     dueño = rt.ownership.owner(message.path)
