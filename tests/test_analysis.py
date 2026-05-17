@@ -161,3 +161,25 @@ def test_motivos_despacha_por_extension() -> None:
 def test_impacto_solo_para_archivos_py() -> None:
     workspace = {"notas.md": "texto", "a.py": "x = 1"}
     assert impacto(workspace, "notas.md", "viejo", "nuevo") == {}
+
+
+def test_deps_interfaz_python() -> None:
+    # Capa 24b: tipos en la interfaz (no en el cuerpo) -> el transitivo
+    # propaga por dependencia de tipos en Python.
+    from laidea.analysis.python import _deps_interfaz, _nodos_top
+
+    src = (
+        "def make_user(rol: Rol) -> Usuario:\n"
+        "    tmp = Interno()  # cuerpo: NO es interfaz\n"
+        "    return Usuario()\n"
+        "class Caja(Base):\n"
+        "    item: Producto\n"
+        "    def __init__(self, d: Deposito): ...\n"
+        "    def _oculto(self, x: Secreto): ...\n"
+    )
+    nt = _nodos_top(src)
+    df = _deps_interfaz(nt["make_user"])
+    assert {"Rol", "Usuario"} <= df and "Interno" not in df  # cuerpo afuera
+    dc = _deps_interfaz(nt["Caja"])
+    assert {"Base", "Producto", "Deposito"} <= dc
+    assert "Secreto" not in dc  # método privado: no es interfaz pública

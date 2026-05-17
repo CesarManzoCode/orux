@@ -156,6 +156,57 @@ def _superficie_clase(nodo: ast.ClassDef) -> tuple[str, frozenset[str]]:
     return init, frozenset(publicos)
 
 
+def _nombres_en(nodo: ast.AST | None) -> set[str]:
+    """Identificadores de tipo dentro de una anotación: `Usuario`,
+    `list[Usuario]`, `mod.Usuario` -> {Usuario, ...}. Sobre-aproxima (toma
+    Name y el .attr de Attribute): es un hint, mismo espíritu que el resto
+    del análisis por nombre."""
+    if nodo is None:
+        return set()
+    out: set[str] = set()
+    for n in ast.walk(nodo):
+        if isinstance(n, ast.Name):
+            out.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            out.add(n.attr)
+    return out
+
+
+def _deps_interfaz(nodo: ast.AST) -> frozenset[str]:
+    """Nombres de TIPO que aparecen en la INTERFAZ del símbolo (lo que ven
+    sus usuarios): retorno y params de funciones, bases de clase, tipos del
+    __init__ y de métodos/atributos públicos. Capa 24b: el impacto
+    transitivo propaga a través de esto (una función que retorna `Usuario`
+    depende de `Usuario` en su contrato, no solo en su cuerpo).
+    """
+    deps: set[str] = set()
+
+    def _de_args(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        a = fn.args
+        for arg in (
+            *a.posonlyargs, *a.args, *a.kwonlyargs,
+            a.vararg, a.kwarg,
+        ):
+            if arg is not None:
+                deps.update(_nombres_en(arg.annotation))
+        deps.update(_nombres_en(fn.returns))
+
+    if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        _de_args(nodo)
+    elif isinstance(nodo, ast.ClassDef):
+        for base in nodo.bases:
+            deps.update(_nombres_en(base))
+        for hijo in nodo.body:
+            if isinstance(hijo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if hijo.name == "__init__" or not hijo.name.startswith("_"):
+                    _de_args(hijo)
+            elif isinstance(hijo, ast.AnnAssign) and isinstance(
+                hijo.target, ast.Name
+            ) and not hijo.target.id.startswith("_"):
+                deps.update(_nombres_en(hijo.annotation))
+    return frozenset(deps)
+
+
 def _nodos_top(source: str) -> dict[str, ast.AST]:
     arbol = _parse(source)
     if arbol is None:

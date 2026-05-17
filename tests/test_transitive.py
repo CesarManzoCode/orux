@@ -128,3 +128,28 @@ def test_no_cruza_lenguajes() -> None:
         lenguaje_de=lambda p: "py" if p.endswith(".py") else "ts",
     )
     assert out == {} and trunc is False  # .ts no se cruza desde .py
+
+
+def test_propaga_por_deps_de_tipo() -> None:
+    # Capa 24b: si el sym aparece en deps (tipo de la interfaz) propaga,
+    # aunque NO esté en firma/superficie como texto.
+    ws = {"models.py": "m", "factory.py": "f", "api.py": "a"}
+    syms = {
+        "f": {"make_user": Simbolo("make_user", "make_user", fuente="def make_user(): return Usuario()", firma="()", deps=frozenset({"Usuario"}))},
+        "a": {"handler": Simbolo("handler", "handler", fuente="make_user()", firma="()")},
+    }
+    fan = {("Usuario", "models.py"): {"factory.py"},
+           ("make_user", "factory.py"): {"api.py"}}
+    out, trunc = impacto_transitivo(
+        ws, "models.py", ["Usuario"],
+        fan_out=lambda s, o: fan.get((s, o), set()),
+        extraer=lambda c: syms.get(c, {}),
+        lenguaje_de=_todo_py,
+    )
+    # make_user: Usuario en deps (no en firma) => interfaz => propaga.
+    assert out["factory.py"][0]["terminal"] is False
+    # y propagó: api.handler alcanzado vía make_user.
+    assert "api.py" in out
+    assert out["api.py"][0]["cadena"] == [
+        "models.py:Usuario", "factory.py:make_user", "api.py:handler"
+    ]

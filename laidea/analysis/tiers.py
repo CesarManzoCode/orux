@@ -68,16 +68,18 @@ class _PythonAst:
         out: dict[str, Simbolo] = {}
         for nombre, nodo in nodos.items():
             fuente = defs.get(nombre, "")
+            deps = python._deps_interfaz(nodo)  # capa 24b: tipos en interfaz
             if isinstance(nodo, python.ast.ClassDef):
                 init, superficie = python._superficie_clase(nodo)
                 out[nombre] = Simbolo(
                     nombre=nombre, tipo="clase", fuente=fuente,
                     init=init, superficie=superficie, detallado=True,
+                    deps=deps,
                 )
             else:  # FunctionDef | AsyncFunctionDef
                 out[nombre] = Simbolo(
                     nombre=nombre, tipo="funcion", fuente=fuente,
-                    firma=python._firma(nodo), detallado=True,
+                    firma=python._firma(nodo), detallado=True, deps=deps,
                 )
         return out
 

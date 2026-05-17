@@ -40,6 +40,12 @@ class Simbolo:
     - `detallado`: True solo si el tier aisló interfaz de cuerpo (parser
       real). False = heurístico: solo puede decir "cambió/desapareció", no
       separar firma de cuerpo. Es la capacidad del tier, no del símbolo.
+    - `deps`: nombres de TIPO que aparecen en la INTERFAZ del símbolo
+      (anotación de retorno, anotaciones de parámetros, bases de clase,
+      tipos de miembros públicos). Capa 24b: lo usa el impacto transitivo
+      para propagar por dependencia de tipos. ADITIVO y aparte de `firma`
+      a propósito: `cambios_que_importan_modelo` (capas 6/19) NO lo mira,
+      así que esos avisos quedan byte-idénticos.
     """
 
     nombre: str
@@ -49,6 +55,7 @@ class Simbolo:
     init: str = ""
     superficie: frozenset[str] = frozenset()
     detallado: bool = False
+    deps: frozenset[str] = frozenset()
 
 
 def cambios_que_importan_modelo(

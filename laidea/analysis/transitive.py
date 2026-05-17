@@ -52,6 +52,12 @@ def _en_interfaz(s: Simbolo, nombre: str) -> bool:
     """¿`nombre` está en la INTERFAZ de `s` (lo que ven sus usuarios:
     firma, constructor, miembros públicos)? Si sí, un cambio de `nombre`
     cambia el contrato de `s` → se propaga."""
+    # Capa 24b: `deps` = nombres de tipo de la interfaz (return/params/
+    # bases/atributos). Es lo que vuelve REAL la propagación en Python
+    # (la firma son nombres de params, no tipos). Match exacto en deps;
+    # texto para firma/init/superficie (heurístico, como el resto).
+    if nombre in s.deps:
+        return True
     interfaz = " ".join([s.firma or "", s.init or "", *sorted(s.superficie)])
     return _menciona(interfaz, nombre)
 
