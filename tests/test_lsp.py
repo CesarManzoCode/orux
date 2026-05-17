@@ -361,6 +361,37 @@ def test_sesion_lsp_caida_degrada_a_capa16() -> None:
     assert impacto(ws, "models.py", viejo, nuevo) == {"crea": ["auth.py"]}
 
 
+class _TsserverFalso(_PyrightFalso):
+    """Igual que el pyright falso pero 'parsea' `function NAME(` (TS/JS).
+    Sirve para probar el MISMO cliente LSP universal con otro lenguaje:
+    capa 18 = enchufar, no re-arquitecturar."""
+
+    _DEF = re.compile(r"^(?:export\s+)?function ([A-Za-z_]\w*)\(([^)]*)\)",
+                       re.M)
+
+
+def test_jsts_usa_fan_out_real_via_tsserver_falso() -> None:
+    raiz = "/data/ws/eq1"
+    ws = {
+        "models.ts": "export function crea(a) { return a }\n",
+        "auth.ts": "y = 1\n",        # NO contiene el token 'crea'
+        "reportes.ts": "z = 2\n",    # NO contiene el token 'crea'
+    }
+    srv = _TsserverFalso([path_a_uri(raiz, p) for p in ("auth.ts",)])
+    c = ClienteLSP(srv)
+    c.iniciar(path_a_uri(raiz, ""))
+    ses = SesionLSP(c, raiz)
+
+    viejo = ws["models.ts"]
+    nuevo = "export function crea(a, b) { return a }\n"  # cambió la firma
+
+    # Detección = jerarquía capa 16 (en sandbox, regex JS): hay aviso.
+    assert motivos("models.ts", viejo, nuevo, ses) != {}
+    # Fan-out = tsserver real: solo auth.ts, aunque el token no esté ahí.
+    af = impacto({**ws, "models.ts": nuevo}, "models.ts", viejo, nuevo, ses)
+    assert af == {"crea": ["auth.ts"]}
+
+
 def test_arrancar_pyright_sin_binario_degrada_a_None() -> None:
     # En el sandbox no hay `pyright-langserver`: el contrato es devolver
     # None (nunca explotar) para que la jerarquía caiga a capa 16. Si algún

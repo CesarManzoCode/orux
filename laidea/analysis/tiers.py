@@ -146,9 +146,11 @@ def lenguaje_de(path: str) -> str | None:
     return par[0] if par else None
 
 
-# pyright (capa 17) hoy solo Python. El cliente LSP es universal; sumar un
-# server de otro lenguaje es enchufar acá, sin re-arquitecturar.
-_LSP_LANGS = {"py"}
+# Lenguajes con Tier 0 LSP. Capa 17: py (pyright). Capa 18: jsts
+# (typescript-language-server) — el cliente LSP era universal, sumarlo fue
+# enchufar. La detección de cambio sigue en la jerarquía de capa 16; el LSP
+# aporta SOLO el fan-out real (ver `cambios`/`archivos_afectados`).
+_LSP_LANGS = {"py", "jsts"}
 
 
 def _usar_lsp(sesion, path: str) -> bool:

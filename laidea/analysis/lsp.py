@@ -369,9 +369,9 @@ class SesionLSP:
     def disponible(self) -> bool:
         return self._c._vivo
 
-    def _sync(self, uri: str, texto: str) -> None:
+    def _sync(self, uri: str, texto: str, lang_id: str) -> None:
         if uri not in self._ver:
-            self._c.abrir(uri, texto)
+            self._c.abrir(uri, texto, lang_id)
             self._ver[uri] = 1
         else:
             self._ver[uri] += 1
@@ -381,7 +381,7 @@ class SesionLSP:
         uri = path_a_uri(self._raiz, path)
         with self._lock:
             try:
-                self._sync(uri, fuente)
+                self._sync(uri, fuente, _language_id(path))
                 ds = self._c.document_symbol(uri)
             except ErrorLSP:
                 return None
@@ -397,9 +397,11 @@ class SesionLSP:
         with self._lock:
             try:
                 for p, txt in workspace.items():
-                    self._sync(path_a_uri(self._raiz, p), txt)
+                    self._sync(
+                        path_a_uri(self._raiz, p), txt, _language_id(p)
+                    )
                 uri = path_a_uri(self._raiz, path)
-                self._sync(uri, nuevo)
+                self._sync(uri, nuevo, _language_id(path))
                 ds = self._c.document_symbol(uri)
                 out: dict[str, set[str]] = {}
                 for s in syms:
@@ -472,30 +474,56 @@ class _TransporteProceso:
             pass
 
 
-# pyright-python expone `pyright-langserver`; algunas versiones/instalaciones
-# también `pyright-python-langserver`. Probamos ambos antes de rendirnos.
-_CMDS = (
-    ["pyright-langserver", "--stdio"],
-    ["pyright-python-langserver", "--stdio"],
-)
+# Servidor LSP por clave de lenguaje (la misma que usa `tiers`): lista de
+# comandos candidatos a probar en orden. pyright-python expone
+# `pyright-langserver` y a veces `pyright-python-langserver`. tsserver es
+# `typescript-language-server --stdio` (npm). El cliente es UNIVERSAL: sumar
+# un lenguaje es agregar una fila acá + su languageId abajo. Nada más.
+_SERVIDORES: dict[str, tuple[list[str], ...]] = {
+    "py": (
+        ["pyright-langserver", "--stdio"],
+        ["pyright-python-langserver", "--stdio"],
+    ),
+    "jsts": (
+        ["typescript-language-server", "--stdio"],
+    ),
+}
+
+# Extensión -> languageId LSP. Importa porque tsserver trata distinto .ts
+# de .tsx (y .js de .jsx); pyright ignora esto pero cuesta cero ser exacto.
+_LANG_ID = {
+    "py": "python", "pyi": "python",
+    "ts": "typescript", "mts": "typescript", "cts": "typescript",
+    "tsx": "typescriptreact",
+    "js": "javascript", "mjs": "javascript", "cjs": "javascript",
+    "jsx": "javascriptreact",
+}
 
 
-def arrancar_pyright(
-    raiz: str, timeout: float = 15.0
+def _language_id(path: str) -> str:
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return _LANG_ID.get(ext, "plaintext")
+
+
+def arrancar_lsp(
+    lang: str, raiz: str, timeout: float = 15.0
 ) -> SesionLSP | None:
-    """Arranca el language server de pyright sobre `raiz` y hace el
-    handshake. Devuelve la sesión lista, o None ante CUALQUIER fallo
-    (binario ausente —caso del sandbox—, spawn falla, handshake no
-    responde). None => la jerarquía cae sola a tree-sitter/ast: nunca
+    """Arranca el language server de `lang` ("py" -> pyright, "jsts" ->
+    tsserver) sobre `raiz` y hace el handshake. Devuelve la sesión lista, o
+    None ante CUALQUIER fallo (binario ausente —caso del sandbox—, spawn,
+    handshake). None => la jerarquía cae sola a tree-sitter/ast: nunca
     rompe, nunca propaga.
 
-    Modo producto: ante fallo se LOGUEA la razón exacta (binario, spawn,
-    handshake) + la cola de stderr de pyright. Sin esto, un pyright que no
-    arranca en el VPS es invisible: el análisis "funciona" pero degradado y
-    nadie sabe por qué. stderr va a un archivo temporal (no a un pipe: un
-    pipe sin leer se llena y CUELGA pyright en el camino feliz)."""
+    Modo producto: ante fallo se LOGUEA la razón exacta + la cola de stderr
+    del server. Sin esto, un server que no arranca en el VPS es invisible:
+    el análisis "funciona" pero degradado y nadie sabe por qué. stderr va a
+    un archivo temporal (no a un pipe: un pipe sin leer se llena y CUELGA el
+    server en el camino feliz)."""
+    cmds = _SERVIDORES.get(lang)
+    if not cmds:
+        return None
     ultimo = ""
-    for cmd in _CMDS:
+    for cmd in cmds:
         err = tempfile.TemporaryFile()
         try:
             proc = subprocess.Popen(
@@ -509,7 +537,9 @@ def arrancar_pyright(
         try:
             cliente = ClienteLSP(_TransporteProceso(proc, timeout))
             cliente.iniciar("file://" + raiz.rstrip("/"))
-            _log.info("pyright LSP arrancado (%s) sobre %s", cmd[0], raiz)
+            _log.info(
+                "LSP %s arrancado (%s) sobre %s", lang, cmd[0], raiz
+            )
             return SesionLSP(cliente, raiz)
         except Exception as e:  # noqa: BLE001 - handshake falló
             try:
@@ -524,13 +554,20 @@ def arrancar_pyright(
             ultimo = (
                 f"{cmd[0]}: handshake falló ({type(e).__name__}: {e})"
                 + (f" | stderr: {cola}" if cola else
-                   " | stderr vacío (¿pyright no escribió nada? "
-                   "suele ser cache/red en el 1er uso)")
+                   " | stderr vacío (suele ser cache/red en el 1er uso)")
             )
         finally:
             err.close()
     _log.warning(
-        "pyright NO disponible -> el análisis degrada a tree-sitter/ast. "
-        "Razón: %s", ultimo or "binario no encontrado en PATH",
+        "LSP %s NO disponible -> el análisis degrada a tree-sitter/ast. "
+        "Razón: %s", lang, ultimo or "binario no encontrado en PATH",
     )
     return None
+
+
+def arrancar_pyright(
+    raiz: str, timeout: float = 15.0
+) -> SesionLSP | None:
+    """Compat: pyright = el LSP del lenguaje "py". Se mantiene mientras
+    `sync.py` no migre a la sesión por-lenguaje (capa 18 paso 3)."""
+    return arrancar_lsp("py", raiz, timeout)
