@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { useStore } from "../useStore";
-import { editar, presence } from "../store";
+import { editar, guardar, presence } from "../store";
 import { resaltar } from "../lang";
 
 // Mismo mecanismo que el cliente vanilla, ahora en un componente: textarea
@@ -141,6 +141,14 @@ export function Editor() {
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     const ta = taRef.current;
     if (!ta || !path) return;
+    // Capa 19: Ctrl+S / Cmd+S = checkpoint (dispara el análisis de
+    // impacto). preventDefault para que el navegador no abra "guardar
+    // página". No guarda nada: el contenido ya viaja por `editar`.
+    if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      guardar(path);
+      return;
+    }
     const v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
     const aplicar = (nv: string, caret: number) => {
       e.preventDefault();

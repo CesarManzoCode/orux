@@ -30,6 +30,11 @@ export interface State {
   peers: Record<string, Peer>;
   proposals: Record<string, Proposal>;
   impacts: Record<string, Impact>;
+  // Capa 19: archivos con cambios desde el último checkpoint (Ctrl+S). Es
+  // el dot de "sin marcar": dispara el reflejo de guardar y es verdad (hay
+  // cambios sin analizar). NO es "sin guardar" (el contenido ya viaja en
+  // vivo); el Ctrl+S solo dispara el análisis de impacto.
+  dirty: Record<string, boolean>;
   git: GitStatus | null;
   gitResult: { ok: boolean; detail: string } | null;
   esAdmin: boolean;
@@ -47,7 +52,8 @@ export interface State {
 const inicial: State = {
   conn: "conectando", authed: false, loginError: null, yo: null,
   files: {}, currentPath: null, owners: {}, peers: {}, proposals: {},
-  impacts: {}, git: null, gitResult: null, esAdmin: false, usuarios: [],
+  impacts: {}, dirty: {}, git: null, gitResult: null, esAdmin: false,
+  usuarios: [],
   proyecto:
     location.hostname && location.hostname !== "localhost"
       ? location.hostname : "local",
@@ -111,7 +117,7 @@ function onMessage(raw: string) {
         equipoError: "",
         // estado de equipo anterior, limpio (por si se cambió de equipo).
         files: {}, owners: {}, peers: {}, proposals: {}, impacts: {},
-        currentPath: null, inviteCode: "",
+        dirty: {}, currentPath: null, inviteCode: "",
       });
       break;
     case "invite_created":
@@ -125,22 +131,33 @@ function onMessage(raw: string) {
         currentPath: primero,
         // ownership/propuestas viejas no aplican tras un re-init (clone).
         proposals: {},
+        // Capa 19: el workspace es otro (clone) -> el server re-baseó;
+        // acá también arrancamos sin "sin marcar".
+        dirty: {},
       });
       if (primero) presence(primero, 1);
       break;
     }
     case "update": {
       if (typeof m.path !== "string" || !m.path) break;
-      set({ files: { ...state.files, [m.path]: m.content } });
+      // Cambió el contenido (lo tocó alguien): hay cambios sin checkpoint.
+      // El checkpoint es global por archivo en el server, así que el dot
+      // aplica sin importar quién tipeó (cualquiera puede Ctrl+S).
+      set({
+        files: { ...state.files, [m.path]: m.content },
+        dirty: { ...state.dirty, [m.path]: true },
+      });
       break;
     }
     case "delete": {
       if (!(m.path in state.files)) break;
       const files = { ...state.files };
       delete files[m.path];
+      const dirty = { ...state.dirty };
+      delete dirty[m.path];
       let cur = state.currentPath;
       if (cur === m.path) cur = Object.keys(files).sort()[0] ?? null;
-      set({ files, currentPath: cur });
+      set({ files, dirty, currentPath: cur });
       break;
     }
     case "welcome": {
@@ -235,8 +252,21 @@ export function cerrarArchivo() {
 // Edición local: actualiza el espejo y avisa al server (que NO hace eco al
 // emisor, así que no hay loop — por eso no hace falta el viejo applyingRemote).
 export function editar(path: string, content: string) {
-  set({ files: { ...state.files, [path]: content } });
+  set({
+    files: { ...state.files, [path]: content },
+    dirty: { ...state.dirty, [path]: true },  // capa 19: sin checkpoint
+  });
   send({ type: "update", path, content });
+}
+// Capa 19: checkpoint explícito (Ctrl+S). NO guarda nada (el contenido ya
+// se sincronizó por `editar`); le dice al server "analizá el impacto de
+// este punto coherente". Limpia el dot de "sin marcar".
+export function guardar(path: string | null) {
+  if (!path) return;
+  const dirty = { ...state.dirty };
+  delete dirty[path];
+  set({ dirty });
+  send({ type: "save", path });
 }
 export function presence(path: string, line: number) {
   if (lastPresence.path === path && lastPresence.line === line) return;
@@ -267,7 +297,11 @@ export function nuevoArchivo(path: string) {
   // server, en el 1er update de un path sin dueño, hace dueño al creador y
   // difunde `ownership` a TODOS (incluido el emisor): eso llega solo.
   if (path in state.files) return;  // ya existe: no pisarlo
-  set({ files: { ...state.files, [path]: "" }, currentPath: path });
+  set({
+    files: { ...state.files, [path]: "" },
+    dirty: { ...state.dirty, [path]: true },  // capa 19: sin checkpoint
+    currentPath: path,
+  });
   send({ type: "update", path, content: "" });
   presence(path, 1);
 }

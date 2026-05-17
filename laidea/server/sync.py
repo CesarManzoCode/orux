@@ -57,6 +57,7 @@ from ..protocol import (
     CreateInviteMessage,
     CreateTeamMessage,
     DeleteMessage,
+    SaveMessage,
     GitRefreshMessage,
     GitResultMessage,
     GitStatusMessage,
@@ -159,6 +160,12 @@ class TeamRuntime:
         # lenguaje y se cachea (incl. None = "no hay, no reintentar").
         self._lsp: dict[str, object] = {}
         self._lsp_lock = threading.Lock()
+        # Capa 19: último contenido ANALIZADO por archivo (baseline del
+        # checkpoint). El impacto ya no corre por tecla: el diff es
+        # baseline->contenido-al-Ctrl+S. Efímero (perderlo solo re-basea;
+        # no es dato). Se siembra con el contenido PREVIO a la 1ª edición
+        # de cada path (archivo nuevo="" / existente=lo cargado).
+        self._analizado: dict[str, str] = {}
         self.clients: set[ServerConnection] = set()
         self.roster = Roster()
         self._ids: dict[ServerConnection, str] = {}
@@ -410,6 +417,7 @@ class SyncServer:
         sus clientes. La presencia (Roster) NO se toca."""
         rt.workspace.recargar()
         rt.ownership.reset()
+        rt._analizado.clear()  # capa 19: el workspace es otro, re-basea
         rt.reciclar_lsp()  # capa 17: el índice de pyright quedó obsoleto
         await self._persistir_own(rt)  # el ownership viejo ya no aplica
         rt.proposals = Proposals()
@@ -633,6 +641,12 @@ class SyncServer:
                         # Primera vez que se ve el path = lo está creando:
                         # quien crea un archivo es su dueño, sin botón.
                         es_nuevo = not rt.workspace.exists(message.path)
+                        # Capa 19: el impacto NO corre por tecla. Acá solo
+                        # se siembra el baseline del checkpoint la 1ª vez
+                        # que se toca el path (contenido PREVIO a editar);
+                        # el análisis espera al `save` (Ctrl+S). El
+                        # contenido sí sigue viajando en vivo (abajo).
+                        rt._analizado.setdefault(message.path, viejo)
                         rt.workspace.update(message.path, message.content)
                         await self._broadcast(
                             rt,
@@ -655,8 +669,20 @@ class SyncServer:
                                     )
                                 ),
                             )
+                elif isinstance(message, SaveMessage):
+                    # Capa 19: el checkpoint del dev (Ctrl+S). NO guarda
+                    # nada (el contenido ya está sincronizado); es el
+                    # disparo del análisis. Diff baseline->ahora; el autor
+                    # del aviso es quien marca el checkpoint. El baseline
+                    # avanza siempre (haya o no impacto): el próximo Ctrl+S
+                    # mide desde acá. No se retransmite (es un disparador,
+                    # no estado a converger).
+                    actual = rt.workspace.snapshot().get(message.path)
+                    if actual is not None:
+                        base = rt._analizado.get(message.path, "")
+                        rt._analizado[message.path] = actual
                         await self._notificar_impacto(
-                            rt, message.path, viejo, message.content,
+                            rt, message.path, base, actual,
                             yo.client_id, yo.name,
                         )
                 elif isinstance(message, DeleteMessage):
@@ -665,6 +691,8 @@ class SyncServer:
                     if dueño is None or dueño == yo.client_id:
                         if rt.workspace.delete(message.path):
                             rt.proposals.drop_path(message.path)
+                            # Capa 19: si se recrea, re-basea desde cero.
+                            rt._analizado.pop(message.path, None)
                             cambio_owner = rt.ownership.liberar(message.path)
                             if cambio_owner:
                                 await self._persistir_own(rt)

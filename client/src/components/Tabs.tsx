@@ -11,11 +11,23 @@ export function Tabs() {
   }
   const c = chipDe(s.currentPath);
   const nombre = s.currentPath.split("/").pop();
+  const sinMarcar = !!s.dirty[s.currentPath];
   return (
     <div className="tabs">
       <div className="tab">
         <span className={"chip" + (c.cls ? " " + c.cls : "")}>{c.txt}</span>
         <span className="nom" title={s.currentPath}>{nombre}</span>
+        {/* Capa 19: dot de "sin marcar" — hay cambios desde el último
+            checkpoint. Dispara el reflejo Ctrl+S; es verdad (sin analizar),
+            no es "sin guardar" (el contenido ya viaja en vivo). */}
+        {sinMarcar && (
+          <span
+            className="dot-sinmarcar"
+            title="cambios sin marcar — Ctrl+S para analizar el impacto"
+          >
+            ●
+          </span>
+        )}
         <button className="tabx" title="cerrar" onClick={cerrarArchivo}>✕</button>
       </div>
     </div>

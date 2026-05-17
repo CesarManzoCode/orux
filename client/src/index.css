@@ -166,6 +166,12 @@ button { font-family: inherit; }
   font-family: var(--font-mono); max-width: 240px;
 }
 .tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Capa 19: dot de "sin marcar" (cambios desde el último Ctrl+S). Color de
+   aviso suave, no alarmante: es un recordatorio del reflejo, no un error. */
+.tab .dot-sinmarcar {
+  color: var(--warn); font-size: 10px; line-height: 1;
+  flex-shrink: 0; cursor: default;
+}
 .tab .tabx {
   border: none; background: transparent; color: var(--faint);
   cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 3px;

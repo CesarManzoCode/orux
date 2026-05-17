@@ -824,19 +824,24 @@ async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
     ) as b:
         wa = await handshake(a)
         await handshake(b)
-        # A crea models.py (queda dueño).
+        # A crea models.py (queda dueño) y hace checkpoint (baseline=V1).
+        # Capa 19: el impacto NO sale por `update`, solo por `save`.
         await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V1}))
         await recv_tipo(b, "update")
         await recv_tipo(a, "ownership")
         await recv_tipo(b, "ownership")
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
         # B crea auth.py que usa Usuario (queda dueño).
         await b.send(json.dumps({"type": "update", "path": "auth.py", "content": _AUTH}))
         await recv_tipo(a, "update")
         await recv_tipo(a, "ownership")
         await recv_tipo(b, "ownership")
 
-        # A modifica la clase Usuario -> B (dueño de auth.py) debe enterarse solo.
+        # A modifica Usuario y hace Ctrl+S -> recién ahí B (dueño de
+        # auth.py) se entera. El diff es V1->V2 (baseline del checkpoint).
         await a.send(json.dumps({"type": "update", "path": "models.py", "content": _MODELS_V2}))
+        await recv_tipo(b, "update")
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
         aviso = await recv_tipo(b, "impact")
         assert aviso["type"] == "impact"
         assert aviso["source_path"] == "models.py"
@@ -863,6 +868,7 @@ async def test_impacto_tambien_en_typescript(server_port: int) -> None:
         await recv_tipo(b, "update")
         await recv_tipo(a, "ownership")
         await recv_tipo(b, "ownership")
+        await a.send(json.dumps({"type": "save", "path": "models.ts"}))
         await b.send(json.dumps({"type": "update", "path": "auth.ts",
                                  "content": "import { Usuario } from './models'\n"
                                             "const u = new Usuario()\n"}))
@@ -872,6 +878,8 @@ async def test_impacto_tambien_en_typescript(server_port: int) -> None:
 
         await a.send(json.dumps({"type": "update", "path": "models.ts",
                                  "content": "export class Usuario { activo = true }\n"}))
+        await recv_tipo(b, "update")
+        await a.send(json.dumps({"type": "save", "path": "models.ts"}))
         aviso = await recv_tipo(b, "impact")
         assert aviso["type"] == "impact"
         assert aviso["source_path"] == "models.ts"
@@ -899,9 +907,13 @@ async def test_no_avisa_si_el_codigo_no_parsea(server_port: int) -> None:
         await recv_tipo(a, "ownership")
         await recv_tipo(b, "ownership")
 
-        # A deja models.py a medio escribir (SyntaxError): NO debe avisar nada.
+        # Checkpoint inicial (baseline = V1 válido).
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
+        # A deja models.py a medio escribir (SyntaxError) y hace Ctrl+S:
+        # ni siquiera en el checkpoint se avisa si no parsea (capa 6).
         await a.send(json.dumps({"type": "update", "path": "models.py", "content": "class Usuario(:\n"}))
         await recv_tipo(b, "update")  # el update sí se difunde igual
+        await a.send(json.dumps({"type": "save", "path": "models.py"}))
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(b.recv(), timeout=0.3)
 

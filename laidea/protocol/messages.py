@@ -85,6 +85,24 @@ class DeleteMessage:
 
 
 @dataclass(frozen=True)
+class SaveMessage:
+    """Capa 19: checkpoint explícito de un archivo (el Ctrl+S del dev).
+
+    El contenido ya viaja en vivo por `update` (presencia/locks/sync no
+    cambian). Esto NO guarda nada —no hay estado sin guardar— : es la señal
+    de "considero este punto coherente, analizá el impacto AHORA". El
+    análisis dejó de correr por tecla (ruido, falsos avisos sobre código a
+    medio escribir, tormenta de queries LSP) y corre solo acá: el autor
+    decide cuándo se publican las consecuencias de su cambio. Solo
+    cliente->servidor; el server no lo retransmite (no es estado a converger,
+    es un disparador).
+    """
+
+    path: str
+    type: Literal["save"] = "save"
+
+
+@dataclass(frozen=True)
 class PresenceState:
     """Dónde está trabajando un cliente. Es el "estado de presencia" de una persona.
 
@@ -576,6 +594,7 @@ Message = Union[
     InitMessage,
     UpdateMessage,
     DeleteMessage,
+    SaveMessage,
     WelcomeMessage,
     PresenceMessage,
     LeaveMessage,
@@ -635,6 +654,8 @@ def decode(raw: str) -> Message:
         return UpdateMessage(path=data["path"], content=data["content"])
     if kind == "delete":
         return DeleteMessage(path=data["path"])
+    if kind == "save":
+        return SaveMessage(path=data["path"])
     if kind == "welcome":
         you = data["you"]
         return WelcomeMessage(
