@@ -26,10 +26,19 @@
 		file_server
 	}
 
-	# Todo lo demás: el cliente React ya compilado (dist/ copiado a /srv
-	# por Dockerfile.web). try_files -> index.html: una SPA sirve la misma
-	# página para cualquier ruta (hoy no hay router, pero es lo correcto y
-	# evita 404 si algún día se agrega navegación).
+	# Capa 23b: la app React vive en /app (Vite base=/app/, dist en
+	# /srv/app). Sus assets se piden como /app/assets/... -> /srv/app/...
+	# Cualquier /app/* sin archivo -> el index del SPA.
+	@app path /app /app/*
+	handle @app {
+		root * /srv
+		try_files {path} /app/index.html
+		file_server
+	}
+
+	# Todo lo demás (incluido el root `/`): la carta de presentación,
+	# estática en /srv/index.html. try_files -> /index.html: un path
+	# suelto muestra la landing en vez de un 404 feo (no hay routing acá).
 	handle {
 		root * /srv
 		try_files {path} /index.html
