@@ -405,20 +405,34 @@ class SyncServer:
                 if not cambiados:
                     return {}, False
 
+                # Perf (capa 24c): el índice de referencias se computa UNA
+                # vez por análisis (antes: tier.referencias por archivo POR
+                # hop = D×N parseos). `extraer` se memoiza por contenido.
+                # Mismos resultados, mucho menos parseo. Aristas por nombre
+                # (capa 16): el filtro de ruido es la contaminación de
+                # interfaz, no la arista (LSP por hop = futuro, caro).
+                refs_idx = {
+                    f: tier.referencias(c)
+                    for f, c in snap.items()
+                    if lenguaje_de(f) == lang
+                }
+
                 def _fan(s: str, origen: str) -> set[str]:
-                    # Aristas por nombre (capa 16): el filtro de ruido es
-                    # la contaminación de interfaz, no la arista. LSP-
-                    # preciso por hop = refinamiento futuro (caro × hops).
                     return {
-                        f for f, c in snap.items()
-                        if f != origen and lenguaje_de(f) == lang
-                        and s in tier.referencias(c)
+                        f for f, r in refs_idx.items()
+                        if f != origen and s in r
                     }
+
+                _cache: dict[str, dict] = {}
+
+                def _extraer(c: str):
+                    if c not in _cache:
+                        _cache[c] = tier.simbolos(c) or {}
+                    return _cache[c]
 
                 return impacto_transitivo(
                     snap, path, cambiados, fan_out=_fan,
-                    extraer=lambda c: tier.simbolos(c),
-                    lenguaje_de=lenguaje_de,
+                    extraer=_extraer, lenguaje_de=lenguaje_de,
                 )
 
             out, trunc = await asyncio.to_thread(_trans)
