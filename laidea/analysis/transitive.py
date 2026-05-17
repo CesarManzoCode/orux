@@ -41,7 +41,14 @@ LangDe = Callable[[str], "str | None"]
 def _menciona(texto: str, nombre: str) -> bool:
     """`nombre` aparece como identificador en `texto` (con borde de palabra:
     `User` no matchea dentro de `Username`). Heurístico por nombre, mismo
-    espíritu que toda la capa de análisis."""
+    espíritu que toda la capa de análisis.
+
+    Es un fallback A PROPÓSITO más laxo que `tier.referencias()` (que sí
+    excluye strings/comentarios): este módulo es puro y no recibe el tier.
+    El gate fino real lo dan `s.deps` (set exacto) y las aristas del
+    fan-out (que SÍ es `tier.referencias`, filtrado de ruido). Acá un
+    sobre-match solo puede producir un aviso TERMINAL de más (acotado, y
+    el transitivo es premium/conservador): aceptable."""
     if not texto:
         return False
     return re.search(r"(?<![\w$])" + re.escape(nombre) + r"(?![\w$])",

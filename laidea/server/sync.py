@@ -406,6 +406,11 @@ class SyncServer:
                 if not cambiados:
                     return {}, False
 
+                # El token-scan canónico por-símbolo es
+                # `tiers.archivos_afectados` (camino directo, capas 17-21);
+                # acá es el MISMO scan pero con el índice memoizado para
+                # multi-hop (NO se reusa aquella para no tocar el camino
+                # free byte-idéntico).
                 # Perf (capa 24c): el índice de referencias se computa UNA
                 # vez por análisis (antes: tier.referencias por archivo POR
                 # hop = D×N parseos). `extraer` se memoiza por contenido.

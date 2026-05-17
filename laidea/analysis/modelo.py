@@ -20,6 +20,11 @@ vez, acá, y se testea una vez.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
+
+# Severidad del aviso. Union de strings (como `type: Literal[...]` del
+# protocolo): documenta el dominio en UN lugar y lo chequea el typechecker.
+Severidad = Literal["alta", "media", "baja"]
 
 
 @dataclass(frozen=True)
@@ -159,7 +164,7 @@ _SEV_ALTA = (
 _SEV_BAJA = ("en su cuerpo — revisá",)
 
 
-def severidad_de(motivo: str) -> str:
+def severidad_de(motivo: str) -> Severidad:
     """'alta' | 'media' | 'baja'. Desconocido => 'media' (no sub-avisar)."""
     if any(k in motivo for k in _SEV_ALTA):
         return "alta"
