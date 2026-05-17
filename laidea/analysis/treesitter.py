@@ -94,6 +94,24 @@ def _nombre_decl(nodo, src: bytes) -> str:
     return _txt(n, src) if n is not None else ""
 
 
+def _deps_ts(nodo, src: bytes) -> frozenset[str]:
+    """Capa 24b: nombres de tipo de la INTERFAZ (params, retorno, herencia,
+    tipos de campos), NO del cuerpo. Regla simple y robusta: recolectar
+    `type_identifier` SIN descender a `statement_block` (= el cuerpo de
+    función/método en la grammar). Así el transitivo propaga por tipos en
+    TS igual que en Python. Heurístico por nombre, como todo el análisis."""
+    out: set[str] = set()
+    pila = [nodo]
+    while pila:
+        n = pila.pop()
+        if n is not nodo and n.type == "statement_block":
+            continue  # cuerpo: no es interfaz
+        if n.type == "type_identifier":
+            out.add(_txt(n, src))
+        pila.extend(n.children)
+    return frozenset(out)
+
+
 def _firma(params_nodo, src: bytes) -> str:
     """Firma normalizada, estable e independiente del cuerpo (mismo espíritu
     que `_firma` de python.py): nombres y forma de los parámetros, presencia
@@ -196,7 +214,7 @@ class TreeSitter:
             return Simbolo(
                 nombre=nom, tipo="funcion", fuente=_txt(nodo, src),
                 firma=_firma(_hijo_tipo(nodo, "formal_parameters"), src),
-                detallado=True,
+                detallado=True, deps=_deps_ts(nodo, src),
             )
         if t in _DECL_CLASS:
             nom = _nombre_decl(nodo, src)
@@ -207,6 +225,7 @@ class TreeSitter:
             return Simbolo(
                 nombre=nom, tipo="clase", fuente=_txt(nodo, src),
                 init=init, superficie=sup, detallado=True,
+                deps=_deps_ts(nodo, src),
             )
         if t in _DECL_TIPO:
             nom = _nombre_decl(nodo, src)
@@ -235,7 +254,7 @@ class TreeSitter:
                 nombre=_txt(nom_n, src), tipo="funcion",
                 fuente=_txt(nodo, src),
                 firma=_firma(_hijo_tipo(valor, "formal_parameters"), src),
-                detallado=True,
+                detallado=True, deps=_deps_ts(valor, src),
             )
         return None
 
