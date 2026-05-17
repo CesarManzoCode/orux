@@ -18,6 +18,17 @@ export function StatusBar() {
         ) : "sin git"}
       </span>
       <span className="spacer" />
+      {(() => {
+        const n = Object.keys(s.peers).length + (s.yo ? 1 : 0);
+        return (
+          <>
+            <span className="sb">
+              <span className="vivo" /> {n} en línea
+            </span>
+            <span className="sep">·</span>
+          </>
+        );
+      })()}
       <span className="sb">{s.currentPath ? chipDe(s.currentPath).nom : "—"}</span>
       <span className="sep">·</span>
       <span className="sb">

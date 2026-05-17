@@ -7,17 +7,28 @@
  * este CSS — tocarlo desalinea las capas de presencia/resaltado.
  */
 :root {
-  --bg-deep: #08090b; --bg: #0d0e11; --surface: #141518;
-  --surface-2: #1c1d21; --elevated: #212227;
-  --border: #2b2c33; --border-soft: #202127;
-  --text: #e9e9ec; --muted: #8b8d96; --faint: #5a5c64;
-  --accent: #4cc38a; --accent-weak: rgba(76, 195, 138, 0.13);
-  --ok: #56d98a; --ok-bg: #143626; --warn: #e3b341; --warn-bg: #3a2e14;
-  --bad: #f0707a; --bad-bg: #3d1a1f; --info: #6cb6ff;
-  --r: 7px; --r-sm: 5px; --r-isla: 10px;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter,
-    system-ui, sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo,
+  /* Identidad: NO es un IDE gris más. Negro frío con tinte azulado,
+     islas con elevación real y un acento verde→cian de marca usado con
+     intención (activo, presencia, foco). Sobrio, no llamativo. Los
+     NOMBRES de token no cambian (el editor sagrado los usa); solo se
+     refinan valores y se suman algunos. */
+  --bg-deep: #060709; --bg: #0b0d11; --surface: #121419;
+  --surface-2: #181b22; --elevated: #20242c;
+  --border: #2a2e38; --border-soft: #1d2027;
+  --text: #edeef2; --muted: #8b909e; --faint: #565b68;
+  --accent: #4cc38a; --accent-2: #2fe6c6;
+  --accent-weak: rgba(76, 195, 138, 0.12);
+  --ok: #56d98a; --ok-bg: #123326; --warn: #e3b341; --warn-bg: #382e14;
+  --bad: #f0707a; --bad-bg: #391a1f; --info: #6cb6ff; --vio: #b48bff;
+  --grad: linear-gradient(120deg, var(--accent), var(--accent-2));
+  --hl: rgba(255, 255, 255, 0.055);   /* hairline superior de las islas */
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.55);
+  --ring: 0 0 0 2px rgba(76, 195, 138, 0.35);
+  --r: 8px; --r-sm: 5px; --r-isla: 12px;
+  --tr: 140ms cubic-bezier(.4, 0, .2, 1);
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
     Consolas, monospace;
 }
 * { box-sizing: border-box; }
@@ -27,6 +38,14 @@ body {
   background: var(--bg-deep); color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
+/* Backdrop ambiental ESTÁTICO (es un IDE: nada de animación): dos
+   resplandores muy tenues del acento dan profundidad sin distraer. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60vw 50vh at 12% -8%, rgba(76,195,138,.07), transparent 70%),
+    radial-gradient(55vw 50vh at 100% 108%, rgba(47,230,198,.05), transparent 70%);
+}
 *::-webkit-scrollbar { width: 9px; height: 9px; }
 *::-webkit-scrollbar-thumb {
   background: var(--border); border-radius: 6px;
@@ -34,40 +53,81 @@ body {
 }
 *::-webkit-scrollbar-thumb:hover { background: #3a3b43; background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-button { font-family: inherit; }
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+button { font-family: inherit; transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr); }
+button:active { transform: translateY(0.5px); }
 
 .app {
   height: 100%; display: flex; flex-direction: column;
-  padding: 6px; gap: 6px;
+  padding: 7px; gap: 7px;
 }
+/* La "isla": objeto diseñado, NO panel plano de IDE. Elevación real
+   (sombra) + un hairline de luz arriba = se siente táctil y premium,
+   que es la diferencia de fondo con un IDE normal. */
 .isla {
-  background: var(--surface); border: 1px solid var(--border-soft);
+  background:
+    linear-gradient(180deg, var(--hl), transparent 1.5px),
+    var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: var(--r-isla);
+  box-shadow: var(--shadow);
 }
 
 /* --- Topbar --- */
 .topbar { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.85rem; flex-shrink: 0; }
 .mark {
-  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
-  background: var(--accent); color: #06120c;
+  width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0;
+  background: var(--grad); color: #04130c;
   display: grid; place-items: center; font-size: 13px; font-weight: 900;
+  box-shadow: 0 0 0 1px rgba(76,195,138,.3), 0 4px 14px -4px rgba(47,230,198,.5);
 }
-.brand { font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
-.brand b { color: var(--accent); font-weight: 700; }
+.brand { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+.brand b {
+  font-weight: 800;
+  background: var(--grad); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
 .chev { color: var(--faint); font-size: 12px; }
-.proy { color: var(--muted); font-size: 12.5px; font-weight: 600; font-family: var(--font-mono); }
+/* El equipo como chip de "cabina", no texto suelto. */
+.proy {
+  color: var(--text); font-size: 12px; font-weight: 600;
+  font-family: var(--font-mono); padding: 3px 9px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
 .spacer { flex: 1; }
 .status {
-  padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 11px;
+  padding: 0.22rem 0.6rem; border-radius: 999px; font-size: 11px;
   font-weight: 600; background: var(--surface-2); color: var(--muted);
-  display: inline-flex; align-items: center; gap: 0.35rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border: 1px solid var(--border-soft);
 }
-.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.status.ok { background: var(--ok-bg); color: var(--ok); }
-.status.bad { background: var(--bad-bg); color: var(--bad); }
-.yo { color: var(--muted); display: inline-flex; align-items: center; gap: 0.35rem; }
-.yo .dot { width: 8px; height: 8px; border-radius: 50%; }
+.status::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; box-shadow: 0 0 7px currentColor;
+}
+.status.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.status.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.yo {
+  color: var(--text); display: inline-flex; align-items: center;
+  gap: 0.4rem; font-size: 12px; font-weight: 600;
+}
+.yo .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 7px currentColor; }
+/* Presencia del equipo, FIRST-CLASS: avatares vivos de quién está. Es
+   la señal visual de "esto es multiplayer", no un editor en solitario —
+   el diferenciador, no un detalle. */
+.peers { display: inline-flex; align-items: center; }
+.peers .av {
+  width: 24px; height: 24px; border-radius: 50%; margin-left: -7px;
+  display: grid; place-items: center; font-size: 10px; font-weight: 800;
+  color: #06120c; border: 2px solid var(--surface);
+  font-family: var(--font-ui); cursor: default; transition: transform var(--tr);
+}
+.peers .av:first-child { margin-left: 0; }
+.peers .av:hover { transform: translateY(-2px); z-index: 2; }
+.peers .av.mas {
+  background: var(--surface-2); color: var(--muted);
+  border-color: var(--surface);
+}
 .salir {
   font-size: 11px; color: var(--muted); cursor: pointer;
   padding: 0.2rem 0.55rem; border-radius: var(--r-sm);
@@ -82,15 +142,16 @@ button { font-family: inherit; }
   align-items: center; gap: 4px; padding: 6px 0;
 }
 .rail button {
-  width: 32px; height: 32px; border: none; border-radius: 8px;
+  width: 34px; height: 34px; border: none; border-radius: 9px;
   background: transparent; color: var(--faint); cursor: pointer;
   display: grid; place-items: center; position: relative;
 }
-.rail button:hover { background: var(--surface-2); color: var(--muted); }
+.rail button:hover { background: var(--surface-2); color: var(--text); }
 .rail button.activo { background: var(--accent-weak); color: var(--accent); }
 .rail button.activo::before {
-  content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px;
-  width: 2px; border-radius: 2px; background: var(--accent);
+  content: ""; position: absolute; left: -7px; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 3px; background: var(--grad);
+  box-shadow: 0 0 10px -1px var(--accent);
 }
 
 .sidebar {
@@ -99,24 +160,31 @@ button { font-family: inherit; }
 }
 .h2 {
   margin: 0.15rem 0.1rem; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint);
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--faint);
 }
 .btn-nuevo {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.5rem 0.7rem; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+  padding: 0.55rem 0.7rem; font-size: 12.5px; font-weight: 600;
   cursor: pointer; text-align: left;
 }
-.btn-nuevo:hover { background: var(--elevated); border-color: #3a3b43; }
+.btn-nuevo:hover {
+  background: var(--accent-weak); border-color: rgba(76,195,138,.4);
+  color: var(--accent);
+}
 
 .tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .row {
   display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.4rem 0.55rem; border-radius: var(--r-sm); cursor: pointer;
+  padding: 0.42rem 0.55rem; border-radius: var(--r-sm); cursor: pointer;
   font-size: 12.5px; color: var(--muted);
+  transition: background var(--tr), color var(--tr);
 }
 .row:hover { background: var(--surface-2); color: var(--text); }
-.row.activo { background: var(--accent-weak); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+.row.activo {
+  background: var(--accent-weak); color: var(--text);
+  box-shadow: inset 2.5px 0 0 var(--accent);
+}
 .row.dir { color: var(--text); }
 .row.dir .twist { width: 0.8em; flex-shrink: 0; color: var(--faint); font-size: 10px; }
 .row.dir .name { font-weight: 600; }
@@ -159,11 +227,16 @@ button { font-family: inherit; }
 }
 .tabs .vacio { color: var(--faint); font-size: 12px; padding: 0.5rem 0.6rem; }
 .tab {
-  display: flex; align-items: center; gap: 0.45rem;
-  padding: 0.4rem 0.5rem 0.4rem 0.6rem; background: var(--surface);
+  display: flex; align-items: center; gap: 0.45rem; position: relative;
+  padding: 0.45rem 0.55rem 0.45rem 0.65rem; background: var(--surface);
   color: var(--text); border: 1px solid var(--border-soft);
-  border-bottom: none; border-radius: 7px 7px 0 0; font-size: 12.5px;
+  border-bottom: none; border-radius: 8px 8px 0 0; font-size: 12.5px;
   font-family: var(--font-mono); max-width: 240px;
+}
+/* La pestaña abierta "cuelga" del acento: ata el archivo a su contenido. */
+.tab::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--grad);
 }
 .tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Capa 19: dot de "sin marcar" (cambios desde el último Ctrl+S). Color de
@@ -200,10 +273,18 @@ button { font-family: inherit; }
 .tray { border-bottom: 1px solid var(--border-soft); background: var(--surface); }
 .tray h3 {
   margin: 0; padding: 0.5rem 1rem; font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.08em; font-weight: 700; color: var(--muted);
+  letter-spacing: 0.13em; font-weight: 700; color: var(--muted);
   background: var(--bg); border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 0.5rem;
 }
-.tray.imp h3 { color: var(--info); }
+/* Marcador de "feed de señal": las bandejas (propuestas/impacto) son EL
+   diferenciador; se ven intencionales, no una lista de debug. */
+.tray h3::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--grad);
+}
+.tray.imp h3 { color: var(--accent); }
+.tray.imp h3::before { box-shadow: 0 0 8px var(--accent); }
 .prop { padding: 0.8rem 1rem; border-top: 1px solid var(--border-soft); }
 .prop:first-of-type { border-top: none; }
 .prop .cab { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.55rem; }
@@ -253,9 +334,12 @@ button { font-family: inherit; }
 .imp-row .cadena .flecha { color: var(--accent); }
 .imp-row .acc { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
 .imp-row .acc button {
-  border: 1px solid var(--border); border-radius: var(--r-sm);
+  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
   padding: 0.28rem 0.7rem; font-size: 12px; font-weight: 600;
   cursor: pointer; background: var(--surface-2); color: var(--info);
+}
+.imp-row .acc button:hover {
+  border-color: rgba(108,182,255,.4); background: rgba(108,182,255,.1);
 }
 
 /* --- Editor (MÉTRICA SAGRADA: no tocar valores) --- */
@@ -324,6 +408,10 @@ button { font-family: inherit; }
 .statusbar .sb { display: inline-flex; align-items: center; gap: 0.35rem; }
 .statusbar .sep { color: var(--faint); }
 .statusbar .pt { width: 7px; height: 7px; border-radius: 50%; }
+.statusbar .vivo {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 7px var(--accent);
+}
 .statusbar b { color: var(--text); font-weight: 600; }
 
 /* --- Login --- */
