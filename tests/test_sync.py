@@ -1520,3 +1520,22 @@ def test_evicta_lsp_ociosas_y_conserva_activas() -> None:
     assert rt.evictar_lsp_ociosas(1200) == ["py"]
     assert list(rt._lsp) == ["go"]            # la activa sobrevive
     assert rt.evictar_lsp_ociosas(1200) == []  # nada más que evictar
+
+
+def test_cap_de_lenguajes_del_plan_en_el_gate_lsp() -> None:
+    # Capa 22: free = 2 lenguajes LSP. Un 3º NUEVO no arranca (degrada a
+    # tree-sitter), un lenguaje YA activo siempre pasa, premium sin tope.
+    rt = TeamRuntime()
+    rt._ws_dir = "/tmp"                 # pasa el guard de "sin dir"
+    rt._lsp = {"py": None, "ts": None}  # 2 ya activos
+    rt._lsp_uso = {"py": 0.0, "ts": 0.0}
+    # 3º lenguaje nuevo con cap=2 -> bloqueado (no se agrega a _lsp).
+    assert rt.lsp_sesion("go", cap_langs=2) is None
+    assert "go" not in rt._lsp
+    # Un lenguaje YA activo pasa aunque esté "lleno" (no es nuevo).
+    assert rt.lsp_sesion("py", cap_langs=2) is None  # None=sandbox sin LSP
+    assert "py" in rt._lsp
+    # Sin cap (premium / cap_langs=inf): el nuevo SÍ se intenta (queda
+    # registrado aunque en sandbox el server no exista -> None).
+    assert rt.lsp_sesion("rust", cap_langs=float("inf")) is None
+    assert "rust" in rt._lsp           # pasó el gate (lo intentó)

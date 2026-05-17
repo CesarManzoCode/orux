@@ -20,6 +20,7 @@ from __future__ import annotations
 import secrets
 
 from ..identity.store import normalizar
+from ..plans import PLAN_DEFECTO, limites, permite_miembro
 
 
 class TeamError(ValueError):
@@ -56,13 +57,31 @@ class MemTeamStore:
         tid = _id_equipo()
         while tid in self._equipos:  # paranoia: regenerar ante colisión
             tid = _id_equipo()
-        self._equipos[tid] = {"id": tid, "nombre": nombre, "creador": creador}
+        self._equipos[tid] = {
+            "id": tid, "nombre": nombre, "creador": creador,
+            "plan": PLAN_DEFECTO,  # capa 22: free es la puerta de entrada
+        }
         self._miembros[tid] = {creador: "admin"}
         return {"id": tid, "nombre": nombre}
 
     async def equipo(self, team_id: str) -> dict | None:
         e = self._equipos.get(team_id)
-        return {"id": e["id"], "nombre": e["nombre"]} if e else None
+        return (
+            {"id": e["id"], "nombre": e["nombre"], "plan": e["plan"]}
+            if e else None
+        )
+
+    async def plan(self, team_id: str) -> str:
+        """Plan del equipo (capa 22). Desconocido/sin equipo -> free
+        (lado barato/seguro)."""
+        e = self._equipos.get(team_id)
+        return e["plan"] if e else PLAN_DEFECTO
+
+    async def set_plan(self, team_id: str, plan: str) -> None:
+        """Setea el plan FUERA de banda (admin/DB/futuro billing). El
+        esqueleto solo lo lee; esto es el punto de enganche del pago."""
+        if team_id in self._equipos:
+            self._equipos[team_id]["plan"] = plan
 
     async def equipos_de(self, usuario: str) -> list[dict]:
         """Equipos del usuario, con su rol. Vacío = todavía no ve nada."""
@@ -121,6 +140,19 @@ class MemTeamStore:
         tid = inv["team_id"]
         if tid not in self._equipos:  # equipo borrado entre medio
             return None
+        # Capa 22: tope de devs del plan. Solo bloquea si SUMA un miembro
+        # nuevo (ya-miembro es idempotente). Se valida ANTES de consumir el
+        # código: un equipo lleno no te quema la invitación (reintentás
+        # tras el upgrade). Mensaje claro de plan, no "código inválido".
+        m = self._miembros.get(tid, {})
+        if u not in m and not permite_miembro(
+            self._equipos[tid]["plan"], len(m)
+        ):
+            raise TeamError(
+                f"este equipo llegó al límite del plan free "
+                f"({limites('free')['max_devs']} devs) — premium para "
+                f"sumar más"
+            )
         inv["usado_por"] = u
         self._miembros.setdefault(tid, {}).setdefault(u, "member")
         e = self._equipos[tid]

@@ -40,6 +40,7 @@ from websockets.asyncio.server import ServerConnection, serve
 from ..analysis import impacto, motivos as motivos_de
 from ..analysis.lsp import arrancar_lsp
 from ..analysis.tiers import lenguaje_de
+from ..plans import limites
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -180,17 +181,25 @@ class TeamRuntime:
         # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
         self._git_lock = asyncio.Lock()
 
-    def lsp_sesion(self, lang: str | None):
+    def lsp_sesion(self, lang: str | None, cap_langs: float | None = None):
         """Sesión LSP de ESTE equipo para `lang`, tibia: se arranca UNA vez
         (lazy, en el 1er análisis de ese lenguaje) y se reusa. Llamar
         SIEMPRE desde un hilo worker (spawn+handshake es bloqueante). None
         si el lenguaje no tiene server / no hay dir => degrada a capa 16.
         Cachear None evita reintentar el spawn en cada tecla.
+
+        Capa 22: `cap_langs` = tope de lenguajes LSP del plan del equipo. Si
+        ya hay `cap_langs` lenguajes con sesión y este es NUEVO, NO se
+        arranca (degrada a tree-sitter/coarse, no rompe). Es el lever de
+        costo real: premium = sin tope. El cap lo precomputa el server en
+        el loop (el plan vive en un store async); acá solo se aplica.
         """
         if lang is None or self._ws_dir is None:
             return None
         with self._lsp_lock:
             if lang not in self._lsp:
+                if cap_langs is not None and len(self._lsp) >= cap_langs:
+                    return None  # tope del plan: no se paga el LSP extra
                 self._lsp[lang] = arrancar_lsp(lang, self._ws_dir)
             # Marca de último uso para el barrido de ociosas: el server vive
             # mientras el equipo lo use; si no, se evicta y libera RAM.
@@ -377,9 +386,13 @@ class SyncServer:
         # (sandbox/sin pyright) o falla, `impacto`/`motivos` degradan solos
         # a capa 16. Seguro: `snapshot()` es copia, todo lo demás strings.
         snap = rt.workspace.snapshot()
+        # Capa 22: el cap de lenguajes LSP del plan se lee acá (el store es
+        # async, vive en el loop) y se pasa al hilo. Premium = sin tope.
+        plan = await self.teams.plan(rt.team_id)
+        cap_langs = limites(plan)["max_langs"]
 
         def _analizar() -> tuple[dict, dict]:
-            ses = rt.lsp_sesion(lenguaje_de(path))
+            ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
             af = impacto(snap, path, viejo, nuevo, ses)
             if not af:
                 return {}, {}
@@ -549,7 +562,13 @@ class SyncServer:
                 except TeamError as e:
                     await _mandar_lobby(str(e))
             elif isinstance(msg, RedeemInviteMessage):
-                eq = await self.teams.redimir(msg.code, usuario)
+                try:
+                    eq = await self.teams.redimir(msg.code, usuario)
+                except TeamError as e:
+                    # Capa 22: tope de plan (equipo lleno). Mensaje de
+                    # upgrade, NO "código inválido": el código sigue vivo.
+                    await _mandar_lobby(str(e))
+                    continue
                 if eq is not None:
                     return eq["id"]
                 await _mandar_lobby("código inválido o ya usado")

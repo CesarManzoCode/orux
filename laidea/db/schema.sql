@@ -23,8 +23,12 @@ CREATE TABLE IF NOT EXISTS teams (
     id         TEXT PRIMARY KEY,            -- id corto estable (no el nombre)
     nombre     TEXT NOT NULL,
     creador    TEXT NOT NULL REFERENCES users(username),
+    plan       TEXT NOT NULL DEFAULT 'free',-- capa 22: free = puerta de entrada
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Idempotente para DBs ya desplegadas (capa 15) que no tenían la columna:
+-- CREATE IF NOT EXISTS no altera una tabla existente.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
 
 CREATE TABLE IF NOT EXISTS team_members (
     team_id  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,

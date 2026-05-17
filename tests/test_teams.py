@@ -88,3 +88,32 @@ async def test_aislamiento_entre_equipos() -> None:
     assert await s.es_miembro(eq2["id"], "ana") is False
     assert [e["id"] for e in await s.equipos_de("ana")] == [eq1["id"]]
     assert [e["id"] for e in await s.equipos_de("beto")] == [eq2["id"]]
+
+
+async def test_plan_por_defecto_es_free() -> None:
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    assert await s.plan(t["id"]) == "free"
+    assert (await s.equipo(t["id"]))["plan"] == "free"
+    assert await s.plan("no-existe") == "free"  # lado seguro
+
+
+async def test_tope_de_devs_free_y_premium() -> None:
+    # Capa 22: free = 5 devs. El creador ya es 1; entran 4 (=5), el 6º
+    # se rechaza con mensaje de plan SIN quemar el código.
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")  # ana = miembro 1 (admin)
+    tid = t["id"]
+    for i in range(4):  # llega a 5 miembros
+        code = await s.crear_invitacion(tid, "ana")
+        assert await s.redimir(code, f"dev{i}") is not None
+    assert len(await s.miembros(tid)) == 5
+    code6 = await s.crear_invitacion(tid, "ana")
+    with pytest.raises(TeamError, match="premium"):
+        await s.redimir(code6, "dev5")
+    # Idempotente: un ya-miembro no cuenta de nuevo aunque esté "lleno".
+    code_ana = await s.crear_invitacion(tid, "ana")
+    assert await s.redimir(code_ana, "ana") is not None
+    # Upgrade: el código RECHAZADO antes NO se quemó y ahora sí entra.
+    await s.set_plan(tid, "premium")
+    assert await s.redimir(code6, "dev5") is not None

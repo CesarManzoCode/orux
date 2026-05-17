@@ -8,6 +8,7 @@ en el VPS cuando el server lo adopte (paso 3). SQL estándar, parametrizado
 from __future__ import annotations
 
 from ..identity.store import normalizar
+from ..plans import PLAN_DEFECTO, limites, permite_miembro
 from .store import TeamError, _codigo, _id_equipo
 
 
@@ -38,9 +39,25 @@ class PgTeamStore:
 
     async def equipo(self, team_id: str) -> dict | None:
         r = await self._db.fetchrow(
-            "SELECT id, nombre FROM teams WHERE id=$1", team_id
+            "SELECT id, nombre, plan FROM teams WHERE id=$1", team_id
         )
-        return {"id": r["id"], "nombre": r["nombre"]} if r else None
+        return (
+            {"id": r["id"], "nombre": r["nombre"], "plan": r["plan"]}
+            if r else None
+        )
+
+    async def plan(self, team_id: str) -> str:
+        """Capa 22: plan del equipo. NULL/sin equipo -> free."""
+        p = await self._db.fetchval(
+            "SELECT plan FROM teams WHERE id=$1", team_id
+        )
+        return p or PLAN_DEFECTO
+
+    async def set_plan(self, team_id: str, plan: str) -> None:
+        """Fuera de banda (admin/futuro billing). El esqueleto solo lee."""
+        await self._db.execute(
+            "UPDATE teams SET plan=$2 WHERE id=$1", team_id, plan
+        )
 
     async def equipos_de(self, usuario: str) -> list[dict]:
         rows = await self._db.fetch(
@@ -99,9 +116,28 @@ class PgTeamStore:
             if inv is None or inv["usado_por"] is not None:
                 return None
             tid = inv["team_id"]
-            t = await con.fetchrow("SELECT id, nombre FROM teams WHERE id=$1", tid)
+            t = await con.fetchrow(
+                "SELECT id, nombre, plan FROM teams WHERE id=$1", tid
+            )
             if t is None:  # equipo borrado entre medio
                 return None
+            # Capa 22: tope de devs del plan. Dentro de la tx: si rechaza,
+            # rollback => la invitación NO se consume (reintentás tras el
+            # upgrade). Solo bloquea si suma miembro nuevo.
+            ya = await con.fetchval(
+                "SELECT 1 FROM team_members WHERE team_id=$1 AND username=$2",
+                tid, u,
+            )
+            if not ya:
+                n = await con.fetchval(
+                    "SELECT count(*) FROM team_members WHERE team_id=$1", tid
+                )
+                if not permite_miembro(t["plan"], n):
+                    raise TeamError(
+                        f"este equipo llegó al límite del plan free "
+                        f"({limites('free')['max_devs']} devs) — premium "
+                        f"para sumar más"
+                    )
             await con.execute(
                 "UPDATE invites SET usado_por=$1, usado_at=now() WHERE code=$2",
                 u, code,
