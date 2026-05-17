@@ -887,6 +887,11 @@ async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:
         assert len(aviso["motivos"]) == 1
         assert "Usuario" in aviso["motivos"][0]
         assert "construye" in aviso["motivos"][0]  # V1->V2 agrega __init__
+        # Contrato byte-idéntico free (capa 24): SIN cadena. Y la
+        # severidad del triage (capa 24d) sí llega también en free:
+        # cambiar la construcción de una clase = "alta".
+        assert aviso["cadena"] == []
+        assert aviso["severidades"] == ["alta"]
 
 
 async def test_impacto_tambien_en_typescript(server_port: int) -> None:
