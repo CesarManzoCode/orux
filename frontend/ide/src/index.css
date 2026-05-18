@@ -766,10 +766,12 @@ button:active { transform: translateY(1px); }
   position: absolute; left: 1px; width: 16px; height: 22px;
   display: grid; place-items: center; padding: 0;
   background: none; border: none; cursor: pointer;
-  color: var(--faint); opacity: 0; pointer-events: auto;
+  color: var(--muted); opacity: 0.5; pointer-events: auto;
   transition: opacity var(--tr), color var(--tr);
 }
-.ed-gutter:hover .ed-chevron { opacity: 0.55; }
+/* Visible siempre (descubrible, como PyCharm); se realza al pasar el
+   mouse por la canaleta o al estar plegada. */
+.ed-gutter:hover .ed-chevron { opacity: 0.8; }
 .ed-chevron:hover { color: var(--text); opacity: 1; }
 .ed-chevron.plegada {
   opacity: 1; color: var(--accent);
