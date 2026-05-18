@@ -267,3 +267,47 @@ def test_push_a_rama_nombrada_sin_forzar(tmp_path) -> None:
         capture_output=True, text=True, check=True,
     ).stdout
     assert "refs/heads/develop" in heads
+
+
+# --- Blindaje capa 10: la URL/rama del cliente no debe ser un vector RCE ---
+
+from laidea.git.repo import _url_segura, _rama_segura  # noqa: E402
+
+
+def test_url_rechaza_transporte_ext_y_fd() -> None:
+    # `ext::sh -c "..."` haría que git ejecute un comando arbitrario en el
+    # servidor: ejecución remota por cualquier miembro de un equipo.
+    assert _url_segura('ext::sh -c "touch /tmp/pwned"') is False
+    assert _url_segura("fd::17/foo") is False
+    assert _url_segura("EXT::algo") is False  # case-insensitive
+
+
+def test_url_rechaza_inyeccion_de_flag_y_vacio() -> None:
+    assert _url_segura("--upload-pack=/bin/sh") is False
+    assert _url_segura("-oProxyCommand=evil") is False
+    assert _url_segura("") is False
+    assert _url_segura("   ") is False
+
+
+def test_url_acepta_remotos_legitimos_y_paths_locales() -> None:
+    assert _url_segura("https://github.com/acme/app.git") is True
+    assert _url_segura("git@github.com:acme/app.git") is True
+    assert _url_segura("ssh://git@host/acme/app") is True
+    assert _url_segura("/tmp/repo-bare") is True  # los tests clonan así
+
+
+def test_rama_rechaza_caracteres_raros_y_dotdot() -> None:
+    assert _rama_segura("laidea/ef6a") is True
+    assert _rama_segura("main") is True
+    assert _rama_segura("..") is False
+    assert _rama_segura("a/../b") is False
+    assert _rama_segura("-flag") is False
+    assert _rama_segura("rama con espacio") is False
+    assert _rama_segura("") is False
+
+
+def test_clone_con_url_insegura_no_invoca_git(tmp_path) -> None:
+    r = GitRepo(tmp_path / "ws")
+    ok, detalle = r.clonar('ext::sh -c "echo hax"', "u", "t")
+    assert ok is False
+    assert "no válida" in detalle

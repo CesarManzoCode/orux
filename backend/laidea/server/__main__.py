@@ -51,10 +51,24 @@ def _secreto(base: Path) -> str:
     """
     f = base / "secret"
     if f.exists():
-        return f.read_text(encoding="utf-8").strip()
+        try:
+            return f.read_text(encoding="utf-8").strip()
+        except OSError as e:
+            # Existe pero no se puede leer (permisos): morir con un mensaje
+            # accionable, no con un traceback crudo de bajo nivel.
+            raise SystemExit(
+                f"no se pudo leer el secreto de firma {f}: {e}"
+            ) from e
     base.mkdir(parents=True, exist_ok=True)
     s = token_hex(32)
-    f.write_text(s, encoding="utf-8")
+    # El secreto firma TODOS los tokens de sesión: quien lo lea forja la
+    # sesión de cualquier usuario. Se crea 0600 de forma atómica (no
+    # write_text+chmod, que deja una ventana world-readable).
+    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, s.encode("utf-8"))
+    finally:
+        os.close(fd)
     return s
 
 

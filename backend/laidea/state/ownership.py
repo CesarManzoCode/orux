@@ -16,6 +16,7 @@ cierre la pestaña (lo recupera al volver a entrar como el mismo usuario).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 
@@ -39,7 +40,14 @@ class Ownership:
         if self._path is None:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._owners), encoding="utf-8")
+        # Atómico: escribir a un temporal y `os.replace` (rename atómico en
+        # el mismo dir). Sin esto, un crash a mitad de `write_text` deja el
+        # JSON truncado y, al reiniciar, `__init__` traga el ValueError y
+        # arranca con ownership VACÍO -> se pierden TODOS los dueños del
+        # equipo en silencio. El rename nunca deja un archivo a medias.
+        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self._owners), encoding="utf-8")
+        os.replace(tmp, self._path)
 
     def owner(self, path: str) -> str | None:
         """Quién es el dueño de `path`, o None si no tiene."""

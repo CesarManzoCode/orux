@@ -36,6 +36,7 @@ import time
 from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.exceptions import ConnectionClosed
 
 from ..analysis import impacto, motivos as motivos_de, tiers
 from ..analysis.modelo import severidad_de
@@ -325,6 +326,23 @@ class SyncServer:
 
     # --- Envío scopeado al equipo (rt) ---
 
+    def _descartar(
+        self, rt: TeamRuntime, client: ServerConnection, exc: Exception
+    ) -> None:
+        """Saca a un cliente cuyo envío falló. Antes esto tragaba TODA
+        excepción sin rastro: un socket muerto (normal) era indistinguible
+        de un bug de serialización que expulsaba clientes 'sin razón'. Una
+        conexión cerrada es esperable (debug); cualquier otra cosa es un
+        problema que debe dejar rastro (warning)."""
+        rt.clients.discard(client)
+        if isinstance(exc, ConnectionClosed):
+            logger.debug("cliente caído en equipo %s (envío)", rt.team_id)
+        else:
+            logger.warning(
+                "envío falló en equipo %s, se descarta el cliente: %r",
+                rt.team_id, exc,
+            )
+
     async def _enviar_a(self, rt: TeamRuntime, client_id: str, payload: str) -> None:
         """Manda `payload` a un único cliente del equipo. Silencioso si no está.
 
@@ -337,8 +355,8 @@ class SyncServer:
             return
         try:
             await conn.send(payload)
-        except Exception:
-            rt.clients.discard(conn)
+        except Exception as e:
+            self._descartar(rt, conn, e)
 
     async def _broadcast_todos(self, rt: TeamRuntime, payload: str) -> None:
         """A TODOS los del equipo, incluido quien disparó la acción.
@@ -350,8 +368,8 @@ class SyncServer:
         for client in list(rt.clients):
             try:
                 await client.send(payload)
-            except Exception:
-                rt.clients.discard(client)
+            except Exception as e:
+                self._descartar(rt, client, e)
 
     async def _broadcast(
         self, rt: TeamRuntime, sender: ServerConnection, payload: str
@@ -366,8 +384,8 @@ class SyncServer:
                 continue
             try:
                 await client.send(payload)
-            except Exception:
-                rt.clients.discard(client)
+            except Exception as e:
+                self._descartar(rt, client, e)
 
     async def _notificar_impacto(
         self,
@@ -654,8 +672,11 @@ class SyncServer:
                 await conn.send(own)
                 if gs is not None:
                     await conn.send(gs)
-            except Exception:
-                rt.clients.discard(conn)
+            except Exception as e:
+                # Fallo a mitad del re-init tras clone destructivo: el
+                # cliente queda con estado mezclado. Se descarta con rastro
+                # (antes era mudo, justo en el peor momento para perderlo).
+                self._descartar(rt, conn, e)
 
     async def _enviar_git_status(
         self, rt: TeamRuntime, websocket: ServerConnection
@@ -831,380 +852,439 @@ class SyncServer:
             await self._enviar_git_status(rt, websocket)
 
             async for raw in websocket:
-                message = decode(raw)
-                if isinstance(message, UpdateMessage):
-                    dueño = rt.ownership.owner(message.path)
-                    if dueño is not None and dueño != yo.client_id:
-                        # Archivo con dueño y no sos vos: edición tentativa.
-                        # No se aplica ni difunde — se guarda como propuesta
-                        # y se le avisa al dueño. "Editar primero, negociar
-                        # después."
-                        prop = rt.proposals.put(
-                            path=message.path,
-                            author_id=yo.client_id,
-                            author_name=yo.name,
-                            content=message.content,
-                        )
-                        await self._enviar_a(
-                            rt, dueño, encode(ProposalMessage(proposal=prop))
-                        )
-                    else:
-                        # Sin dueño, o sos el dueño: se aplica directo.
-                        # Capa 5 (colisiones por línea): si NO tiene dueño y
-                        # pisás una línea ocupada por otro presente, se
-                        # rechaza el update entero. El dueño tiene preferencia.
-                        viejo = rt.workspace.snapshot().get(message.path, "")
-                        if dueño is None:
-                            tocadas = lineas_tocadas(viejo, message.content)
-                            ocupadas = rt.roster.lineas_ocupadas(
-                                message.path, excepto=yo.client_id
-                            )
-                            if tocadas & ocupadas:
-                                await websocket.send(
-                                    encode(
-                                        UpdateMessage(
-                                            path=message.path, content=viejo
-                                        )
-                                    )
-                                )
-                                continue
-                        # Primera vez que se ve el path = lo está creando:
-                        # quien crea un archivo es su dueño, sin botón.
-                        es_nuevo = not rt.workspace.exists(message.path)
-                        # Capa 19: el impacto NO corre por tecla. Acá solo
-                        # se siembra el baseline del checkpoint la 1ª vez
-                        # que se toca el path (contenido PREVIO a editar);
-                        # el análisis espera al `save` (Ctrl+S). El
-                        # contenido sí sigue viajando en vivo (abajo).
-                        rt._analizado.setdefault(message.path, viejo)
-                        rt.workspace.update(message.path, message.content)
-                        await self._broadcast(
-                            rt,
-                            websocket,
-                            encode(
-                                UpdateMessage(
-                                    path=message.path,
-                                    content=message.content,
-                                )
-                            ),
-                        )
-                        if es_nuevo and dueño is None:
-                            rt.ownership.claim(message.path, yo.client_id)
-                            await self._persistir_own(rt)
-                            await self._broadcast_todos(
-                                rt,
-                                encode(
-                                    OwnershipMessage(
-                                        owners=rt.ownership.snapshot()
-                                    )
-                                ),
-                            )
-                elif isinstance(message, SaveMessage):
-                    # Capa 19: el checkpoint del dev (Ctrl+S). NO guarda
-                    # nada (el contenido ya está sincronizado); es el
-                    # disparo del análisis. Diff baseline->ahora; el autor
-                    # del aviso es quien marca el checkpoint. El baseline
-                    # avanza siempre (haya o no impacto): el próximo Ctrl+S
-                    # mide desde acá. No se retransmite (es un disparador,
-                    # no estado a converger).
-                    actual = rt.workspace.snapshot().get(message.path)
-                    if actual is not None:
-                        base = rt._analizado.get(message.path, "")
-                        rt._analizado[message.path] = actual
-
-                        # Capa 26: ¿este checkpoint ES un rename de miembro
-                        # confiable? La detección usa los Simbolo del tier
-                        # (parseo) -> a un hilo (no bloquear el loop).
-                        def _det(b=base, a=actual, p=message.path):
-                            t = tiers.tier_para(p)
-                            if t is None:
-                                return None
-                            sa = t.simbolos(b)
-                            sd = t.simbolos(a)
-                            if sa is None or sd is None:
-                                return None
-                            return detectar_rename(sa, sd)
-
-                        ren = await asyncio.to_thread(_det)
-                        plan = await self.teams.plan(rt.team_id)
-                        if ren is not None and permite_rename(plan):
-                            # Premium: se propaga como propuesta capa 4. El
-                            # aviso genérico de ese símbolo lo reemplaza la
-                            # propuesta accionable (no se manda además).
-                            await self._propagar_rename(
-                                rt, message.path, base, actual,
-                                ren, yo.client_id, yo.name,
-                            )
-                        else:
-                            # Free (o sin rename): impacto normal; si hubo
-                            # rename confiable, el "por qué" se vuelve el
-                            # texto accionable (premium lo aplica por vos).
-                            await self._notificar_impacto(
-                                rt, message.path, base, actual,
-                                yo.client_id, yo.name, rename=ren,
-                            )
-                elif isinstance(message, DeleteMessage):
-                    # Sólo borra el dueño, o cualquiera si no tiene dueño.
-                    dueño = rt.ownership.owner(message.path)
-                    if dueño is None or dueño == yo.client_id:
-                        if rt.workspace.delete(message.path):
-                            rt.proposals.drop_path(message.path)
-                            # Capa 19: si se recrea, re-basea desde cero.
-                            rt._analizado.pop(message.path, None)
-                            cambio_owner = rt.ownership.liberar(message.path)
-                            if cambio_owner:
-                                await self._persistir_own(rt)
-                            await self._broadcast_todos(
-                                rt, encode(DeleteMessage(path=message.path))
-                            )
-                            if cambio_owner:
-                                await self._broadcast_todos(
-                                    rt,
-                                    encode(
-                                        OwnershipMessage(
-                                            owners=rt.ownership.snapshot()
-                                        )
-                                    ),
-                                )
-                elif isinstance(message, ClaimMessage):
-                    rt.ownership.claim(message.path, yo.client_id)
-                    await self._persistir_own(rt)
-                    await self._broadcast_todos(
-                        rt,
-                        encode(OwnershipMessage(owners=rt.ownership.snapshot())),
+                try:
+                    message = decode(raw)
+                except (ValueError, KeyError, TypeError) as e:
+                    # Un frame malformado/incompleto NO debe tumbar la
+                    # conexion (antes: excepcion -> finally -> LeaveMessage,
+                    # el usuario "desaparecia" sin rastro). Se loguea y se
+                    # ignora ese frame, igual que _autenticar/_lobby.
+                    logger.warning(
+                        "mensaje invalido de %s en equipo %s: %s",
+                        yo.client_id, team_id, e,
                     )
-                elif isinstance(message, AdminAssignMessage):
-                    # Capa 12/15: el admin DEL EQUIPO reparte ownership. Sólo
-                    # el admin del equipo; un no-admin se ignora en silencio.
-                    # `username` vacío = revocar. El destino debe ser miembro
-                    # del equipo (asignar a alguien de afuera no tiene sentido
-                    # y rompería el aislamiento).
-                    if await self.teams.rol(team_id, yo.client_id) == "admin":
-                        aplicado = False
-                        if message.username:
-                            destino = normalizar(message.username)
-                            if await self.teams.es_miembro(team_id, destino):
-                                rt.ownership.asignar(message.path, destino)
-                                aplicado = True
-                        else:
-                            aplicado = rt.ownership.liberar(message.path)
-                        if aplicado:
-                            await self._persistir_own(rt)
-                            await self._broadcast_todos(
-                                rt,
-                                encode(
-                                    OwnershipMessage(
-                                        owners=rt.ownership.snapshot()
-                                    )
-                                ),
-                            )
-                elif isinstance(message, AdminAssignManyMessage):
-                    # Capa 13/15: reparto masivo, un solo broadcast. Misma
-                    # compuerta (admin del equipo) y reglas que admin_assign.
-                    if await self.teams.rol(team_id, yo.client_id) == "admin":
-                        destino = (
-                            normalizar(message.username)
-                            if message.username else ""
-                        )
-                        valido = (
-                            not destino
-                            or await self.teams.es_miembro(team_id, destino)
-                        )
-                        aplicado = False
-                        if valido:
-                            for p in message.paths:
-                                if not isinstance(p, str) or not p:
-                                    continue
-                                if destino:
-                                    rt.ownership.asignar(p, destino)
-                                    aplicado = True
-                                elif rt.ownership.liberar(p):
-                                    aplicado = True
-                        if aplicado:
-                            await self._persistir_own(rt)
-                            await self._broadcast_todos(
-                                rt,
-                                encode(
-                                    OwnershipMessage(
-                                        owners=rt.ownership.snapshot()
-                                    )
-                                ),
-                            )
-                elif isinstance(message, CreateInviteMessage):
-                    # Capa 15: el admin del equipo genera un código para
-                    # invitar. Sólo el admin; un no-admin se ignora (igual
-                    # que toda acción no autorizada: no se delata).
-                    if await self.teams.rol(team_id, yo.client_id) == "admin":
-                        try:
-                            code = await self.teams.crear_invitacion(
-                                team_id, yo.client_id
-                            )
-                            await self._enviar_a(
-                                rt, yo.client_id,
-                                encode(InviteCreatedMessage(code=code)),
-                            )
-                        except TeamError:
-                            pass  # carrera benigna (dejó de ser admin, etc.)
-                elif isinstance(message, ResolveMessage):
-                    prop = rt.proposals.get(message.proposal_id)
-                    # Sólo el dueño actual resuelve. Si ya no existe o no sos
-                    # el dueño, se ignora (carrera benigna).
-                    if prop is not None and rt.ownership.owner(
-                        prop.path
-                    ) == yo.client_id:
-                        rt.proposals.pop(message.proposal_id)
-                        if message.accept:
-                            viejo = rt.workspace.snapshot().get(prop.path, "")
-                            rt.workspace.update(prop.path, prop.content)
-                            await self._broadcast_todos(
-                                rt,
-                                encode(
-                                    UpdateMessage(
-                                        path=prop.path, content=prop.content
-                                    )
-                                ),
-                            )
-                            await self._notificar_impacto(
-                                rt, prop.path, viejo, prop.content,
-                                prop.author_id, prop.author_name,
-                            )
-                        else:
-                            await self._enviar_a(
-                                rt,
-                                prop.author_id,
-                                encode(
-                                    UpdateMessage(
-                                        path=prop.path,
-                                        content=rt.workspace.snapshot().get(
-                                            prop.path, ""
-                                        ),
-                                    )
-                                ),
-                            )
-                elif isinstance(message, PresenceMessage):
-                    estado = rt.roster.mover(
-                        yo.client_id, message.path, message.line
+                    continue
+                try:
+                    await self._despachar(
+                        rt, websocket, yo, team_id, message
                     )
-                    if estado is not None:
-                        await self._broadcast(
-                            rt,
-                            websocket,
-                            encode(
-                                PresenceMessage(
-                                    client_id=estado.client_id,
-                                    name=estado.name,
-                                    color=estado.color,
-                                    path=estado.path,
-                                    line=estado.line,
-                                )
-                            ),
-                        )
-                elif isinstance(message, GitRefreshMessage):
-                    await self._enviar_git_status(rt, websocket)
-                elif isinstance(message, CommitMessage):
-                    if rt.git is None:
-                        await self._enviar_a(
-                            rt, yo.client_id,
-                            encode(GitResultMessage(False, "git no disponible")),
-                        )
-                    else:
-                        msg = (message.message or "").strip()[:500]
-                        if not msg:
-                            await self._enviar_a(
-                                rt, yo.client_id,
-                                encode(GitResultMessage(
-                                    False, "escribí un mensaje de commit")),
-                            )
-                        else:
-                            nombre, email = _autor_git(yo.client_id)
-                            async with rt._git_lock:
-                                ok, detalle = await asyncio.to_thread(
-                                    rt.git.commitear, msg, nombre, email
-                                )
-                            await self._enviar_a(
-                                rt, yo.client_id,
-                                encode(GitResultMessage(ok, detalle)),
-                            )
-                            if ok:
-                                payload = await self._git_status_encoded(rt)
-                                if payload is not None:
-                                    await self._broadcast_todos(rt, payload)
-                elif isinstance(message, CloneMessage):
-                    if rt.git is None:
-                        await self._enviar_a(
-                            rt, yo.client_id,
-                            encode(GitResultMessage(False, "git no disponible")),
-                        )
-                    else:
-                        async with rt._git_lock:
-                            ok, detalle = await asyncio.to_thread(
-                                rt.git.clonar,
-                                message.url, message.username, message.token,
-                            )
-                            if ok:
-                                await self._reiniciar_para_todos(rt)
-                        await self._enviar_a(
-                            rt, yo.client_id,
-                            encode(GitResultMessage(ok, detalle)),
-                        )
-                elif isinstance(message, PushMessage):
-                    if rt.git is None:
-                        await self._enviar_a(
-                            rt, yo.client_id,
-                            encode(GitResultMessage(False, "git no disponible")),
-                        )
-                    else:
-                        # Capa 21b: la rama destino la ELIGE el usuario.
-                        # Vacío = la rama de publicación del equipo (default
-                        # seguro: force-with-lease + PR; laidea es su único
-                        # escritor). Cualquier otra (p.ej. main) = push
-                        # normal SIN forzar (capa 10: non-ff honesto, jamás
-                        # pisa historia compartida). laidea decide force-o-no
-                        # por el destino; el usuario solo elige a dónde.
-                        rama_eq = f"laidea/{rt.team_id}"
-                        destino = (message.rama or "").strip() or rama_eq
-                        async with rt._git_lock:
-                            if destino == rama_eq:
-                                ok, detalle, pr_url = await asyncio.to_thread(
-                                    rt.git.push_a_rama,
-                                    message.username, message.token,
-                                    rama_eq, message.url or None,
-                                )
-                            else:
-                                ok, detalle = await asyncio.to_thread(
-                                    rt.git.push,
-                                    message.username, message.token,
-                                    message.url or None, destino,
-                                )
-                                pr_url = ""
-                        await self._enviar_a(
-                            rt, yo.client_id,
-                            encode(GitResultMessage(ok, detalle, pr_url)),
-                        )
-                        if ok:
-                            payload = await self._git_status_encoded(rt)
-                            if payload is not None:
-                                await self._broadcast_todos(rt, payload)
-                # Init/Welcome/Leave del cliente se ignoran: los origina el
-                # server. Mensajes de lobby acá tampoco aplican (ya hay equipo).
+                except ConnectionClosed:
+                    raise  # el cliente se fue: que el finally limpie
+                except Exception:
+                    # Aislar la conexion culpable: un bug procesando ESTE
+                    # mensaje (analisis sobre codigo arbitrario del cliente,
+                    # etc.) no expulsa al usuario ni se traga el error.
+                    logger.exception(
+                        "error procesando %s de %s en equipo %s",
+                        type(message).__name__, yo.client_id, team_id,
+                    )
+                    continue
         finally:
             rt.clients.discard(websocket)
-            rt._ids.pop(websocket, None)
-            # Soltamos conexión->id sólo si sigue apuntando a ESTA conexión:
-            # en una recarga la nueva puede registrarse antes de este finally.
-            if rt._conns.get(yo.client_id) is websocket:
+            rt._ids.pop(websocket, None)  # mapeo por-conexión: siempre seguro
+            # `client_id == usuario` (identidad determinista): dos pestañas /
+            # una recarga rápida = el MISMO client_id con dos conexiones, y
+            # la nueva se registra antes de que corra el finally de la vieja.
+            # Si esta conexión ya NO es la registrada, otra está viva con esa
+            # identidad: NO le borres la presencia (capa 5 dejaría de proteger
+            # las líneas de un usuario que sigue editando) ni difundas Leave.
+            es_la_actual = rt._conns.get(yo.client_id) is websocket
+            if es_la_actual:
                 rt._conns.pop(yo.client_id, None)
-            # Ownership NO se toca al desconectar (por usuario, persistido).
-            # Sólo la presencia es efímera.
-            ultimo = rt.roster.quitar(yo.client_id)
-            if ultimo is not None and ultimo.path is not None:
-                await self._broadcast(
-                    rt, websocket, encode(LeaveMessage(client_id=yo.client_id))
-                )
+                # Ownership NO se toca al desconectar (por usuario,
+                # persistido). Sólo la presencia es efímera.
+                ultimo = rt.roster.quitar(yo.client_id)
+                if ultimo is not None and ultimo.path is not None:
+                    await self._broadcast(
+                        rt, websocket,
+                        encode(LeaveMessage(client_id=yo.client_id)),
+                    )
             logger.info(
                 "usuario %s salió del equipo %s — %d en el equipo",
                 yo.client_id, team_id, len(rt.clients),
             )
+
+
+    async def _despachar(
+        self,
+        rt: TeamRuntime,
+        websocket: ServerConnection,
+        yo,
+        team_id: str,
+        message,
+    ) -> None:
+        """Procesa UN mensaje ya decodificado de la sesion de equipo.
+
+        Extraido del bucle (capa de robustez): aislado para que una
+        excepcion aqui la capture el llamador y NO mate la conexion. El
+        antiguo `continue` de capa 5 (rebote del lock) es ahora `return`:
+        en un metodo, "saltar este mensaje" = volver.
+        """
+        if isinstance(message, UpdateMessage):
+            dueño = rt.ownership.owner(message.path)
+            if dueño is not None and dueño != yo.client_id:
+                # Archivo con dueño y no sos vos: edición tentativa.
+                # No se aplica ni difunde — se guarda como propuesta
+                # y se le avisa al dueño. "Editar primero, negociar
+                # después."
+                prop = rt.proposals.put(
+                    path=message.path,
+                    author_id=yo.client_id,
+                    author_name=yo.name,
+                    content=message.content,
+                )
+                await self._enviar_a(
+                    rt, dueño, encode(ProposalMessage(proposal=prop))
+                )
+            else:
+                # Sin dueño, o sos el dueño: se aplica directo.
+                # Capa 5 (colisiones por línea): si NO tiene dueño y
+                # pisás una línea ocupada por otro presente, se
+                # rechaza el update entero. El dueño tiene preferencia.
+                viejo = rt.workspace.snapshot().get(message.path, "")
+                if dueño is None:
+                    tocadas = lineas_tocadas(viejo, message.content)
+                    ocupadas = rt.roster.lineas_ocupadas(
+                        message.path, excepto=yo.client_id
+                    )
+                    if tocadas & ocupadas:
+                        await websocket.send(
+                            encode(
+                                UpdateMessage(
+                                    path=message.path, content=viejo
+                                )
+                            )
+                        )
+                        return
+                # Primera vez que se ve el path = lo está creando:
+                # quien crea un archivo es su dueño, sin botón.
+                es_nuevo = not rt.workspace.exists(message.path)
+                # Capa 19: el impacto NO corre por tecla. Acá solo
+                # se siembra el baseline del checkpoint la 1ª vez
+                # que se toca el path (contenido PREVIO a editar);
+                # el análisis espera al `save` (Ctrl+S). El
+                # contenido sí sigue viajando en vivo (abajo).
+                rt._analizado.setdefault(message.path, viejo)
+                rt.workspace.update(message.path, message.content)
+                await self._broadcast(
+                    rt,
+                    websocket,
+                    encode(
+                        UpdateMessage(
+                            path=message.path,
+                            content=message.content,
+                        )
+                    ),
+                )
+                if es_nuevo and dueño is None:
+                    rt.ownership.claim(message.path, yo.client_id)
+                    await self._persistir_own(rt)
+                    await self._broadcast_todos(
+                        rt,
+                        encode(
+                            OwnershipMessage(
+                                owners=rt.ownership.snapshot()
+                            )
+                        ),
+                    )
+        elif isinstance(message, SaveMessage):
+            # Capa 19: el checkpoint del dev (Ctrl+S). NO guarda
+            # nada (el contenido ya está sincronizado); es el
+            # disparo del análisis. Diff baseline->ahora; el autor
+            # del aviso es quien marca el checkpoint. El baseline
+            # avanza siempre (haya o no impacto): el próximo Ctrl+S
+            # mide desde acá. No se retransmite (es un disparador,
+            # no estado a converger).
+            actual = rt.workspace.snapshot().get(message.path)
+            if actual is not None:
+                base = rt._analizado.get(message.path, "")
+                rt._analizado[message.path] = actual
+
+                # Capa 26: ¿este checkpoint ES un rename de miembro
+                # confiable? La detección usa los Simbolo del tier
+                # (parseo) -> a un hilo (no bloquear el loop).
+                def _det(b=base, a=actual, p=message.path):
+                    t = tiers.tier_para(p)
+                    if t is None:
+                        return None
+                    sa = t.simbolos(b)
+                    sd = t.simbolos(a)
+                    if sa is None or sd is None:
+                        return None
+                    return detectar_rename(sa, sd)
+
+                ren = await asyncio.to_thread(_det)
+                plan = await self.teams.plan(rt.team_id)
+                if ren is not None and permite_rename(plan):
+                    # Premium: se propaga como propuesta capa 4. El
+                    # aviso genérico de ese símbolo lo reemplaza la
+                    # propuesta accionable (no se manda además).
+                    await self._propagar_rename(
+                        rt, message.path, base, actual,
+                        ren, yo.client_id, yo.name,
+                    )
+                else:
+                    # Free (o sin rename): impacto normal; si hubo
+                    # rename confiable, el "por qué" se vuelve el
+                    # texto accionable (premium lo aplica por vos).
+                    await self._notificar_impacto(
+                        rt, message.path, base, actual,
+                        yo.client_id, yo.name, rename=ren,
+                    )
+        elif isinstance(message, DeleteMessage):
+            # Sólo borra el dueño, o cualquiera si no tiene dueño.
+            dueño = rt.ownership.owner(message.path)
+            if dueño is None or dueño == yo.client_id:
+                if rt.workspace.delete(message.path):
+                    logger.info(
+                        "delete: %s borró %r en equipo %s",
+                        yo.client_id, message.path, team_id,
+                    )
+                    rt.proposals.drop_path(message.path)
+                    # Capa 19: si se recrea, re-basea desde cero.
+                    rt._analizado.pop(message.path, None)
+                    cambio_owner = rt.ownership.liberar(message.path)
+                    if cambio_owner:
+                        await self._persistir_own(rt)
+                    await self._broadcast_todos(
+                        rt, encode(DeleteMessage(path=message.path))
+                    )
+                    if cambio_owner:
+                        await self._broadcast_todos(
+                            rt,
+                            encode(
+                                OwnershipMessage(
+                                    owners=rt.ownership.snapshot()
+                                )
+                            ),
+                        )
+        elif isinstance(message, ClaimMessage):
+            rt.ownership.claim(message.path, yo.client_id)
+            await self._persistir_own(rt)
+            await self._broadcast_todos(
+                rt,
+                encode(OwnershipMessage(owners=rt.ownership.snapshot())),
+            )
+        elif isinstance(message, AdminAssignMessage):
+            # Capa 12/15: el admin DEL EQUIPO reparte ownership. Sólo
+            # el admin del equipo; un no-admin se ignora en silencio.
+            # `username` vacío = revocar. El destino debe ser miembro
+            # del equipo (asignar a alguien de afuera no tiene sentido
+            # y rompería el aislamiento).
+            if await self.teams.rol(team_id, yo.client_id) == "admin":
+                aplicado = False
+                if message.username:
+                    destino = normalizar(message.username)
+                    if await self.teams.es_miembro(team_id, destino):
+                        rt.ownership.asignar(message.path, destino)
+                        aplicado = True
+                else:
+                    aplicado = rt.ownership.liberar(message.path)
+                if aplicado:
+                    await self._persistir_own(rt)
+                    await self._broadcast_todos(
+                        rt,
+                        encode(
+                            OwnershipMessage(
+                                owners=rt.ownership.snapshot()
+                            )
+                        ),
+                    )
+        elif isinstance(message, AdminAssignManyMessage):
+            # Capa 13/15: reparto masivo, un solo broadcast. Misma
+            # compuerta (admin del equipo) y reglas que admin_assign.
+            if await self.teams.rol(team_id, yo.client_id) == "admin":
+                destino = (
+                    normalizar(message.username)
+                    if message.username else ""
+                )
+                valido = (
+                    not destino
+                    or await self.teams.es_miembro(team_id, destino)
+                )
+                aplicado = False
+                if valido:
+                    for p in message.paths:
+                        if not isinstance(p, str) or not p:
+                            continue
+                        if destino:
+                            rt.ownership.asignar(p, destino)
+                            aplicado = True
+                        elif rt.ownership.liberar(p):
+                            aplicado = True
+                if aplicado:
+                    await self._persistir_own(rt)
+                    await self._broadcast_todos(
+                        rt,
+                        encode(
+                            OwnershipMessage(
+                                owners=rt.ownership.snapshot()
+                            )
+                        ),
+                    )
+        elif isinstance(message, CreateInviteMessage):
+            # Capa 15: el admin del equipo genera un código para
+            # invitar. Sólo el admin; un no-admin se ignora (igual
+            # que toda acción no autorizada: no se delata).
+            if await self.teams.rol(team_id, yo.client_id) == "admin":
+                try:
+                    code = await self.teams.crear_invitacion(
+                        team_id, yo.client_id
+                    )
+                    await self._enviar_a(
+                        rt, yo.client_id,
+                        encode(InviteCreatedMessage(code=code)),
+                    )
+                except TeamError:
+                    pass  # carrera benigna (dejó de ser admin, etc.)
+        elif isinstance(message, ResolveMessage):
+            prop = rt.proposals.get(message.proposal_id)
+            # Sólo el dueño actual resuelve. Si ya no existe o no sos
+            # el dueño, se ignora (carrera benigna).
+            if prop is not None and rt.ownership.owner(
+                prop.path
+            ) == yo.client_id:
+                rt.proposals.pop(message.proposal_id)
+                if message.accept:
+                    viejo = rt.workspace.snapshot().get(prop.path, "")
+                    rt.workspace.update(prop.path, prop.content)
+                    await self._broadcast_todos(
+                        rt,
+                        encode(
+                            UpdateMessage(
+                                path=prop.path, content=prop.content
+                            )
+                        ),
+                    )
+                    await self._notificar_impacto(
+                        rt, prop.path, viejo, prop.content,
+                        prop.author_id, prop.author_name,
+                    )
+                else:
+                    await self._enviar_a(
+                        rt,
+                        prop.author_id,
+                        encode(
+                            UpdateMessage(
+                                path=prop.path,
+                                content=rt.workspace.snapshot().get(
+                                    prop.path, ""
+                                ),
+                            )
+                        ),
+                    )
+        elif isinstance(message, PresenceMessage):
+            estado = rt.roster.mover(
+                yo.client_id, message.path, message.line
+            )
+            if estado is not None:
+                await self._broadcast(
+                    rt,
+                    websocket,
+                    encode(
+                        PresenceMessage(
+                            client_id=estado.client_id,
+                            name=estado.name,
+                            color=estado.color,
+                            path=estado.path,
+                            line=estado.line,
+                        )
+                    ),
+                )
+        elif isinstance(message, GitRefreshMessage):
+            await self._enviar_git_status(rt, websocket)
+        elif isinstance(message, CommitMessage):
+            if rt.git is None:
+                await self._enviar_a(
+                    rt, yo.client_id,
+                    encode(GitResultMessage(False, "git no disponible")),
+                )
+            else:
+                msg = (message.message or "").strip()[:500]
+                if not msg:
+                    await self._enviar_a(
+                        rt, yo.client_id,
+                        encode(GitResultMessage(
+                            False, "escribí un mensaje de commit")),
+                    )
+                else:
+                    nombre, email = _autor_git(yo.client_id)
+                    async with rt._git_lock:
+                        ok, detalle = await asyncio.to_thread(
+                            rt.git.commitear, msg, nombre, email
+                        )
+                    await self._enviar_a(
+                        rt, yo.client_id,
+                        encode(GitResultMessage(ok, detalle)),
+                    )
+                    if ok:
+                        payload = await self._git_status_encoded(rt)
+                        if payload is not None:
+                            await self._broadcast_todos(rt, payload)
+        elif isinstance(message, CloneMessage):
+            if rt.git is None:
+                await self._enviar_a(
+                    rt, yo.client_id,
+                    encode(GitResultMessage(False, "git no disponible")),
+                )
+            else:
+                # Destructivo: reemplaza el workspace del equipo entero.
+                # En producción tiene que quedar auditado quién y de dónde.
+                logger.info(
+                    "clone (DESTRUCTIVO) pedido por %s en equipo %s",
+                    yo.client_id, team_id,
+                )
+                async with rt._git_lock:
+                    ok, detalle = await asyncio.to_thread(
+                        rt.git.clonar,
+                        message.url, message.username, message.token,
+                    )
+                    if ok:
+                        await self._reiniciar_para_todos(rt)
+                await self._enviar_a(
+                    rt, yo.client_id,
+                    encode(GitResultMessage(ok, detalle)),
+                )
+        elif isinstance(message, PushMessage):
+            if rt.git is None:
+                await self._enviar_a(
+                    rt, yo.client_id,
+                    encode(GitResultMessage(False, "git no disponible")),
+                )
+            else:
+                # Capa 21b: la rama destino la ELIGE el usuario.
+                # Vacío = la rama de publicación del equipo (default
+                # seguro: force-with-lease + PR; laidea es su único
+                # escritor). Cualquier otra (p.ej. main) = push
+                # normal SIN forzar (capa 10: non-ff honesto, jamás
+                # pisa historia compartida). laidea decide force-o-no
+                # por el destino; el usuario solo elige a dónde.
+                rama_eq = f"laidea/{rt.team_id}"
+                destino = (message.rama or "").strip() or rama_eq
+                async with rt._git_lock:
+                    if destino == rama_eq:
+                        ok, detalle, pr_url = await asyncio.to_thread(
+                            rt.git.push_a_rama,
+                            message.username, message.token,
+                            rama_eq, message.url or None,
+                        )
+                    else:
+                        ok, detalle = await asyncio.to_thread(
+                            rt.git.push,
+                            message.username, message.token,
+                            message.url or None, destino,
+                        )
+                        pr_url = ""
+                await self._enviar_a(
+                    rt, yo.client_id,
+                    encode(GitResultMessage(ok, detalle, pr_url)),
+                )
+                if ok:
+                    payload = await self._git_status_encoded(rt)
+                    if payload is not None:
+                        await self._broadcast_todos(rt, payload)
+        # Init/Welcome/Leave del cliente se ignoran: los origina el
+        # server. Mensajes de lobby acá tampoco aplican (ya hay equipo).
 
     async def _barrer_lsp_ociosas(self, ttl: float) -> None:
         """Tarea de fondo: cada minuto evicta sesiones LSP sin uso hace más

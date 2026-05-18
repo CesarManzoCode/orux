@@ -59,3 +59,34 @@ def test_roster_lineas_ocupadas_excluye_al_propio_y_otros_paths() -> None:
     assert r.lineas_ocupadas("main.py", excepto=b.client_id) == {10}
     # Nadie en un archivo sin presencia.
     assert r.lineas_ocupadas("vacio.py", excepto=a.client_id) == set()
+
+
+# --- Blindaje: tope anti-DoS de la matriz LCS (robustez, capa de seguridad) -
+
+def test_archivo_gigante_no_revienta_y_es_conservador() -> None:
+    """Un update con un archivo enorme NO debe construir la matriz O(n·m)
+    (congelaría el event loop de TODOS los equipos). Se degrada a la
+    comparación posicional: rápida y CONSERVADORA (nunca reporta de menos,
+    así la capa 5 sigue protegiendo)."""
+    from laidea.state.locks import _LCS_MAX_CELDAS
+
+    n = int(_LCS_MAX_CELDAS**0.5) + 50  # n·n por encima del tope -> fallback
+    viejo = "\n".join(f"linea {i}" for i in range(n))
+    # Cambia SOLO la línea 0; el resto idéntico y en su misma posición.
+    nuevo = "\n".join(
+        ("CAMBIADA" if i == 0 else f"linea {i}") for i in range(n)
+    )
+    tocadas = lineas_tocadas(viejo, nuevo)
+    # La 1 está tocada; ninguna línea intacta en su posición se reporta.
+    assert 1 in tocadas
+    assert tocadas == {1}
+
+
+def test_fallback_nunca_subreporta_una_linea_borrada() -> None:
+    """Propiedad de seguridad del fallback: una línea vieja que desaparece
+    SIEMPRE cuenta como tocada (sub-reportar dejaría pasar una colisión)."""
+    from laidea.state.locks import _tocadas_posicional
+
+    a = ["a", "b", "c", "d"]
+    b = ["a", "X"]  # b, c, d ya no están / cambiaron
+    assert _tocadas_posicional(a, b) == {2, 3, 4}

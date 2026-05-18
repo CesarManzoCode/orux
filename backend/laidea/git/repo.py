@@ -25,12 +25,73 @@ Decisiones:
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Timeout duro para CUALQUIER invocación de git. Sin esto, un `git` colgado
+# (remoto que no responde pese a GIT_TERMINAL_PROMPT=0, hook clavado en un
+# repo clonado) bloquea su hilo de `asyncio.to_thread` para siempre y, al
+# agotar el threadpool por defecto, congela el análisis de TODOS los equipos.
+# Es generoso: una operación de red legítima rara vez pasa de esto.
+_GIT_TIMEOUT = float(os.environ.get("LAIDEA_GIT_TIMEOUT", "120"))
+
+# Endurecimiento del subproceso git contra RCE por URL del cliente. La URL
+# de clone/push la elige el usuario; sin esto, `ext::sh -c "..."` o
+# `fd::` hacen que git ejecute un comando arbitrario en el servidor
+# (ejecución remota por cualquier miembro de un equipo). Allowlist de
+# transportes: se permiten los reales (incl. `file`/local — los tests
+# clonan de rutas locales y un workspace puede sembrarse así) y se niega
+# explícitamente el transporte `ext` por las dos vías que git respeta.
+_GIT_ENV_SEGURO = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_ALLOW_PROTOCOL": "file:git:http:https:ssh:ftp:ftps",
+    "GIT_PROTOCOL_FROM_USER": "0",
+}
+_GIT_CONF_SEGURO = [
+    "-c", "protocol.ext.allow=never",
+    "-c", "protocol.fd.allow=never",
+]
+
+# Una URL/refspec que empieza con `-` la interpretaría git como opción
+# (p.ej. `--upload-pack=/bin/sh`): inyección de flag. Una rama destino se
+# acota a caracteres de ref legítimos y se prohíbe `..` (evita refs raras
+# en el remoto del usuario).
+_RAMA_OK = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def _url_segura(url: str) -> bool:
+    """¿La URL de remoto es pasable a git sin riesgo de RCE/inyección?
+
+    No es un parser de URLs: es una compuerta de seguridad. Rechaza lo
+    vacío, lo que empieza con `-` (se leería como opción de git) y el
+    transporte `ext::`/`fd::` (ejecución de comando arbitrario). Acepta
+    el resto (https/ssh/git y rutas locales — los bloqueos de transporte
+    del entorno son la defensa en profundidad real)."""
+    u = (url or "").strip()
+    if not u or u.startswith("-"):
+        return False
+    bajo = u.lower()
+    return not bajo.startswith(("ext::", "fd::"))
+
+
+def _rama_segura(rama: str) -> bool:
+    """¿El nombre de rama destino es un ref legítimo? Sin esto un `rama`
+    con `..` o caracteres raros crea refs inesperados en el remoto."""
+    r = (rama or "").strip()
+    return (
+        bool(r)
+        and not r.startswith("-")  # se leería como opción de git
+        and ".." not in r
+        and bool(_RAMA_OK.match(r))
+    )
 
 # Script `GIT_ASKPASS`: git lo llama cuando un remoto pide credenciales. NO
 # contiene el secreto — lo lee del entorno del subproceso (que vive solo
@@ -71,13 +132,32 @@ class GitRepo:
         """
         try:
             p = subprocess.run(
-                ["git", *args],
+                ["git", *_GIT_CONF_SEGURO, *args],
                 cwd=self._root,
                 capture_output=True,
                 text=True,
+                timeout=_GIT_TIMEOUT,
+                env={**os.environ, **_GIT_ENV_SEGURO},
             )
+            if p.returncode != 0:
+                # Antes esto degradaba MUDO a "git no disponible": un git
+                # roto en el VPS era indiagnosticable. Ahora deja rastro
+                # (sin volcar stdout entero: solo la última línea útil).
+                cola = (p.stderr or p.stdout or "").strip().splitlines()
+                logger.warning(
+                    "git %s -> rc=%d: %s",
+                    args[0] if args else "?", p.returncode,
+                    cola[-1] if cola else "(sin salida)",
+                )
             return p.returncode, p.stdout.strip()
-        except (FileNotFoundError, OSError):
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "git %s excedió el timeout de %.0fs",
+                args[0] if args else "?", _GIT_TIMEOUT,
+            )
+            return 1, ""
+        except (FileNotFoundError, OSError) as e:
+            logger.warning("git no se pudo invocar: %s", e)
             return 1, ""
 
     def asegurar(self) -> None:
@@ -122,25 +202,39 @@ class GitRepo:
             os.chmod(askpass.name, 0o700)
             env = {
                 **os.environ,
+                **_GIT_ENV_SEGURO,
                 "GIT_ASKPASS": askpass.name,
-                "GIT_TERMINAL_PROMPT": "0",
                 "LAIDEA_GIT_USER": usuario,
                 "LAIDEA_GIT_TOKEN": token,
             }
             try:
                 p = subprocess.run(
-                    ["git", "-c", "credential.helper=", *args],
+                    ["git", "-c", "credential.helper=",
+                     *_GIT_CONF_SEGURO, *args],
                     cwd=cwd if cwd is not None else self._root,
                     capture_output=True,
                     text=True,
+                    timeout=_GIT_TIMEOUT,
                     env=env,
                 )
                 salida = (p.stdout + p.stderr).strip()
                 rc = p.returncode
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "git %s (con credenciales) excedió %.0fs",
+                    args[0] if args else "?", _GIT_TIMEOUT,
+                )
+                return 1, "la operación con el remoto tardó demasiado"
             except (FileNotFoundError, OSError):
                 return 1, "git no disponible"
         finally:
-            os.unlink(askpass.name)
+            # El unlink no debe enmascarar el resultado de git ni propagar:
+            # en el peor caso queda un script SIN el token (lo lee del env,
+            # que ya murió con el subproceso) en /tmp. Se loguea y sigue.
+            try:
+                os.unlink(askpass.name)
+            except OSError as e:
+                logger.warning("no se pudo borrar el askpass temporal: %s", e)
         # Defensa en profundidad: aunque el token no debería aparecer, si
         # aparece NO sale de aquí en claro.
         if token:
@@ -221,11 +315,16 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible")
+        if not _url_segura(url):
+            logger.warning("clone rechazado: URL no segura")
+            return (False, "URL de repo no válida")
         tmp = Path(tempfile.mkdtemp(prefix="laidea-clone-"))
         destino = tmp / "repo"
         try:
+            # `--` corta el parseo de opciones: aunque la URL pasara la
+            # compuerta, git no la tratará como flag.
             rc, out = self._git_cred(
-                ["clone", url, str(destino)], usuario, token, cwd=tmp
+                ["clone", "--", url, str(destino)], usuario, token, cwd=tmp
             )
             if rc != 0:
                 return (False, _detalle_remoto(out))
@@ -259,6 +358,10 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible")
+        if url and not _url_segura(url):
+            return (False, "URL de repo no válida")
+        if rama is not None and not _rama_segura(rama):
+            return (False, "nombre de rama no válido")
         self.asegurar()
         if url:
             self._run("remote", "remove", "origin")
@@ -299,6 +402,10 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible", "")
+        if url and not _url_segura(url):
+            return (False, "URL de repo no válida", "")
+        if not _rama_segura(rama):
+            return (False, "nombre de rama no válido", "")
         self.asegurar()
         if url:
             self._run("remote", "remove", "origin")
