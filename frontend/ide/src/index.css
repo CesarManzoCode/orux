@@ -1066,16 +1066,43 @@ button:active { transform: translateY(1px); }
 }
 
 @media (max-width: 860px) {
-  .landing { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* El split deja de ser dos columnas fijas en pantalla recortada:
+     relato arriba (alto natural), consola debajo, y si no entra se hace
+     SCROLL en vez de cortarse (antes overflow:hidden + 1fr lo recortaba
+     arriba/abajo en teléfonos y en horizontal). */
+  .landing {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
   .landing-pitch {
     padding: 2.2rem 1.6rem; border-right: none;
     border-bottom: 1px solid var(--border-soft);
+  }
+  .landing-auth {
+    align-items: flex-start;
+    padding: 1.8rem 1.4rem 2.6rem;
   }
   .lp-marca { margin-bottom: 1rem; }
   .lp-eyebrow { margin-bottom: 0.8rem; }
   .lp-tag { font-size: clamp(23px, 6.5vw, 31px); margin-bottom: 0.6rem; }
   .lp-tesis { margin-bottom: 0; }
   .lp-points, .lp-feed { display: none; }
+}
+
+/* Teléfono: la tarjeta usa el ancho disponible y el contenedor permite
+   scroll vertical. Lobby puede crecer (varios equipos + dos formularios)
+   más que la pantalla; con flex centrado + fixed quedaba cortado arriba
+   y abajo sin forma de llegar al botón. */
+@media (max-width: 560px) {
+  .login {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 1.5rem 1rem 2.5rem;
+  }
+  .login-card { width: 100%; }
+  .landing-auth .login-card,
+  .landing-pitch .lp-inner { width: 100%; max-width: 100%; }
 }
 
 /* Responsive del IDE: el rail/sidebar se condensan; nada se rompe ni

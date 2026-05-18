@@ -724,12 +724,37 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .stage { overflow: hidden; border-radius: var(--r-isla); }
   .card-impact, .card-prop { position: relative; inset: auto; width: auto;
     right: auto; left: auto; top: auto; bottom: auto; margin-top: 14px; box-shadow: var(--sh-2); }
+
+  /* La tira técnica dejaba bordes verticales sueltos al envolver: en
+     teléfono se apila como lista, cada ítem al ancho completo. */
+  .trust .wrap { flex-direction: column; align-items: stretch; }
+  .trust .ti { border-right: none; border-bottom: 1px solid var(--line-soft);
+    padding: 14px 0; }
+  .trust .ti:last-child { border-bottom: none; }
 }
+
+/* Por debajo de ~600px el mock del IDE ya no entra con rail fijo +
+   código sin wrap (quedaba cortado a la derecha dentro de .stage). En
+   vez de recortarlo se simplifica a sólo el editor: la historia de
+   ownership ya la cuenta la sección "Qué hace". */
+@media (max-width: 600px) {
+  .ide-body { grid-template-columns: 1fr; min-height: auto; }
+  .ide-rail { display: none; }
+  .ide-code { padding: 14px 0; font-size: 11px; line-height: 1.95; }
+  .ln { padding: 0 14px; gap: 12px; }
+  .ln .n { width: 16px; }
+  /* La status bar envuelve en vez de salirse y quedar cortada. */
+  .ide-status { flex-wrap: wrap; gap: 7px 14px; }
+  .ide-status .push { margin-left: 0; }
+}
+
 @media (max-width: 480px) {
   .wrap { padding: 0 18px; }
-  .trust .ti { padding: 14px 16px; font-size: 11px; }
-  .trust .ti:first-child { padding-left: 0; }
   .risk-col, .fn, .step { padding: 22px; }
+  /* El eyebrow mono en pastilla se hacía 3 líneas: lo achicamos. */
+  .eyebrow { font-size: 10.5px; letter-spacing: 0.1em; }
+  /* La etiqueta de marca compite con el botón en pantallas muy chicas. */
+  .brand .tag { display: none; }
 }
 
 /* ── prefers-reduced-motion: apaga TODO el motion ── */

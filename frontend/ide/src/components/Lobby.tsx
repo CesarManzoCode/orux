@@ -16,7 +16,7 @@ export function Lobby() {
   // de estilos inline sueltos: una sola fuente de verdad visual.
   return (
     <div className="login">
-      <div className="login-card" style={{ width: 420 }}>
+      <div className="login-card" style={{ width: "min(420px, 100%)" }}>
         <div className="marca">la<b>idea</b></div>
         <p>
           Hola <b>{s.yo?.name}</b>. Para entrar necesitás un equipo. Otro
