@@ -27,11 +27,14 @@ function Propuestas() {
                 <button className="no" onClick={() => resolver(p.id, false)}>rechazar</button>
               </span>
             </div>
+            {/* El signo +/− lo dibuja el CSS en un canal propio (como
+                GitHub/Linear), no se mete en el texto: el código del diff
+                queda limpio y seleccionable sin el prefijo. Un espacio en
+                las líneas vacías para que conserven su alto de fila
+                (white-space: pre-wrap no lo colapsa). */}
             <div className="diff">
               {filas.map((f, i) => (
-                <div key={i} className={f.t}>
-                  {(f.t === "add" ? "+ " : f.t === "del" ? "- " : "  ") + f.x}
-                </div>
+                <div key={i} className={f.t}>{f.x || " "}</div>
               ))}
             </div>
           </div>
@@ -74,8 +77,8 @@ function Impactos() {
                 <div className="por" key={i}>
                   <span className={"sev sev-" + _sev(m, i)}>
                     {_sev(m, i)}
-                  </span>{" "}
-                  ↳ {m.motivos[i]}
+                  </span>
+                  <span className="motivo">{m.motivos[i]}</span>
                 </div>
               ) : null
             )}

@@ -1,69 +1,98 @@
 /*
  * ───────────────────────────────────────────────────────────────────────
- * SISTEMA DE DISEÑO  ·  "Islands Dark" (evolución, no reemplazo)
+ * SISTEMA DE DISEÑO  ·  "Islands Dark" — refundación enterprise
  * ───────────────────────────────────────────────────────────────────────
- * Por qué un sistema y no parches: cada superficie del IDE comparte los
- * mismos tokens (color, radio, sombra, motion) y los mismos PATRONES
- * (.btn, .card/.isla, .field, .empty, .pill). Así la mejora es sistémica:
- * tocás un token y todo el producto se mueve junto, coherente.
+ * Misma arquitectura de tokens (un valor mueve todo el producto), pero
+ * recalibrada con criterio de staff designer de tooling: más PROFUNDIDAD
+ * (rampa de superficies de 6 escalones, no 4), hairlines de verdad, sombras
+ * sobrias, CERO glow/neón, y densidad alta. El acento de marca existe pero
+ * se gasta con intención (foco, activo, presencia) — nunca decora.
+ *
+ * Inspiración: JetBrains (densidad, guías de indentación), Linear/Raycast
+ * (sobriedad, hairlines, motion preciso), Cursor/VSCode (jerarquía de
+ * editor). Identidad propia, no copia.
  *
  * CONTRATO SAGRADO DEL EDITOR: el componente Editor depende de
- * LINE_H=22 / PAD_TOP=20 y del gutter de 52px sincronizados con ESTE CSS.
- * El bloque "--- Editor ---" conserva su métrica EXACTA (line-height 22px,
+ * LINE_H=22 / PAD_TOP=20 / gutter 52px sincronizados con ESTE CSS. El
+ * bloque "── Editor ──" conserva su GEOMETRÍA EXACTA (line-height 22px,
  * padding 20px 24px 20px 64px, gutter width 52px / font 14px / lh 22px,
- * .ed-active y .marca height 22px). Solo se reestiliza el "chrome"
- * alrededor (fondo, bordes, scrollbars, selección). NO tocar esos valores.
+ * .ed-active y .marca height 22px, .ed-active left 52px). Solo se
+ * reestiliza el "chrome" (fondo, bordes, banda activa, selección,
+ * scrollbars, presencia). NO tocar esos números: desalinea las marcas.
  *
  * Los NOMBRES de token NO cambian (el editor sagrado los referencia); se
- * refinan valores y se SUMAN tokens nuevos (espaciado, tipografía, motion).
+ * refinan valores y se SUMAN tokens nuevos.
  */
 :root {
-  /* ── Color: negro frío azulado, islas con elevación. Refinado para
-       más profundidad entre capas (deep < bg < surface < surface-2 <
-       elevated) y mejor contraste de texto (AA sobre --surface). ── */
-  --bg-deep: #060709; --bg: #0b0d11; --surface: #121419;
-  --surface-2: #181b22; --elevated: #20242c;
-  --border: #2a2e38; --border-soft: #1d2027;
-  --text: #edeef2; --muted: #8b909e; --faint: #565b68;
+  /* ── Color: negro frío azulado. Rampa de 6 superficies para que cada
+       capa se despegue de la de abajo por luminancia, no por borde:
+       deep < bg < surface < surface-2 < surface-3 < elevated. ── */
+  --bg-deep: #050608;
+  --bg: #0a0b0e;
+  --surface: #101217;
+  --surface-2: #15181e;
+  --surface-3: #1b1f26;
+  --elevated: #232830;
 
-  /* ── Acento de marca: verde→cian, usado con INTENCIÓN (foco, presencia,
-       activo). Nunca decorativo. ── */
-  --accent: #4cc38a; --accent-2: #2fe6c6;
-  --accent-weak: rgba(76, 195, 138, 0.12);
-  --accent-soft: rgba(76, 195, 138, 0.18);
-  --ok: #56d98a; --ok-bg: #123326; --warn: #e3b341; --warn-bg: #382e14;
-  --bad: #f0707a; --bad-bg: #391a1f; --info: #6cb6ff; --vio: #b48bff;
-  --info-bg: #122636; --vio-bg: #241a36;
-  --grad: linear-gradient(120deg, var(--accent), var(--accent-2));
-  --hl: rgba(255, 255, 255, 0.055);   /* hairline superior de las islas */
+  --border: #272b34;          /* divisor visible en controles            */
+  --border-soft: #181b21;     /* hairline: costura entre paneles/filas    */
+  --border-strong: #333a47;   /* borde enfatizado (hover de inputs)       */
+  --hl: rgba(255, 255, 255, 0.035);  /* luz superior de la isla (sutil)   */
 
-  /* ── Elevación: sombra real + hairline = "objeto táctil", no panel
-       plano. Tres niveles para jerarquía (isla < flotante < modal). ── */
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.55);
-  --shadow-pop: 0 2px 6px rgba(0,0,0,.45), 0 18px 44px -16px rgba(0,0,0,.6);
-  --shadow-modal: 0 24px 70px -12px rgba(0,0,0,.7), 0 2px 8px rgba(0,0,0,.5);
-  --glow: 0 0 0 1px var(--accent-soft), 0 0 18px -4px rgba(76,195,138,.45);
-  --ring: 0 0 0 2px var(--bg), 0 0 0 4px rgba(76, 195, 138, 0.45);
+  /* ── Texto: 4 niveles. --text-2 es NUEVO: el escalón legible secundario
+       (valores, etiquetas) que faltaba entre --text y --muted. Todos AA
+       sobre --surface. ── */
+  --text: #e8eaef;
+  --text-2: #b5bac5;
+  --muted: #8a8f9c;
+  --faint: #5b606e;
 
-  /* ── Radii ── */
-  --r: 8px; --r-sm: 5px; --r-lg: 12px; --r-isla: 14px; --r-pill: 999px;
+  /* ── Acento de marca: verde→cian. El gradiente SOLO en el logomark y el
+       CTA primario; el resto usa el sólido o un tinte neutro. ── */
+  --accent: #4cc38a;
+  --accent-2: #34d9bf;
+  --accent-weak: rgba(76, 195, 138, 0.10);
+  --accent-soft: rgba(76, 195, 138, 0.16);
+  --accent-line: rgba(76, 195, 138, 0.55);  /* indicadores finos, sin glow */
+  --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
 
-  /* ── Spacing: escala 4px. Usar SIEMPRE estas variables, no números
-       sueltos — así el ritmo vertical es consistente en todo el IDE. ── */
-  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  /* ── Semántica: color + tinte translúcido (se posa bien sobre cualquier
+       superficie, no es un bloque opaco que rompe la profundidad). ── */
+  --ok: #4cc98a;   --ok-bg: rgba(76, 201, 138, 0.13);
+  --warn: #d8a93e; --warn-bg: rgba(216, 169, 62, 0.13);
+  --bad: #e8636f;  --bad-bg: rgba(232, 99, 111, 0.13);
+  --info: #62a8f0; --info-bg: rgba(98, 168, 240, 0.13);
+  --vio: #a98bf0;  --vio-bg: rgba(169, 139, 240, 0.13);
+
+  /* ── Elevación: sombra real + hairline = objeto táctil. Sin neón. Tres
+       niveles para jerarquía (isla < flotante < modal). ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -14px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 2px 5px rgba(0, 0, 0, 0.36), 0 14px 36px -18px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 24px 64px -16px rgba(0, 0, 0, 0.66), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --glow: 0 0 0 1px var(--accent-soft);  /* "glow" = ahora solo un anillo  */
+  /* Foco de teclado: anillo doble sobrio (negro + acento translúcido). */
+  --ring: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+
+  /* ── Radii: un punto menos redondo que antes = más instrumento, menos
+       burbuja. Consistencia total. ── */
+  --r: 7px; --r-sm: 5px; --r-lg: 10px; --r-isla: 12px; --r-pill: 999px;
+
+  /* ── Spacing: escala 4px. Usar SIEMPRE estas variables. ── */
+  --s-0: 2px; --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
   --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
 
-  /* ── Tipografía: escala modular, titulares apretados (-0.02/-0.03em,
-       lh 1.1), cuerpo aireado (1.5). ── */
-  --t-xs: 11px; --t-sm: 12px; --t-base: 13px; --t-md: 14px;
-  --t-lg: 16px; --t-xl: 20px; --t-2xl: 24px; --t-3xl: 32px;
+  /* ── Tipografía: escala modular densa. Titulares apretados, cuerpo a
+       13px (densidad de IDE, no de landing). ── */
+  --t-xs: 10.5px; --t-sm: 11.5px; --t-base: 13px; --t-md: 13.5px;
+  --t-lg: 15px; --t-xl: 19px; --t-2xl: 23px; --t-3xl: 30px;
 
-  /* ── Motion: estado/hover rápido y plano; ENTRADAS expresivas con
-       overshoot suave; press hunde 0.5–2px. ── */
-  --tr: 140ms cubic-bezier(.4, 0, .2, 1);
-  --tr-slow: 240ms cubic-bezier(.4, 0, .2, 1);
+  /* ── Motion: estado/hover muy rápido y plano; entradas con un overshoot
+       suave; press hunde 1px. Microinteracción precisa, nunca flashy. ── */
+  --tr: 120ms cubic-bezier(.4, 0, .2, 1);
+  --tr-slow: 220ms cubic-bezier(.4, 0, .2, 1);
   --ease-in: cubic-bezier(.22, 1, .36, 1);
-  --dur-in: 420ms;
+  --dur-in: 360ms;
 
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, system-ui, sans-serif;
@@ -75,235 +104,255 @@
 html, body, #root { height: 100%; }
 body {
   margin: 0; font-family: var(--font-ui); font-size: var(--t-base);
-  line-height: 1.5;
-  background: var(--bg-deep); color: var(--text);
-  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  line-height: 1.5; background: var(--bg-deep); color: var(--text);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Inter variable: tamaño óptico automático + letterforms refinadas
+     (cv11 = 'l'/'i' inequívocas, ss03 = 'g' de una planta). Detalle
+     invisible que el ojo igual registra como "caro". */
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11" 1, "ss03" 1;
 }
-/* Backdrop ambiental ESTÁTICO (el IDE es quieto a propósito): dos
-   resplandores muy tenues de acento dan profundidad sin distraer. */
+/* Backdrop ESTÁTICO y NEUTRO: una sola vignette blanca casi imperceptible
+   que levanta el borde superior. Sin color de marca de ambiente — eso era
+   lo que delataba "webapp", no "instrumento". */
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background:
-    radial-gradient(60vw 50vh at 12% -8%, rgba(76,195,138,.07), transparent 70%),
-    radial-gradient(55vw 50vh at 100% 108%, rgba(47,230,198,.05), transparent 70%);
+  background: radial-gradient(130vw 80vh at 50% -25%,
+    rgba(255, 255, 255, 0.014), transparent 62%);
 }
-::selection { background: rgba(76, 195, 138, 0.26); }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+::selection { background: rgba(76, 195, 138, 0.24); }
+
+/* Scrollbars: finas, casi invisibles en reposo, despiertan al pasar. El
+   detalle que separa "app" de "herramienta". */
+*::-webkit-scrollbar { width: 11px; height: 11px; }
 *::-webkit-scrollbar-thumb {
   background: var(--border); border-radius: var(--r-pill);
-  border: 2px solid transparent; background-clip: padding-box;
+  border: 3px solid transparent; background-clip: padding-box;
   transition: background var(--tr);
 }
-*::-webkit-scrollbar-thumb:hover { background: #3f424d; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #3a3f4b; background-clip: padding-box; }
 *::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
-/* Foco visible REAL: doble anillo (negro + acento) que se ve sobre
-   cualquier fondo. Accesibilidad no negociable. */
+/* Números que se alinean en columna (gutter, contadores, métricas) =
+   tabular. En prosa NO (queda peor); por eso es scoped, no global. */
+.tabnum, .gitp ol, .h2-num, .cuenta, .ammeta,
+.statusbar, code, .ed-gutter { font-variant-numeric: tabular-nums; }
+
+/* Foco visible REAL: anillo doble que se ve sobre cualquier fondo.
+   Accesibilidad no negociable. */
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
 
-/* ── PATRÓN: botones. Tres variantes con la misma física (hover sube,
+/* ── PATRÓN: botones. Tres variantes, misma física (hover sube 1px,
    press hunde). El primario es el único con gradiente de marca. ── */
 button { font-family: inherit; transition:
   background var(--tr), color var(--tr), border-color var(--tr),
-  box-shadow var(--tr), transform var(--tr); }
+  box-shadow var(--tr), transform var(--tr), filter var(--tr); }
 button:active { transform: translateY(1px); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   gap: var(--s-2); border-radius: var(--r); cursor: pointer;
-  font-family: inherit; font-size: var(--t-base); font-weight: 650;
-  padding: 0.62rem 0.95rem; border: 1px solid transparent;
-  line-height: 1; white-space: nowrap;
+  font-family: inherit; font-size: var(--t-base); font-weight: 600;
+  padding: 0.55rem 0.9rem; border: 1px solid transparent;
+  line-height: 1; white-space: nowrap; letter-spacing: -0.005em;
 }
 .btn-primario {
-  background: var(--grad); color: #04130c; font-weight: 750;
-  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset,
-    0 6px 18px -8px rgba(47,230,198,.6);
+  background: var(--grad); color: #04130c; font-weight: 700;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 4px 14px -8px rgba(52, 217, 191, 0.5);
 }
-.btn-primario:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.btn-primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .btn-primario:active { transform: translateY(1px); filter: brightness(.98); }
 .btn-secundario {
   background: var(--surface-2); color: var(--text);
   border-color: var(--border);
 }
-.btn-secundario:hover { background: var(--elevated); border-color: #353a45; transform: translateY(-1px); }
+.btn-secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--muted); }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
 .btn:disabled { opacity: 0.4; cursor: default; transform: none !important; filter: none !important; }
 
-/* ── PATRÓN: inputs. Foco = borde acento + halo suave (mismo lenguaje
-   que el ring de foco-teclado pero más íntimo dentro de formularios). ── */
-.field {
+/* ── PATRÓN: inputs. Una sola identidad para TODO control de texto del
+   IDE (login, git, modal): foco = borde acento + halo íntimo. ── */
+.field, .login-card input, .gitp input, .ambar select {
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--r);
-  padding: 0.65rem 0.8rem; font-size: var(--t-base);
+  padding: 0.6rem 0.75rem; font-size: var(--t-base);
   font-family: inherit; outline: none; width: 100%;
   transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
 }
-.field::placeholder { color: var(--faint); }
-.field:hover { border-color: #353a45; }
-.field:focus {
+.field::placeholder, .login-card input::placeholder,
+.gitp input::placeholder { color: var(--faint); }
+.field:hover, .login-card input:hover,
+.gitp input:hover, .ambar select:hover { border-color: var(--border-strong); }
+.field:focus, .login-card input:focus,
+.gitp input:focus, .ambar select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-weak);
   background: var(--surface);
 }
 
-/* ── PATRÓN: estado vacío. Icono + título + subtítulo + (acción). Un
-   vacío con voz vale más que "sin datos": orienta y no parece roto. ── */
+/* ── PATRÓN: estado vacío. Icono + título + subtítulo. Un vacío con voz
+   orienta y no parece roto. ── */
 .empty {
   display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: var(--s-2); padding: var(--s-8) var(--s-5);
   color: var(--muted); animation: fade-in var(--dur-in) var(--ease-in) both;
 }
 .empty .empty-ic {
-  width: 46px; height: 46px; border-radius: var(--r-lg);
+  width: 42px; height: 42px; border-radius: var(--r-lg);
   display: grid; place-items: center; color: var(--faint);
   background: var(--surface-2); border: 1px solid var(--border-soft);
-  margin-bottom: var(--s-1);
+  margin-bottom: var(--s-1); box-shadow: var(--shadow-sm);
 }
-.empty .empty-tit { font-size: var(--t-md); font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
-.empty .empty-sub { font-size: var(--t-sm); color: var(--muted); max-width: 30ch; line-height: 1.55; }
+.empty .empty-tit { font-size: var(--t-md); font-weight: 650; color: var(--text); letter-spacing: -0.01em; }
+.empty .empty-sub { font-size: var(--t-sm); color: var(--muted); max-width: 32ch; line-height: 1.55; }
 .empty.compacto { padding: var(--s-5) var(--s-4); }
 
 /* ── PATRÓN: pill / chip de estado genérico ── */
 .pill {
   display: inline-flex; align-items: center; gap: var(--s-1);
-  padding: 0.2rem 0.6rem; border-radius: var(--r-pill);
-  font-size: var(--t-xs); font-weight: 650; line-height: 1;
+  padding: 0.18rem 0.55rem; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; line-height: 1;
 }
 
-/* Animaciones reutilizables. Stagger por variable --d (delay). */
-@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@keyframes rise-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
-@keyframes pop-in  { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+/* Animaciones reutilizables. Entrada una vez, después quieto. */
+@keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes pop-in  { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 
-.app { height: 100%; display: flex; flex-direction: column; padding: 7px; gap: 7px; }
+.app { height: 100%; display: flex; flex-direction: column; padding: 6px; gap: 6px; }
 
-/* La "isla": objeto diseñado, no panel plano. Elevación real + hairline
-   de luz arriba = táctil y premium. El IDE entero entra con un rise
-   suave (una vez), después queda quieto. */
+/* La "isla": objeto diseñado, no panel plano. Elevación contenida +
+   hairline de luz arriba. Costura fina, no marco grueso: el conjunto se
+   lee como un instrumento, no como tarjetas flotando. */
 .isla {
   background:
-    linear-gradient(180deg, var(--hl), transparent 1.5px),
+    linear-gradient(180deg, var(--hl), transparent 2px),
     var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-isla);
   box-shadow: var(--shadow);
 }
 .app > .isla,
-.app > .layout > .isla { animation: fade-in 380ms var(--ease-in) both; }
-.app > .layout > .rail { animation-delay: 40ms; }
-.app > .layout > .sidebar { animation-delay: 70ms; }
-.app > .layout > .main { animation-delay: 100ms; }
-.app > .statusbar { animation-delay: 130ms; }
+.app > .layout > .isla { animation: fade-in 340ms var(--ease-in) both; }
+.app > .layout > .rail { animation-delay: 30ms; }
+.app > .layout > .sidebar { animation-delay: 55ms; }
+.app > .layout > .main { animation-delay: 80ms; }
+.app > .statusbar { animation-delay: 105ms; }
 
-/* ── Topbar ── */
-.topbar { display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.85rem; flex-shrink: 0; }
+/* ── Topbar: tres grupos con divisores finos. Ritmo, no ruido. ── */
+.topbar { display: flex; align-items: center; gap: 0.55rem; padding: 0.4rem 0.6rem 0.4rem 0.55rem; flex-shrink: 0; }
+/* Grupo lógico: une lo que va junto y lo separa de lo que no. */
+.tb-grp { display: inline-flex; align-items: center; gap: 0.5rem; }
+/* Divisor vertical sutil entre grupos (1px, hairline). */
+.tb-div { width: 1px; align-self: stretch; margin: 0.32rem 0.15rem; background: var(--border-soft); }
 .mark {
-  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
-  background: var(--grad); color: #04130c;
-  display: grid; place-items: center; font-size: var(--t-base); font-weight: 900;
-  box-shadow: 0 0 0 1px rgba(76,195,138,.3), 0 4px 14px -4px rgba(47,230,198,.5);
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px;
+  display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
 }
-.brand { font-size: var(--t-md); font-weight: 600; letter-spacing: -0.02em; }
-.brand b {
-  font-weight: 800;
-  background: var(--grad); -webkit-background-clip: text;
-  background-clip: text; color: transparent;
-}
+.mark svg { display: block; }
+.brand { font-size: var(--t-md); font-weight: 550; letter-spacing: -0.02em; color: var(--text-2); }
+.brand b { font-weight: 750; color: var(--text); }
 .chev { color: var(--faint); font-size: var(--t-sm); }
 /* El equipo como chip de "cabina", no texto suelto. */
 .proy {
   color: var(--text); font-size: var(--t-sm); font-weight: 600;
-  font-family: var(--font-mono); padding: 3px 10px; border-radius: var(--r-pill);
+  font-family: var(--font-mono); padding: 3px 9px; border-radius: 6px;
   background: var(--surface-2); border: 1px solid var(--border-soft);
+  letter-spacing: -0.01em;
 }
 .spacer { flex: 1; }
 .status {
-  padding: 0.24rem 0.65rem; border-radius: var(--r-pill); font-size: var(--t-xs);
-  font-weight: 650; background: var(--surface-2); color: var(--muted);
-  display: inline-flex; align-items: center; gap: 0.42rem;
-  border: 1px solid var(--border-soft);
+  padding: 0.22rem 0.6rem 0.22rem 0.5rem; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; background: var(--surface-2);
+  color: var(--muted); display: inline-flex; align-items: center;
+  gap: 0.4rem; border: 1px solid var(--border-soft);
+  text-transform: lowercase; letter-spacing: 0.01em;
 }
 .status::before {
   content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; box-shadow: 0 0 7px currentColor;
+  background: currentColor;
 }
-/* El punto "vivo" respira sutil SOLO cuando hay conexión sana: señal
-   ambiental de que el realtime está despierto. Se apaga con
-   prefers-reduced-motion. */
+/* El punto "vivo" respira muy leve SOLO con conexión sana: señal de que
+   el realtime está despierto. Amplitud baja, no es una alarma. */
 .status.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
-.status.ok::before { animation: pulso 2.4s ease-in-out infinite; }
+.status.ok::before { animation: pulso 2.6s ease-in-out infinite; }
 .status.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
 @keyframes pulso {
-  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
-  50% { box-shadow: 0 0 7px 1px currentColor; opacity: .7; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 .yo {
-  color: var(--text); display: inline-flex; align-items: center;
-  gap: 0.42rem; font-size: var(--t-sm); font-weight: 600;
+  color: var(--text-2); display: inline-flex; align-items: center;
+  gap: 0.42rem; font-size: var(--t-sm); font-weight: 550;
 }
-.yo .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 7px currentColor; }
+.yo .dot { width: 7px; height: 7px; border-radius: 50%; }
 .yo code {
   font-family: var(--font-mono); background: var(--surface-2);
-  padding: 2px 7px; border-radius: var(--r-sm); border: 1px solid var(--border-soft);
+  color: var(--text); padding: 2px 6px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-soft); font-size: var(--t-xs);
 }
-/* Presencia del equipo, FIRST-CLASS: avatares vivos. Es LA señal de
-   "esto es multiplayer" — el diferenciador. Anillo de superficie para
-   separarlos y un realce vivo al pasar el mouse. */
+/* Presencia del equipo, FIRST-CLASS: avatares vivos. ES la señal de
+   "esto es multiplayer" — el diferenciador. Anillo de la superficie de
+   abajo para que se recorten limpios; realce sobrio al pasar. */
 .peers { display: inline-flex; align-items: center; padding-left: 2px; }
 .peers .av {
-  width: 25px; height: 25px; border-radius: 50%; margin-left: -8px;
-  display: grid; place-items: center; font-size: 10px; font-weight: 800;
+  width: 23px; height: 23px; border-radius: 50%; margin-left: -7px;
+  display: grid; place-items: center; font-size: 9.5px; font-weight: 750;
   color: #06120c; border: 2px solid var(--surface);
   font-family: var(--font-ui); cursor: default;
   transition: transform var(--tr), box-shadow var(--tr);
-  box-shadow: 0 2px 6px -2px rgba(0,0,0,.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 .peers .av:first-child { margin-left: 0; }
 .peers .av:hover {
-  transform: translateY(-3px); z-index: 2;
-  box-shadow: 0 6px 14px -4px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.12);
+  transform: translateY(-2px); z-index: 2;
+  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
 }
-.peers .av.mas { background: var(--surface-2); color: var(--muted); border-color: var(--surface); }
-.salir {
+.peers .av.mas { background: var(--surface-3); color: var(--muted); border-color: var(--surface); font-weight: 650; }
+.salir, .invitar {
   font-size: var(--t-xs); color: var(--muted); cursor: pointer;
-  padding: 0.28rem 0.6rem; border-radius: var(--r-sm);
-  border: 1px solid var(--border); background: transparent;
-  transition: background var(--tr), color var(--tr), border-color var(--tr);
+  padding: 0.3rem 0.62rem; border-radius: 6px;
+  border: 1px solid var(--border-soft); background: var(--surface-2);
+  font-weight: 550;
+  transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr);
 }
-.salir:hover { color: var(--text); background: var(--surface-2); border-color: #353a45; }
+.salir:hover, .invitar:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); transform: translateY(-1px); }
 
 /* ── Layout: rail + sidebar + main ── */
-.layout { flex: 1; display: flex; min-height: 0; gap: 7px; }
+.layout { flex: 1; display: flex; min-height: 0; gap: 6px; }
 .rail {
-  width: 46px; flex-shrink: 0; display: flex; flex-direction: column;
-  align-items: center; gap: 5px; padding: 8px 0;
+  width: 44px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; padding: 7px 0;
 }
 .rail button {
-  width: 36px; height: 36px; border: none; border-radius: 10px;
+  width: 34px; height: 34px; border: none; border-radius: 9px;
   background: transparent; color: var(--faint); cursor: pointer;
   display: grid; place-items: center; position: relative;
 }
-.rail button:hover { background: var(--surface-2); color: var(--text); }
+.rail button:hover { background: var(--surface-2); color: var(--text-2); }
 .rail button.activo { background: var(--accent-weak); color: var(--accent); }
-/* La barra de "activo" cuelga del gradiente y emite glow: el item
-   seleccionado es lo único que brilla en el rail. */
+/* La barra de "activo" cuelga al borde del rail. Plana, sin glow: el
+   color YA es la señal; el glow era ruido. */
 .rail button.activo::before {
-  content: ""; position: absolute; left: -8px; top: 8px; bottom: 8px;
-  width: 3px; border-radius: 3px; background: var(--grad);
-  box-shadow: 0 0 10px -1px var(--accent);
+  content: ""; position: absolute; left: -7px; top: 7px; bottom: 7px;
+  width: 2.5px; border-radius: 0 3px 3px 0; background: var(--accent);
 }
-.rail .rail-sep { width: 20px; height: 1px; background: var(--border-soft); margin: 3px 0; }
+.rail .rail-sep { width: 18px; height: 1px; background: var(--border-soft); margin: 2px 0; }
 
 .sidebar {
-  width: 252px; flex-shrink: 0; padding: 0.85rem; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.65rem;
+  width: 248px; flex-shrink: 0; padding: 0.7rem 0.6rem; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.55rem;
 }
-/* Encabezado de sección: pequeño, ancho, en mayúsculas — estructura
-   sin gritar. Línea fina debajo para anclar la jerarquía. */
+/* Encabezado de sección: micro, ancho, en mayúsculas — estructura sin
+   gritar. */
 .h2 {
-  margin: 0.15rem 0.1rem; font-size: 10px; font-weight: 750;
-  text-transform: uppercase; letter-spacing: 0.14em; color: var(--faint);
+  margin: 0.2rem 0.35rem 0.05rem; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.13em; color: var(--faint);
   display: flex; align-items: center; gap: 0.45rem;
 }
 .h2 .h2-num {
@@ -312,69 +361,86 @@ button:active { transform: translateY(1px); }
   padding: 1px 6px; font-size: 9.5px; letter-spacing: 0;
 }
 .btn-nuevo {
-  background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
-  padding: 0.58rem 0.7rem; font-size: 12.5px; font-weight: 600;
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--border-soft); border-radius: 6px;
+  padding: 0.5rem 0.65rem; font-size: 12px; font-weight: 550;
   cursor: pointer; text-align: left; display: flex; align-items: center;
   gap: 0.5rem; transition: background var(--tr), color var(--tr),
-  border-color var(--tr), transform var(--tr);
+  border-color var(--tr);
 }
 .btn-nuevo:hover {
-  background: var(--accent-weak); border-color: rgba(76,195,138,.4);
-  color: var(--accent); transform: translateY(-1px);
+  background: var(--surface-3); border-color: var(--border);
+  color: var(--text);
 }
-.btn-nuevo svg { flex-shrink: 0; }
+.btn-nuevo svg { flex-shrink: 0; color: var(--faint); transition: color var(--tr); }
+.btn-nuevo:hover svg { color: var(--accent); }
 
-.tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+/* ── File tree: denso, con GUÍAS DE INDENTACIÓN (la firma de un IDE de
+   verdad). Las guías son una rejilla vertical muy tenue cada 14px (el
+   mismo paso que usa FileTree para sangrar); las filas en reposo son
+   transparentes y la dejan ver, el hover/activo la tapan. Cero cambio de
+   lógica. ── */
+.tree {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  /* Guías de indentación: rejilla vertical hairline cada 14px (el paso
+     exacto con que FileTree sangra). En reposo las filas son
+     transparentes y la dejan ver — la firma "IDE de verdad"; el hover y
+     el activo la tapan solos con su fondo. Cero cambio de lógica/DOM. */
+  background-image: repeating-linear-gradient(90deg,
+    transparent 0 14px, var(--border-soft) 14px 15px);
+  background-position: 16px 0;
+}
 .row {
-  display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.44rem 0.55rem; border-radius: var(--r-sm); cursor: pointer;
-  font-size: 12.5px; color: var(--muted);
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.34rem 0.5rem; border-radius: var(--r-sm); cursor: pointer;
+  font-size: 12.5px; color: var(--muted); position: relative;
   transition: background var(--tr), color var(--tr), box-shadow var(--tr);
 }
 .row:hover { background: var(--surface-2); color: var(--text); }
 .row.activo {
   background: var(--accent-weak); color: var(--text);
-  box-shadow: inset 2.5px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
-.row.dir { color: var(--text); }
+.row.dir { color: var(--text-2); }
 .row.dir .twist {
-  width: 0.85em; flex-shrink: 0; color: var(--faint); font-size: 10px;
-  transition: transform var(--tr); display: inline-block;
+  width: 0.85em; flex-shrink: 0; color: var(--faint); font-size: 9px;
+  transition: transform var(--tr); display: inline-block; text-align: center;
 }
+.row.dir:hover .twist { color: var(--muted); }
 .row.dir .name { font-weight: 600; }
-.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; letter-spacing: -0.005em; }
 .chip {
-  flex-shrink: 0; font-family: var(--font-mono); font-size: 9.5px;
-  font-weight: 800; line-height: 1; padding: 3px 4px; border-radius: 4px;
-  min-width: 20px; text-align: center; text-transform: lowercase;
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 9px;
+  font-weight: 700; line-height: 1; padding: 3px 4px; border-radius: 4px;
+  min-width: 19px; text-align: center; text-transform: lowercase;
   background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-soft);
 }
-.chip.t-py { background: #1d2b1f; color: #6cd08a; }
-.chip.t-js { background: #2e2a14; color: #e3c14a; }
-.chip.t-ts { background: #142436; color: #5aa6ef; }
-.chip.t-go { background: #112b30; color: #56cfd9; }
-.chip.t-rs { background: #2e1d14; color: #e0905f; }
-.chip.t-java { background: #2e1a14; color: #e08a5f; }
-.chip.t-cpp { background: #1a2336; color: #7aa6f0; }
-.chip.t-md { background: #1f2026; color: #9aa0ad; }
-.chip.t-cfg { background: #251f2e; color: #b58bd0; }
+/* Tipo por color, pero apagado (texto teñido, no caramelo): scaneás sin
+   que grite. */
+.chip.t-py { color: #6cc78a; }
+.chip.t-js { color: #d8bd55; }
+.chip.t-ts { color: #5fa0e8; }
+.chip.t-go { color: #5cc7d2; }
+.chip.t-rs { color: #d89065; }
+.chip.t-java { color: #d8895f; }
+.chip.t-cpp { color: #7aa0e8; }
+.chip.t-md { color: #969cab; }
+.chip.t-cfg { color: #a98bcf; }
 .badges { display: flex; gap: 3px; flex-shrink: 0; }
-/* El badge de presencia respira muy leve: alguien está EN ese archivo
-   ahora mismo. Es vida, no adorno. */
+/* Presencia: alguien está EN ese archivo ahora. Anillo de la superficie
+   para recortarlo; sin loop de glow (la vida la da el color + estar). */
 .badge {
-  width: 17px; height: 17px; border-radius: 50%; font-size: 9px;
-  line-height: 17px; text-align: center; color: #0d0e11;
-  font-weight: 800; box-shadow: 0 0 0 2px var(--surface);
-  animation: badge-vivo 2.6s ease-in-out infinite;
+  width: 16px; height: 16px; border-radius: 50%; font-size: 8.5px;
+  line-height: 16px; text-align: center; color: #0a0c10;
+  font-weight: 750; box-shadow: 0 0 0 2px var(--surface);
 }
-@keyframes badge-vivo {
-  0%, 100% { box-shadow: 0 0 0 2px var(--surface); }
-  50% { box-shadow: 0 0 0 2px var(--surface), 0 0 8px -1px currentColor; }
-}
+/* El componente pasa "✕" como texto (no un ícono): necesita tamaño y
+   alto de línea reales para centrarse. */
 .delx {
   border: none; background: transparent; color: var(--faint);
-  cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 5px;
+  cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 4px;
   border-radius: var(--r-sm); opacity: 0; display: flex;
   transition: opacity var(--tr), color var(--tr), background var(--tr);
 }
@@ -384,172 +450,197 @@ button:active { transform: translateY(1px); }
 /* ── Main ── */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .tabs {
-  display: flex; align-items: stretch; gap: 4px; padding: 6px 6px 0;
+  display: flex; align-items: stretch; gap: 3px; padding: 5px 6px 0;
   background: var(--bg); border-bottom: 1px solid var(--border-soft);
-  min-height: 38px;
+  min-height: 37px;
 }
 .tabs .vacio {
-  color: var(--faint); font-size: var(--t-sm); padding: 0.55rem 0.7rem;
-  display: inline-flex; align-items: center; gap: 0.45rem;
+  color: var(--faint); font-size: var(--t-sm); padding: 0.5rem 0.65rem;
+  display: inline-flex; align-items: center; gap: 0.42rem;
 }
 .tabs .vacio svg { opacity: .7; }
 .tab {
   display: flex; align-items: center; gap: 0.45rem; position: relative;
-  padding: 0.5rem 0.55rem 0.5rem 0.7rem; background: var(--surface);
+  padding: 0.46rem 0.5rem 0.46rem 0.62rem; background: var(--surface);
   color: var(--text); border: 1px solid var(--border-soft);
-  border-bottom: none; border-radius: 8px 8px 0 0; font-size: 12.5px;
+  border-bottom: none; border-radius: 7px 7px 0 0; font-size: 12px;
   font-family: var(--font-mono); max-width: 260px;
-  animation: pop-in 220ms var(--ease-in) both;
+  animation: pop-in 180ms var(--ease-in) both;
 }
-/* La pestaña abierta "cuelga" del acento: ata el archivo a su contenido. */
+/* La pestaña abierta se ata al editor por un filo de acento ARRIBA, fino
+   y sin glow, y se "funde" con el cuerpo por abajo (gana 1px que tapa la
+   costura). Lectura de IDE real, no de tabs de webapp. */
 .tab::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
-  border-radius: 2px 2px 0 0; background: var(--grad);
-  box-shadow: 0 0 10px -2px var(--accent);
+  border-radius: 2px 2px 0 0; background: var(--accent);
 }
-.tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Capa 19: dot de "sin marcar" (cambios desde el último Ctrl+S). Aviso
-   suave, no alarmante: recordatorio del reflejo, no un error. */
+.tab::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 1px; background: var(--surface);
+}
+.tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+/* Capa 19: dot de "sin marcar". Aviso suave, no alarma. */
+/* El componente pasa un glyph "●" como texto; lo ocultamos (font-size 0)
+   y dibujamos un punto limpio por CSS — el círculo no depende del render
+   del glyph en cada fuente. */
 .tab .dot-sinmarcar {
-  color: var(--warn); font-size: 9px; line-height: 1;
-  flex-shrink: 0; cursor: default;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+  flex-shrink: 0; cursor: default; font-size: 0; overflow: hidden;
+  align-self: center;
 }
 .tab .tabx {
   border: none; background: transparent; color: var(--faint);
-  cursor: pointer; font-size: 12px; line-height: 1; padding: 3px 4px;
+  cursor: pointer; line-height: 0; padding: 3px;
   border-radius: 4px; flex-shrink: 0; display: flex;
   transition: color var(--tr), background var(--tr);
 }
 .tab .tabx:hover { color: var(--bad); background: var(--bad-bg); }
 .ctxbar {
-  padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-soft);
+  padding: 0.42rem 0.9rem; border-bottom: 1px solid var(--border-soft);
   background: var(--surface); font-size: var(--t-sm); color: var(--muted);
-  display: flex; align-items: center; gap: 0.7rem; min-height: 36px;
+  display: flex; align-items: center; gap: 0.55rem; min-height: 34px;
   flex-wrap: wrap;
 }
-.aqui { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.aqui { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 .aqui .quien {
-  font-size: var(--t-xs); padding: 0.16rem 0.55rem; border-radius: var(--r-pill);
-  color: #0d0e11; font-weight: 750; display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--t-xs); padding: 0.14rem 0.5rem 0.14rem 0.42rem;
+  border-radius: var(--r-pill); color: #0a0c10; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 5px;
 }
 .aqui .quien::before {
   content: ""; width: 5px; height: 5px; border-radius: 50%;
-  background: rgba(0,0,0,.45);
+  background: rgba(0, 0, 0, 0.4);
 }
 .otag {
-  padding: 0.16rem 0.6rem; border-radius: var(--r-pill); font-weight: 700;
-  font-size: var(--t-xs); display: inline-flex; align-items: center; gap: 5px;
+  padding: 0.14rem 0.55rem 0.14rem 0.45rem; border-radius: var(--r-pill);
+  font-weight: 650; font-size: var(--t-xs); display: inline-flex;
+  align-items: center; gap: 5px;
 }
 .otag::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .otag.tuyo { background: var(--ok-bg); color: var(--ok); }
 .otag.ajeno { background: var(--warn-bg); color: var(--warn); }
-.ctx-nota { color: var(--warn); font-size: var(--t-sm); }
+.ctx-nota { color: var(--muted); font-size: var(--t-sm); }
+.ctx-nota b, .ctx-nota strong { color: var(--warn); }
 .reclamar {
-  background: var(--surface-2); color: var(--text);
+  background: var(--surface-2); color: var(--text-2);
   border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.26rem 0.7rem; font-size: var(--t-xs); font-weight: 650; cursor: pointer;
-  transition: background var(--tr), border-color var(--tr), transform var(--tr);
+  padding: 0.24rem 0.65rem; font-size: var(--t-xs); font-weight: 600; cursor: pointer;
+  transition: background var(--tr), border-color var(--tr), color var(--tr), transform var(--tr);
 }
-.reclamar:hover { background: var(--accent-weak); border-color: rgba(76,195,138,.4); color: var(--accent); transform: translateY(-1px); }
+.reclamar:hover { background: var(--accent-weak); border-color: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
 
-/* ── Bandejas: aviso / propuestas / impacto ── */
-.aviso { padding: 0.6rem 1rem; font-size: var(--t-sm); background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--border-soft); }
+/* ── Bandejas: aviso / propuestas / impacto. EL diferenciador del
+   producto: se leen como un "feed de review" intencional, no como una
+   lista de debug. ── */
+.aviso { padding: 0.55rem 0.9rem; font-size: var(--t-sm); background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--border-soft); }
 .tray {
   border-bottom: 1px solid var(--border-soft); background: var(--surface);
-  animation: fade-in 300ms var(--ease-in) both;
+  animation: fade-in 260ms var(--ease-in) both;
 }
 .tray h3 {
-  margin: 0; padding: 0.55rem 1rem; font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.14em; font-weight: 750; color: var(--muted);
+  margin: 0; padding: 0.5rem 0.9rem; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.13em; font-weight: 700; color: var(--muted);
   background: var(--bg); border-bottom: 1px solid var(--border-soft);
   display: flex; align-items: center; gap: 0.5rem;
 }
-/* Marcador de "feed de señal": las bandejas (propuestas/impacto) son EL
-   diferenciador; se ven intencionales, no una lista de debug. */
 .tray h3::before {
-  content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--grad);
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--muted);
 }
 .tray h3 .cuenta {
   margin-left: auto; font-family: var(--font-mono); letter-spacing: 0;
   background: var(--surface-2); color: var(--muted);
-  padding: 1px 8px; border-radius: var(--r-pill); font-size: 10px;
+  padding: 1px 7px; border-radius: var(--r-pill); font-size: 10px;
+  border: 1px solid var(--border-soft);
 }
 .tray.imp h3 { color: var(--accent); }
-.tray.imp h3::before { box-shadow: 0 0 9px var(--accent); }
-.prop { padding: 0.85rem 1rem; border-top: 1px solid var(--border-soft); animation: fade-in 260ms var(--ease-in) both; }
+.tray.imp h3::before { background: var(--accent); }
+.tray.imp h3 .cuenta { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-weak); }
+.prop { padding: 0.75rem 0.9rem; border-top: 1px solid var(--border-soft); animation: fade-in 220ms var(--ease-in) both; }
 .prop:first-of-type { border-top: none; }
-.prop .cab { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
-.prop .quien { font-size: 12.5px; }
-.prop .quien b { color: var(--warn); font-weight: 700; }
-.prop .acc { margin-left: auto; display: flex; gap: 0.45rem; }
+.prop .cab { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.55rem; }
+.prop .quien { font-size: 12px; color: var(--muted); }
+.prop .quien b { color: var(--text); font-weight: 650; }
+.prop .acc { margin-left: auto; display: flex; gap: 0.4rem; }
 .prop button {
   border: 1px solid transparent; border-radius: var(--r-sm);
-  padding: 0.34rem 0.85rem; font-size: var(--t-sm); font-weight: 700;
+  padding: 0.3rem 0.8rem; font-size: var(--t-sm); font-weight: 650;
   cursor: pointer; transition: background var(--tr), transform var(--tr), filter var(--tr);
 }
-.prop button:hover { transform: translateY(-1px); filter: brightness(1.12); }
+.prop button:hover { transform: translateY(-1px); filter: brightness(1.1); }
 .prop .ok { background: var(--ok-bg); color: var(--ok); }
 .prop .no { background: var(--bad-bg); color: var(--bad); }
+/* Diff de review: canal de signo a la izquierda (lo dibuja el CSS, no
+   texto), filas teñidas sobrias, gutter como GitHub/Linear. */
 .diff {
   margin: 0; font-family: var(--font-mono); font-size: var(--t-sm);
-  line-height: 1.55; white-space: pre-wrap; max-height: 220px;
+  line-height: 1.6; white-space: pre-wrap; max-height: 230px;
   overflow: auto; border: 1px solid var(--border-soft);
   border-radius: var(--r-sm); background: var(--bg);
 }
-.diff div { padding: 0 0.6rem; }
-.diff .add { background: rgba(86, 217, 138, 0.12); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
-.diff .del { background: rgba(240, 112, 122, 0.12); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
+.diff div { padding: 1px 0.7rem 1px 1.7rem; position: relative; }
+.diff div::before {
+  position: absolute; left: 0; width: 1.7rem; text-align: center;
+  color: inherit; opacity: 0.7;
+}
+.diff .add { background: rgba(76, 201, 138, 0.1); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
+.diff .add::before { content: "+"; }
+.diff .del { background: rgba(232, 99, 111, 0.1); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
+.diff .del::before { content: "\2212"; }
 .diff .eq { color: var(--faint); }
 .imp-row {
-  padding: 0.7rem 1rem; border-top: 1px solid var(--border-soft);
-  display: flex; align-items: flex-start; gap: 0.75rem;
-  font-size: 12.5px; color: var(--text);
-  animation: fade-in 260ms var(--ease-in) both;
+  padding: 0.65rem 0.9rem; border-top: 1px solid var(--border-soft);
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  font-size: 12.5px; color: var(--text-2);
+  animation: fade-in 220ms var(--ease-in) both;
 }
 .imp-row:first-of-type { border-top: none; }
 .imp-row .izq { flex: 1; min-width: 0; }
-.imp-row b { color: var(--info); font-weight: 650; }
-.imp-row code { background: var(--bg); color: var(--accent); padding: 1px 5px; border-radius: var(--r-sm); font-family: var(--font-mono); font-size: 11.5px; }
+.imp-row b { color: var(--text); font-weight: 650; }
+.imp-row code { background: var(--surface-2); color: var(--accent); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--border-soft); }
 .imp-row .por {
-  margin-top: 0.4rem; font-size: var(--t-sm); line-height: 1.45;
-  color: var(--warn); font-family: var(--font-mono);
-  white-space: pre-wrap; word-break: break-word;
+  margin-top: 0.38rem; font-size: var(--t-sm); line-height: 1.5;
+  color: var(--muted); display: flex; gap: 0.45rem; align-items: flex-start;
 }
-/* Capa 24d: badge de severidad del aviso. */
+.imp-row .por .motivo {
+  flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word;
+  padding-top: 1px;
+}
+/* Capa 24d: badge de severidad — el triage del dueño. */
 .imp-row .sev {
-  font-size: 9.5px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--r-pill);
-  vertical-align: middle;
+  font-size: 9px; font-weight: 750; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 1px 6px; border-radius: var(--r-pill);
+  flex-shrink: 0;
 }
-.imp-row .sev-alta { background: rgba(229,83,75,0.16); color: #e5534b; }
-.imp-row .sev-media { background: rgba(227,179,65,0.16); color: var(--warn); }
-.imp-row .sev-baja { background: rgba(154,160,173,0.14); color: var(--faint); }
-/* Capa 24: cadena del impacto transitivo (premium). */
+.imp-row .sev-alta { background: var(--bad-bg); color: var(--bad); }
+.imp-row .sev-media { background: var(--warn-bg); color: var(--warn); }
+.imp-row .sev-baja { background: var(--surface-2); color: var(--faint); }
+/* Capa 24: cadena del impacto transitivo (premium). El PORQUÉ de la onda. */
 .imp-row .cadena {
-  margin-top: 0.45rem; font-size: var(--t-xs); line-height: 1.6;
+  margin-top: 0.42rem; font-size: var(--t-xs); line-height: 1.7;
   color: var(--faint); word-break: break-word;
 }
-.imp-row .cadena .flecha { color: var(--accent); }
-.imp-row .acc { margin-left: auto; display: flex; gap: 0.4rem; flex-shrink: 0; }
+.imp-row .cadena .flecha { color: var(--accent); padding: 0 2px; }
+.imp-row .acc { margin-left: auto; display: flex; gap: 0.35rem; flex-shrink: 0; }
 .imp-row .acc button {
   border: 1px solid var(--border-soft); border-radius: var(--r-sm);
-  padding: 0.3rem 0.7rem; font-size: var(--t-sm); font-weight: 600;
-  cursor: pointer; background: var(--surface-2); color: var(--info);
-  transition: background var(--tr), border-color var(--tr), transform var(--tr);
+  padding: 0.28rem 0.65rem; font-size: var(--t-sm); font-weight: 550;
+  cursor: pointer; background: var(--surface-2); color: var(--text-2);
+  transition: background var(--tr), border-color var(--tr), color var(--tr), transform var(--tr);
 }
 .imp-row .acc button:hover {
-  border-color: rgba(108,182,255,.4); background: rgba(108,182,255,.1);
-  transform: translateY(-1px);
+  border-color: var(--border); background: var(--surface-3);
+  color: var(--text); transform: translateY(-1px);
 }
 
-/* ── Editor (MÉTRICA SAGRADA: NO tocar valores de geometría) ──
+/* ── Editor (GEOMETRÍA SAGRADA: NO tocar valores de medida) ──
    line-height 22, padding 20px 24px 20px 64px, gutter 52px / font 14 /
-   lh 22, .ed-active y .marca 22px. Solo se reestiliza el chrome. */
-.editorwrap { flex: 1; position: relative; display: flex; min-height: 0; background: var(--surface); }
-.editorwrap.off { background: var(--bg); }
-/* Estado vacío del editor (sin archivo): mensaje centrado por encima
-   del textarea deshabilitado. No es "roto", es una invitación. */
+   lh 22, .ed-active y .marca 22px. Solo se reestiliza el chrome: ahora el
+   editor es la superficie MÁS PROFUNDA (un "pozo" --bg bajo la isla
+   --surface) → el código es el foco, hay profundidad real. */
+.editorwrap { flex: 1; position: relative; display: flex; min-height: 0; background: var(--bg); }
+.editorwrap.off { background: var(--surface); }
+/* Estado vacío del editor: invitación, no error. */
 .editorwrap.off::after {
   content: "Ningún archivo abierto · elegí uno en la izquierda o creá uno nuevo";
   position: absolute; inset: 0; display: grid; place-items: center;
@@ -557,11 +648,13 @@ button:active { transform: translateY(1px); }
   font-size: var(--t-base); pointer-events: none; white-space: pre-wrap;
   letter-spacing: -0.005em;
 }
+/* Banda de línea activa: neutra y discreta, con un filo de acento a la
+   izquierda. (left/height SAGRADOS — solo cambia el aspecto.) */
 .ed-active {
   position: absolute; left: 52px; right: 0; height: 22px;
-  background: rgba(76, 195, 138, 0.05); z-index: 0;
+  background: rgba(255, 255, 255, 0.022); z-index: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(76,195,138,.05);
+  box-shadow: inset 2px 0 0 var(--accent-line);
 }
 .ed-hl {
   position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
@@ -573,15 +666,15 @@ button:active { transform: translateY(1px); }
 .ed-pres { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
 .ed-pres-scroll { position: absolute; left: 0; right: 0; top: 0; }
 .marca { position: absolute; left: 0; right: 0; height: 22px; }
-.marca .tinte { position: absolute; inset: 0; opacity: 0.16; }
-.marca .raya { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
-/* Etiqueta de presencia: pequeña cápsula con el nombre. Más legible y
-   con micro-sombra para despegar del código sin tapar nada. */
+.marca .tinte { position: absolute; inset: 0; opacity: 0.1; }
+.marca .raya { position: absolute; left: 0; right: 0; top: 0; height: 2px; }
+/* Etiqueta de presencia: cápsula nítida con el nombre, micro-sombra para
+   despegar del código sin taparlo. */
 .marca .etiqueta {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  font-size: 10px; padding: 1px 8px; border-radius: var(--r-pill); color: #0d0e11;
-  font-weight: 800; white-space: nowrap; font-family: var(--font-ui);
-  box-shadow: 0 2px 6px -2px rgba(0,0,0,.6);
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; padding: 1px 7px; border-radius: var(--r-pill); color: #0a0c10;
+  font-weight: 750; white-space: nowrap; font-family: var(--font-ui);
+  letter-spacing: -0.01em; box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.6);
 }
 .ed-ta {
   flex: 1; position: relative; z-index: 1; background: transparent;
@@ -590,93 +683,82 @@ button:active { transform: translateY(1px); }
   font-size: 14px; line-height: 22px; padding: 20px 24px 20px 64px;
   resize: none; outline: none; white-space: pre; overflow: auto; tab-size: 4;
 }
-.ed-ta::selection { background: rgba(76, 195, 138, 0.28); }
+.ed-ta::selection { background: rgba(76, 195, 138, 0.26); }
 .ed-ta::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
 .ed-gutter {
   position: absolute; left: 0; top: 0; bottom: 0; width: 52px;
   overflow: hidden; pointer-events: none; z-index: 3;
-  background: linear-gradient(90deg, var(--bg), var(--surface));
+  background: var(--bg);
   border-right: 1px solid var(--border-soft);
   font-family: var(--font-mono); font-size: 14px; line-height: 22px;
 }
 .ed-gutter-scroll { padding: 20px 10px 0 0; text-align: right; color: var(--faint); white-space: pre; }
 .editorwrap.off .ed-gutter, .editorwrap.off .ed-active { display: none; }
 
-/* Tokens de Prism con NUESTRA paleta (sin su theme). */
+/* Tokens de Prism con NUESTRA paleta (sin su theme). Calibrados para
+   contraste cómodo sobre el "pozo" --bg, sin saturación de juguete. */
 .token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--faint); font-style: italic; }
 .token.punctuation { color: var(--muted); }
-.token.keyword, .token.boolean, .token.important, .token.atrule { color: #c98bdb; }
-.token.string, .token.char, .token.attr-value, .token.regex { color: #e3b341; }
-.token.number, .token.unit { color: #e0905f; }
+.token.keyword, .token.boolean, .token.important, .token.atrule { color: #c08fd6; }
+.token.string, .token.char, .token.attr-value, .token.regex { color: #d8b35e; }
+.token.number, .token.unit { color: #dd9266; }
 .token.function, .token.class-name, .token.maybe-class-name { color: #4cc38a; }
 .token.builtin, .token.tag, .token.selector, .token.attr-name,
-.token.property, .token.constant, .token.symbol { color: #6cb6ff; }
-.token.operator, .token.entity, .token.url { color: var(--text); }
+.token.property, .token.constant, .token.symbol { color: #66aef0; }
+.token.operator, .token.entity, .token.url { color: var(--text-2); }
 .token.decorator, .token.namespace { color: #56d98a; }
 .token.deleted { color: var(--bad); }
 .token.inserted { color: var(--ok); }
 
 /* ── Status bar ── */
 .statusbar {
-  flex-shrink: 0; display: flex; align-items: center; gap: 0.55rem;
-  padding: 0.34rem 0.9rem; font-size: var(--t-xs); color: var(--muted);
-  min-height: 28px;
+  flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0.8rem; font-size: var(--t-xs); color: var(--muted);
+  min-height: 27px;
 }
 .statusbar .sb { display: inline-flex; align-items: center; gap: 0.35rem; }
-.statusbar .sep { color: var(--faint); opacity: .6; }
-.statusbar .pt { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+.statusbar .sep { color: var(--faint); opacity: .55; }
+.statusbar .pt { width: 6px; height: 6px; border-radius: 50%; }
 .statusbar .vivo {
   width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-  box-shadow: 0 0 7px var(--accent); animation: pulso 2.4s ease-in-out infinite;
+  animation: pulso 2.6s ease-in-out infinite;
 }
-.statusbar b { color: var(--text); font-weight: 600; }
+.statusbar b { color: var(--text-2); font-weight: 600; }
 
 /* ── Login / tarjeta de auth (patrón reusado por Lobby) ── */
 .login {
   position: fixed; inset: 0; z-index: 50; display: flex;
   align-items: center; justify-content: center; padding: 1rem;
-  background: radial-gradient(900px 500px at 50% -10%, rgba(76,195,138,0.07), transparent 60%), var(--bg-deep);
+  background: radial-gradient(900px 500px at 50% -10%, rgba(76, 195, 138, 0.05), transparent 60%), var(--bg-deep);
 }
 .login-card {
-  width: 340px; background: var(--surface); border: 1px solid var(--border);
+  width: 348px; background: var(--surface); border: 1px solid var(--border-soft);
   border-radius: var(--r-isla); padding: 1.7rem; display: flex;
-  flex-direction: column; gap: 0.65rem; box-shadow: var(--shadow-modal);
+  flex-direction: column; gap: 0.6rem; box-shadow: var(--shadow-modal);
   animation: rise-in var(--dur-in) var(--ease-in) both;
 }
-.login-card .marca { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.login-card .marca { font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em; line-height: 1.1; color: var(--text); }
 .login-card .marca b {
   font-weight: 800;
   background: var(--grad); -webkit-background-clip: text;
   background-clip: text; color: transparent;
 }
 .login-card p { margin: 0 0 0.5rem; font-size: var(--t-sm); color: var(--muted); line-height: 1.55; }
-.login-card input {
-  background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 0.7rem 0.85rem; font-size: var(--t-base);
-  outline: none; font-family: inherit;
-  transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
-}
-.login-card input::placeholder { color: var(--faint); }
-.login-card input:hover { border-color: #353a45; }
-.login-card input:focus {
-  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
-  background: var(--surface);
-}
 .login-card .fila { display: flex; gap: 0.55rem; margin-top: 0.35rem; }
 .login-card button {
   flex: 1; border: 1px solid transparent; border-radius: var(--r);
-  padding: 0.65rem; font-size: var(--t-base); font-weight: 700; cursor: pointer;
+  padding: 0.62rem; font-size: var(--t-base); font-weight: 650; cursor: pointer;
   transition: background var(--tr), border-color var(--tr),
   transform var(--tr), filter var(--tr);
 }
 .login-card .primario {
-  background: var(--grad); color: #04130c; font-weight: 750;
-  box-shadow: 0 6px 18px -8px rgba(47,230,198,.55);
+  background: var(--grad); color: #04130c; font-weight: 700;
+  box-shadow: 0 4px 14px -8px rgba(52, 217, 191, 0.5);
 }
-.login-card .primario:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.login-card .primario:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .login-card .primario:active { transform: translateY(1px); }
 .login-card .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
-.login-card .secundario:hover { background: var(--elevated); border-color: #353a45; transform: translateY(-1px); }
+.login-card .secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .login-card .err {
   font-size: var(--t-sm); color: var(--bad); min-height: 1.1em;
   display: flex; align-items: center; gap: 6px;
@@ -689,11 +771,12 @@ button:active { transform: translateY(1px); }
 .login-card .lazo {
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-size: var(--t-sm); margin-top: 0.3rem; align-self: flex-start;
-  padding: 4px 2px; transition: color var(--tr);
+  padding: 4px 2px; flex: none; transition: color var(--tr);
 }
 .login-card .lazo:hover { color: var(--text); }
 
-/* ── Landing (capa 25): split con relato + compuerta ── */
+/* ── Landing (capa 25): el ÚNICO lugar con permiso de motion expresivo;
+   el IDE es quieto a propósito. Refinada: aurora más contenida. ── */
 .landing {
   position: fixed; inset: 0; z-index: 50;
   display: grid; grid-template-columns: 1.05fr 0.95fr;
@@ -704,30 +787,30 @@ button:active { transform: translateY(1px); }
   display: flex; align-items: center;
   padding: clamp(2rem, 6vw, 5.5rem);
   background:
-    linear-gradient(180deg, rgba(255,255,255,.03), transparent 40%),
-    radial-gradient(120% 90% at 0% 0%, rgba(76,195,138,.16), transparent 55%),
-    radial-gradient(120% 90% at 100% 100%, rgba(47,230,198,.12), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent 40%),
+    radial-gradient(120% 90% at 0% 0%, rgba(76, 195, 138, 0.12), transparent 55%),
+    radial-gradient(120% 90% at 100% 100%, rgba(52, 217, 191, 0.09), transparent 55%),
     var(--bg);
   border-right: 1px solid var(--border-soft);
 }
 .landing-pitch .lp-aurora {
   position: absolute; inset: -30%; pointer-events: none; z-index: 0;
   background:
-    radial-gradient(40% 40% at 30% 35%, rgba(76,195,138,.20), transparent 60%),
-    radial-gradient(35% 35% at 70% 65%, rgba(47,230,198,.16), transparent 60%);
-  filter: blur(28px); opacity: .9;
-  animation: lp-drift 22s ease-in-out infinite alternate;
+    radial-gradient(40% 40% at 30% 35%, rgba(76, 195, 138, 0.15), transparent 60%),
+    radial-gradient(35% 35% at 70% 65%, rgba(52, 217, 191, 0.12), transparent 60%);
+  filter: blur(30px); opacity: .85;
+  animation: lp-drift 24s ease-in-out infinite alternate;
 }
 @keyframes lp-drift {
-  0%   { transform: translate3d(-4%, -3%, 0) scale(1.05); }
-  100% { transform: translate3d(5%, 4%, 0) scale(1.15); }
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1.05); }
+  100% { transform: translate3d(4%, 3%, 0) scale(1.12); }
 }
 .landing-pitch .lp-inner {
-  position: relative; z-index: 1; max-width: 460px;
+  position: relative; z-index: 1; max-width: 470px;
   animation: rise-in .6s var(--ease-in) both;
 }
 .lp-marca {
-  font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.03em;
+  font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em;
   color: var(--text); margin-bottom: 1.6rem;
 }
 .lp-marca b {
@@ -737,7 +820,7 @@ button:active { transform: translateY(1px); }
 }
 .lp-tag {
   margin: 0 0 1.1rem; font-size: clamp(26px, 3.4vw, 40px);
-  line-height: 1.12; font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.12; font-weight: 800; letter-spacing: -0.035em;
   color: var(--text);
 }
 .lp-tag span {
@@ -746,7 +829,7 @@ button:active { transform: translateY(1px); }
 }
 .lp-tesis {
   margin: 0 0 1.8rem; font-size: 14.5px; line-height: 1.65;
-  color: var(--muted); max-width: 40ch;
+  color: var(--muted); max-width: 42ch;
 }
 .lp-puntos { list-style: none; margin: 0 0 2rem; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .lp-puntos li {
@@ -755,15 +838,15 @@ button:active { transform: translateY(1px); }
   animation: rise-in .55s var(--ease-in) both;
 }
 .lp-puntos li::before {
-  content: ""; position: absolute; left: 0; top: 0.42em;
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--grad); box-shadow: 0 0 10px -1px var(--accent);
+  content: ""; position: absolute; left: 0; top: 0.45em;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
 }
 .lp-puntos b { color: var(--text); font-weight: 700; }
 .lp-puntos code {
   font-family: var(--font-mono); font-size: 11.5px;
   background: var(--surface-2); color: var(--accent);
-  padding: 1px 5px; border-radius: 4px;
+  padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border-soft);
 }
 .lp-presencia {
   display: inline-flex; align-items: center; gap: 0;
@@ -771,25 +854,25 @@ button:active { transform: translateY(1px); }
 }
 .lp-presencia .pp {
   width: 30px; height: 30px; border-radius: 50%; margin-left: -8px;
-  display: grid; place-items: center; font-size: var(--t-sm); font-weight: 800;
+  display: grid; place-items: center; font-size: var(--t-sm); font-weight: 750;
   color: #06120c; border: 2px solid var(--bg);
-  animation: lp-pulse 2.6s ease-in-out infinite;
+  animation: lp-pulse 2.8s ease-in-out infinite;
 }
 .lp-presencia .pp:first-child { margin-left: 0; animation-delay: 0s; }
-.lp-presencia .pp:nth-child(2) { animation-delay: .35s; }
-.lp-presencia .pp:nth-child(3) { animation-delay: .7s; }
+.lp-presencia .pp:nth-child(2) { animation-delay: .4s; }
+.lp-presencia .pp:nth-child(3) { animation-delay: .8s; }
 .lp-presencia .pp-txt {
-  margin-left: 0.8rem; font-size: var(--t-sm); font-weight: 600;
+  margin-left: 0.8rem; font-size: var(--t-sm); font-weight: 550;
   color: var(--muted);
 }
 @keyframes lp-pulse {
-  0%, 100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(76,195,138,0); }
-  45%      { transform: translateY(-3px); box-shadow: 0 0 0 6px rgba(76,195,138,.10); }
+  0%, 100% { transform: translateY(0); box-shadow: 0 0 0 0 rgba(76, 195, 138, 0); }
+  45%      { transform: translateY(-2px); box-shadow: 0 0 0 5px rgba(76, 195, 138, 0.08); }
 }
 .landing-auth {
   display: flex; align-items: center; justify-content: center;
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: radial-gradient(800px 500px at 70% 0%, rgba(76,195,138,.05), transparent 60%), var(--bg-deep);
+  background: radial-gradient(800px 500px at 70% 0%, rgba(76, 195, 138, 0.04), transparent 60%), var(--bg-deep);
 }
 .landing-auth .login-card { animation: rise-in .6s .12s var(--ease-in) both; }
 
@@ -802,8 +885,8 @@ button:active { transform: translateY(1px); }
   .lp-tesis { margin-bottom: 0; }
 }
 
-/* Responsive del IDE: en pantallas medianas el rail/sidebar se
-   condensan; nada se rompe ni desaparece — solo se ajusta el ritmo. */
+/* Responsive del IDE: el rail/sidebar se condensan; nada se rompe ni
+   desaparece — solo se ajusta el ritmo. */
 @media (max-width: 1080px) {
   .sidebar { width: 216px; }
 }
@@ -811,12 +894,12 @@ button:active { transform: translateY(1px); }
   .app { padding: 4px; gap: 4px; }
   .layout { gap: 4px; }
   .sidebar { width: 184px; }
-  .topbar { gap: 0.5rem; }
+  .topbar { gap: 0.4rem; }
   .topbar .proy { display: none; }
 }
 
-/* El IDE es quieto a propósito; quien pide quietud, la tiene. Apaga
-   TODA animación de entrada/ambiente/pulso del producto entero. */
+/* El IDE es quieto a propósito; quien pide quietud, la tiene. Apaga TODA
+   animación de entrada/ambiente/pulso del producto entero. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
@@ -825,28 +908,29 @@ button:active { transform: translateY(1px); }
 }
 
 /* ── Panel git ── */
-.gitp { display: flex; flex-direction: column; gap: 0.55rem; }
+.gitp { display: flex; flex-direction: column; gap: 0.5rem; }
 .gitp .cab {
   display: flex; align-items: center; justify-content: space-between;
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
-  font-weight: 750; color: var(--faint);
+  font-weight: 700; color: var(--faint); padding: 0.15rem 0.35rem 0;
 }
 .gitp .cab button, .gitp .remacc button {
   background: var(--surface-2); color: var(--muted);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.16rem 0.55rem; font-size: 10px; font-weight: 650; cursor: pointer;
+  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+  padding: 0.16rem 0.5rem; font-size: 10px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
   transition: background var(--tr), color var(--tr), border-color var(--tr);
 }
-.gitp .cab button:hover { background: var(--elevated); color: var(--text); }
+.gitp .cab button:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
 .gitp .estado {
   display: flex; align-items: center; gap: 0.5rem;
   background: var(--surface-2); border: 1px solid var(--border-soft);
   border-radius: var(--r-sm); padding: 0.5rem 0.6rem;
 }
-.gitp .rama { font-size: var(--t-sm); color: var(--muted); font-family: var(--font-mono); }
+.gitp .rama { font-size: var(--t-sm); color: var(--muted); font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 5px; }
 .gitp .rama b { color: var(--accent); font-weight: 700; }
 .gitp .cambios {
-  font-size: var(--t-xs); color: var(--warn); font-weight: 650;
+  font-size: var(--t-xs); color: var(--warn); font-weight: 600;
   margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
 }
 .gitp .cambios::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
@@ -854,35 +938,29 @@ button:active { transform: translateY(1px); }
 .gitp ol {
   list-style: none; margin: 0; padding: 0; font-size: var(--t-xs);
   color: var(--muted); font-family: var(--font-mono); display: flex;
-  flex-direction: column; gap: 4px; max-height: 124px; overflow: auto;
+  flex-direction: column; gap: 3px; max-height: 124px; overflow: auto;
 }
 .gitp ol li {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  padding-left: 12px; position: relative;
+  padding-left: 13px; position: relative;
 }
 .gitp ol li::before {
-  content: ""; position: absolute; left: 2px; top: 0.5em;
+  content: ""; position: absolute; left: 3px; top: 0.5em;
   width: 4px; height: 4px; border-radius: 50%; background: var(--border);
 }
-.gitp input {
-  background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 0.45rem 0.55rem; font-size: var(--t-sm);
-  outline: none; width: 100%;
-  transition: border-color var(--tr), box-shadow var(--tr);
-}
-.gitp input::placeholder { color: var(--faint); }
-.gitp input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
 .gitp .commitbox { display: flex; gap: 0.4rem; }
+.gitp .commitbox input { padding: 0.45rem 0.55rem; font-size: var(--t-sm); }
 .gitp .commitbox button {
-  border: none; border-radius: var(--r-sm); padding: 0.45rem 0.75rem;
+  border: none; border-radius: var(--r-sm); padding: 0.45rem 0.7rem;
   background: var(--grad); color: #04130c; font-size: var(--t-sm);
-  font-weight: 750; cursor: pointer; flex-shrink: 0;
+  font-weight: 700; cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
   transition: filter var(--tr), transform var(--tr);
 }
-.gitp .commitbox button:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.gitp .commitbox button:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .gitp .res {
   font-size: var(--t-xs); padding: 0.45rem 0.6rem; border-radius: var(--r-sm);
-  animation: fade-in 240ms var(--ease-in) both;
+  line-height: 1.5; animation: fade-in 200ms var(--ease-in) both;
 }
 .gitp .res.ok { color: var(--ok); background: var(--ok-bg); }
 .gitp .res.bad { color: var(--bad); background: var(--bad-bg); }
@@ -892,78 +970,73 @@ button:active { transform: translateY(1px); }
 }
 .gitp .res .prlink:hover { text-decoration: underline; }
 .gitp .remoto {
-  margin-top: 0.4rem; padding-top: 0.65rem;
+  margin-top: 0.35rem; padding-top: 0.6rem;
   border-top: 1px solid var(--border-soft); display: flex;
   flex-direction: column; gap: 0.4rem;
 }
-.gitp .remtit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 750; color: var(--faint); }
+.gitp .remtit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--faint); padding: 0 0.35rem; }
+.gitp .remoto input { padding: 0.45rem 0.55rem; font-size: var(--t-sm); }
 .gitp .remacc { display: flex; gap: 0.4rem; }
-.gitp .remacc button { flex: 1; padding: 0.42rem; }
-.gitp .remacc button:hover { background: var(--elevated); color: var(--text); }
+.gitp .remacc button { flex: 1; padding: 0.42rem; justify-content: center; }
+.gitp .remacc button:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
 .gitp .remacc .no { color: var(--bad); }
-.gitp .remacc .no:hover { background: var(--bad-bg); border-color: rgba(240,112,122,.4); color: var(--bad); }
+.gitp .remacc .no:hover { background: var(--bad-bg); border-color: rgba(232, 99, 111, 0.4); color: var(--bad); }
 
 /* ── Modal admin (reparto masivo) ── */
 .ammodal {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center; padding: 2.5rem;
-  animation: fade-in 180ms var(--ease-in) both;
+  animation: fade-in 160ms var(--ease-in) both;
 }
 .amcard {
   width: 760px; max-width: 100%; max-height: 100%; display: flex;
   flex-direction: column; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--r-isla);
+  border: 1px solid var(--border-soft); border-radius: var(--r-isla);
   box-shadow: var(--shadow-modal);
-  animation: rise-in 280ms var(--ease-in) both;
+  animation: rise-in 240ms var(--ease-in) both;
 }
 .amhead {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border-soft);
+  padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border-soft);
 }
 .amtit {
-  font-size: var(--t-base); font-weight: 750;
-  display: flex; align-items: center; gap: 0.5rem;
+  font-size: var(--t-base); font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 0.5rem; letter-spacing: -0.01em;
 }
 .amtit svg { color: var(--accent); }
 .amx {
   border: none; background: transparent; color: var(--muted); cursor: pointer;
-  font-size: 14px; padding: 0.25rem 0.5rem; border-radius: var(--r-sm);
+  padding: 0.3rem; border-radius: var(--r-sm); line-height: 0;
   display: flex; transition: background var(--tr), color var(--tr);
 }
 .amx:hover { background: var(--surface-2); color: var(--text); }
 .ambar {
-  display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
-  padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--border-soft);
   background: var(--bg);
 }
-.ambar .amsel { font-size: var(--t-sm); color: var(--muted); display: flex; align-items: center; gap: 0.45rem; }
-.ambar select {
-  background: var(--surface); color: var(--text); border: 1px solid var(--border);
-  border-radius: var(--r-sm); padding: 0.38rem 0.55rem; font-size: var(--t-sm);
-  outline: none; font-family: inherit;
-  transition: border-color var(--tr), box-shadow var(--tr);
-}
-.ambar select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-.ambar .amcount { font-size: var(--t-sm); color: var(--text); font-weight: 650; }
+.ambar .amsel { font-size: var(--t-sm); color: var(--muted); display: flex; align-items: center; gap: 0.42rem; }
+.ambar select { width: auto; padding: 0.36rem 0.55rem; font-size: var(--t-sm); }
+.ambar .amcount { font-size: var(--t-sm); color: var(--text); font-weight: 600; }
 .ambar button {
   border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 0.38rem 0.75rem; font-size: var(--t-sm); font-weight: 650;
+  padding: 0.36rem 0.7rem; font-size: var(--t-sm); font-weight: 600;
   cursor: pointer; background: var(--surface-2); color: var(--text);
   transition: background var(--tr), border-color var(--tr),
   transform var(--tr), filter var(--tr);
 }
-.ambar button:hover:not(:disabled) { background: var(--elevated); transform: translateY(-1px); }
+.ambar button:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .ambar button:disabled { opacity: 0.4; cursor: default; }
 .ambar .amgo {
-  background: var(--grad); color: #04130c; border-color: transparent; font-weight: 750;
+  background: var(--grad); color: #04130c; border-color: transparent; font-weight: 700;
 }
-.ambar .amgo:hover:not(:disabled) { filter: brightness(1.07); }
+.ambar .amgo:hover:not(:disabled) { filter: brightness(1.06); }
 .ambar .amno { color: var(--bad); }
-.ambar .amno:hover:not(:disabled) { background: var(--bad-bg); border-color: rgba(240,112,122,.4); }
+.ambar .amno:hover:not(:disabled) { background: var(--bad-bg); border-color: rgba(232, 99, 111, 0.4); }
 .amtree { flex: 1; overflow: auto; padding: 0.5rem 0.6rem; font-family: var(--font-mono); font-size: 12.5px; }
 .amrow {
-  display: flex; align-items: center; gap: 0.5rem; padding: 0.26rem 0.4rem;
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.24rem 0.4rem;
   border-radius: var(--r-sm); cursor: pointer; transition: background var(--tr);
 }
 .amrow:hover { background: var(--surface-2); }
@@ -977,10 +1050,11 @@ button:active { transform: translateY(1px); }
   margin-left: auto; font-size: var(--t-xs); color: var(--accent);
   font-family: var(--font-ui); flex-shrink: 0;
   background: var(--accent-weak); padding: 1px 8px; border-radius: var(--r-pill);
+  border: 1px solid var(--accent-soft);
 }
 .amvacio { color: var(--faint); padding: 1rem; font-family: var(--font-ui); }
 .amfoot {
-  padding: 0.7rem 1.1rem; border-top: 1px solid var(--border-soft);
+  padding: 0.65rem 1.1rem; border-top: 1px solid var(--border-soft);
   font-size: 11.5px; color: var(--muted); min-height: 2.4em;
   display: flex; align-items: center; background: var(--bg);
 }

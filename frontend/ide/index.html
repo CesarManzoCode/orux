@@ -4,7 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#050608" />
     <title>laidea</title>
+
+    <!--
+      Tipografía REAL. El sistema de diseño siempre referenció "Inter" y
+      "JetBrains Mono", pero nunca se cargaban: el IDE corría con la fuente
+      del sistema. Es la mejora de calidad percibida más grande por línea
+      tocada. Carga en runtime en el navegador del usuario (no es una dep
+      de build ni de npm — distinto al caso Prism), con preconnect para
+      que no bloquee y display=swap; si la red falla, el stack de sistema
+      en los tokens toma el relevo sin romper nada. Inter va como fuente
+      VARIABLE con eje óptico (opsz) para que los titulares respiren y el
+      cuerpo quede nítido a 13px.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    />
+
+    <!-- Pinta el fondo profundo antes de que cargue el CSS: cero flash. -->
+    <style>
+      html, body { background: #050608; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
