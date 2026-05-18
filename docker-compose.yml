@@ -18,6 +18,11 @@ services:
       # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
       # adaptador sólo se usa cuando el server lo adopte. Vacío = JSON/memoria.
       - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
+      # MISMO secreto que el contenedor `api`: el server WS verifica los
+      # tokens de sesión que el callback OAuth firma. Vacío = OAuth
+      # deshabilitado y el server usa su archivo ~/.laidea/secret (igual
+      # que siempre). Generá uno fuerte: `openssl rand -hex 32`.
+      - LAIDEA_SESSION_SECRET=${LAIDEA_SESSION_SECRET:-}
     volumes:
       - laidea-data:/data
 
@@ -41,6 +46,15 @@ services:
       - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
       - LAIDEA_ADMIN_USER=${LAIDEA_ADMIN_USER:-}
       - LAIDEA_ADMIN_TOKEN=${LAIDEA_ADMIN_TOKEN:-}
+      # GitHub OAuth (cerrado por defecto: faltando cualquiera, /oauth/* da
+      # 503). LAIDEA_SESSION_SECRET DEBE ser idéntico al del servicio
+      # `laidea`. El callback registrado en la OAuth App de GitHub tiene que
+      # ser EXACTAMENTE LAIDEA_OAUTH_REDIRECT.
+      - LAIDEA_SESSION_SECRET=${LAIDEA_SESSION_SECRET:-}
+      - LAIDEA_GITHUB_CLIENT_ID=${LAIDEA_GITHUB_CLIENT_ID:-}
+      - LAIDEA_GITHUB_CLIENT_SECRET=${LAIDEA_GITHUB_CLIENT_SECRET:-}
+      - LAIDEA_OAUTH_REDIRECT=${LAIDEA_OAUTH_REDIRECT:-}
+      - LAIDEA_APP_URL=${LAIDEA_APP_URL:-/app/}
     # /api/v1/health no requiere token (capa 23): healthcheck honesto.
     # `curl` ya está en la imagen (capa 20). Unhealthy -> Docker reinicia.
     healthcheck:

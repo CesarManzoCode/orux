@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .passwords import hash_password, verificar_password
+from .passwords import MARCADOR_EXTERNO, hash_password, verificar_password
 
 
 def normalizar(username: str) -> str:
@@ -70,6 +70,25 @@ class UserStore:
             raise ValueError("ese usuario ya existe")
         self._usuarios[u] = hash_password(password)  # valida password vacía
         self._guardar()
+        return u
+
+    def asegurar_externo(self, username: str) -> str:
+        """Garantiza una cuenta para una identidad externa (OAuth GitHub),
+        SIN contraseña. Idempotente. Devuelve la forma canónica.
+
+        `SessionMessage` (capa 7) exige que el usuario exista en el store; un
+        usuario que entra por GitHub no pasó por `registrar`. Esto lo crea la
+        primera vez con `MARCADOR_EXTERNO` (que `verificar_password` rechaza
+        siempre): existe para `existe()`, pero NO se puede entrar por
+        contraseña. La identidad ya viene con namespace `gh:` desde
+        `identidad_github`, así que jamás colisiona con una cuenta de
+        contraseña."""
+        u = normalizar(username)
+        if not u:
+            raise ValueError("usuario inválido")
+        if u not in self._usuarios:
+            self._usuarios[u] = MARCADOR_EXTERNO
+            self._guardar()
         return u
 
     def admin(self) -> str | None:

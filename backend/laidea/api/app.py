@@ -24,22 +24,145 @@ se prueba 100% en sandbox; acá solo HTTP. Los stores viven en `app.state`
 from __future__ import annotations
 
 import contextlib
+import json
+import logging
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.routing import Route
 
 from ..db.pool import Database
 from ..db.stores import PgUserStore
+from ..identity import (
+    crear_token,
+    firmar_state,
+    identidad_github,
+    url_autorizacion,
+    validar_state,
+)
+from ..identity.oauth import URL_PERFIL, URL_TOKEN
 from ..teams import PgTeamStore
 from . import service
+
+logger = logging.getLogger(__name__)
 
 # Quién es el operador (una cuenta registrada) y el secreto de FIRMA de sus
 # tokens de sesión (nunca se manda al cliente). Faltando cualquiera: 503.
 _ADMIN_USER = os.environ.get("LAIDEA_ADMIN_USER", "")
 _SECRET = os.environ.get("LAIDEA_ADMIN_TOKEN", "")
+
+# --- GitHub OAuth (capa nueva, superficie PÚBLICA, no la de operador) -----
+#
+# Cerrado por defecto: faltando cualquier pieza, /oauth/github/* responde
+# 503 y NUNCA inicia un flujo a medias (mismo principio que la consola de
+# operador). `_SESSION_SECRET` es el MISMO que verifica el server WS
+# (LAIDEA_SESSION_SECRET inyectado a ambos contenedores): el token que se
+# emite acá lo acepta `SessionMessage` tal cual, sin tocar el protocolo.
+_GH_CLIENT_ID = os.environ.get("LAIDEA_GITHUB_CLIENT_ID", "")
+_GH_CLIENT_SECRET = os.environ.get("LAIDEA_GITHUB_CLIENT_SECRET", "")
+# URL EXACTA registrada en la OAuth App de GitHub. Explícita a propósito:
+# derivarla del header Host sería spoofeable (open redirect / robo de code).
+_GH_REDIRECT = os.environ.get("LAIDEA_OAUTH_REDIRECT", "")
+_SESSION_SECRET = os.environ.get("LAIDEA_SESSION_SECRET", "")
+# A dónde vuelve el navegador con el token ya emitido. El front (otra
+# sesión) lo lee de `?session=` y manda `SessionMessage`, igual que el
+# auto-login con `laidea_session`. Default razonable: el SPA en /app/.
+_APP_URL = os.environ.get("LAIDEA_APP_URL", "/app/")
+
+
+def _oauth_ok() -> bool:
+    return bool(
+        _GH_CLIENT_ID and _GH_CLIENT_SECRET
+        and _GH_REDIRECT and _SESSION_SECRET
+    )
+
+
+def _volver(error: str = "", token: str = ""):
+    """Redirige el navegador de vuelta al SPA. Con token (éxito) o con un
+    código de error legible (el front decide qué mostrar). 302."""
+    par = {"session": token} if token else {"oauth_error": error}
+    sep = "&" if "?" in _APP_URL else "?"
+    return RedirectResponse(
+        f"{_APP_URL}{sep}{urllib.parse.urlencode(par)}", status_code=302
+    )
+
+
+def _intercambiar(code: str) -> dict:
+    """Bloqueante (urllib, stdlib — cero deps): canjea `code` por un token y
+    lee el perfil de GitHub. Vive en la cáscara y se corre en el threadpool;
+    se ejercita en el VPS (sandbox sin internet), igual que toda la I/O de
+    `api/app.py`. Timeouts cortos: un GitHub colgado no cuelga al worker."""
+    datos = urllib.parse.urlencode({
+        "client_id": _GH_CLIENT_ID,
+        "client_secret": _GH_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": _GH_REDIRECT,
+    }).encode("ascii")
+    r1 = urllib.request.Request(
+        URL_TOKEN, data=datos, headers={"Accept": "application/json"}
+    )
+    with urllib.request.urlopen(r1, timeout=10) as resp:
+        tok = json.loads(resp.read())["access_token"]
+    r2 = urllib.request.Request(
+        URL_PERFIL,
+        headers={
+            "Authorization": f"Bearer {tok}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "laidea",
+        },
+    )
+    with urllib.request.urlopen(r2, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+async def _gh_login(_req: Request):
+    """Arranca el flujo: 302 a GitHub con un `state` CSRF firmado (stateless,
+    se valida en el callback). Sin configurar: 503, no a medias."""
+    if not _oauth_ok():
+        return JSONResponse(
+            {"error": "GitHub OAuth no configurado"}, status_code=503
+        )
+    state = firmar_state(_SESSION_SECRET)
+    return RedirectResponse(
+        url_autorizacion(_GH_CLIENT_ID, _GH_REDIRECT, state),
+        status_code=302,
+    )
+
+
+async def _gh_callback(req: Request):
+    """GitHub vuelve acá. Valida `state`, canjea `code`, deriva la identidad
+    `gh:<login>`, asegura la cuenta (sin password) y emite el MISMO token de
+    sesión de la capa 7. Cualquier fallo -> vuelve al SPA con un error
+    legible, nunca un 500 crudo (esto lo ve un humano en el navegador)."""
+    if not _oauth_ok():
+        return JSONResponse(
+            {"error": "GitHub OAuth no configurado"}, status_code=503
+        )
+    if req.query_params.get("error"):
+        # El usuario canceló el consentimiento en GitHub.
+        return _volver(error="cancelado")
+    code = req.query_params.get("code", "")
+    state = req.query_params.get("state", "")
+    if not code or not validar_state(state, _SESSION_SECRET):
+        # state ausente/falso/vencido: posible CSRF o link viejo.
+        return _volver(error="state")
+    from starlette.concurrency import run_in_threadpool
+
+    try:
+        perfil = await run_in_threadpool(_intercambiar, code)
+        usuario = identidad_github(perfil)
+    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
+        logger.warning("OAuth GitHub falló: %r", e)
+        return _volver(error="github")
+    await req.app.state.users.asegurar_externo(usuario)
+    token = crear_token(usuario, _SESSION_SECRET)
+    logger.info("OAuth GitHub OK: %s", usuario)
+    return _volver(token=token)
 
 
 def _gate(req: Request) -> JSONResponse | None:
@@ -138,6 +261,10 @@ _RUTAS = [
     Route("/api/v1/teams", _teams),
     Route("/api/v1/teams/{tid}", _detalle),
     Route("/api/v1/teams/{tid}/plan", _plan, methods=["POST"]),
+    # GitHub OAuth: superficie PÚBLICA (sin _gate; no es la API de
+    # operador). Caddy proxya /oauth/* a este contenedor.
+    Route("/oauth/github/login", _gh_login),
+    Route("/oauth/github/callback", _gh_callback),
 ]
 
 

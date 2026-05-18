@@ -44,11 +44,24 @@ BASE_POR_DEFECTO = Path.home() / ".laidea"
 def _secreto(base: Path) -> str:
     """Secreto para firmar tokens de sesión, estable entre reinicios.
 
-    Se guarda en `~/.laidea/secret` y se genera la primera vez. Estable =
-    los tokens de sesión guardados en los clientes siguen valiendo tras
-    reiniciar el server (no obliga a re-loguear a todos). Si alguien borra el
-    archivo, simplemente todos re-loguean una vez.
+    Prioridad: `LAIDEA_SESSION_SECRET` (env) > archivo `~/.laidea/secret`.
+
+    El env existe para GitHub OAuth: el callback corre en OTRO proceso (el
+    contenedor `api`/Starlette) y tiene que firmar el token de sesión con el
+    MISMO secreto que este server WS verifica. Compartir un archivo entre
+    contenedores sería frágil; una variable de entorno inyectada a ambos es
+    explícita y robusta. Sin el env se mantiene el comportamiento histórico
+    (archivo): backward-compatible, y OAuth simplemente queda deshabilitado
+    (cerrado por defecto), nunca a medias.
+
+    El archivo se guarda en `~/.laidea/secret` y se genera la primera vez.
+    Estable = los tokens de sesión guardados en los clientes siguen valiendo
+    tras reiniciar el server (no obliga a re-loguear a todos). Si alguien
+    borra el archivo, simplemente todos re-loguean una vez.
     """
+    env = os.environ.get("LAIDEA_SESSION_SECRET", "").strip()
+    if env:
+        return env
     f = base / "secret"
     if f.exists():
         try:

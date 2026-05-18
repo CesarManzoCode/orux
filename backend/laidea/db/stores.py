@@ -6,7 +6,11 @@ Se ejercitan de verdad en el VPS (paso 3b), no acá.
 
 from __future__ import annotations
 
-from ..identity.passwords import hash_password, verificar_password
+from ..identity.passwords import (
+    MARCADOR_EXTERNO,
+    hash_password,
+    verificar_password,
+)
 from ..identity.store import normalizar
 
 
@@ -39,6 +43,20 @@ class PgUserStore:
         await self._db.execute(
             "INSERT INTO users (username, password_hash) VALUES ($1,$2)",
             u, hash_password(password),  # valida password vacía
+        )
+        return u
+
+    async def asegurar_externo(self, username: str) -> str:
+        """Idem `UserStore.asegurar_externo` pero en Postgres. Idempotente
+        vía `ON CONFLICT DO NOTHING` (atómico, sin carrera entre dos logins
+        OAuth simultáneos del mismo usuario)."""
+        u = normalizar(username)
+        if not u:
+            raise ValueError("usuario inválido")
+        await self._db.execute(
+            "INSERT INTO users (username, password_hash) VALUES ($1,$2) "
+            "ON CONFLICT (username) DO NOTHING",
+            u, MARCADOR_EXTERNO,
         )
         return u
 

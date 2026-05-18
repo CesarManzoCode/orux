@@ -22,6 +22,13 @@ import secrets
 # en un solo lugar cuando haga falta.
 _ITERACIONES = 240_000
 
+# Registro de contraseña de una cuenta SIN contraseña (identidad externa:
+# OAuth). A propósito NO tiene el formato `algo$iter$sal$hash`, así que
+# `verificar_password` cae en su rama tolerante y devuelve False SIEMPRE: a
+# una cuenta de GitHub no se entra nunca por contraseña, solo por su
+# proveedor. Es un valor, no un secreto.
+MARCADOR_EXTERNO = "externo-oauth-sin-password"
+
 
 def hash_password(password: str) -> str:
     """Deriva un registro verificable a partir de la contraseña.
