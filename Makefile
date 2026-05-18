@@ -25,10 +25,10 @@ ps: ## Estado de los contenedores
 	docker compose ps
 
 sh: ## Abre una shell en el contenedor del server
-	docker compose exec laidea sh
+	docker compose exec orux sh
 
 test: ## Corre la suite de tests en local (no en docker)
 	cd backend && python -m pytest -q
 
 dev: ## Server en local para desarrollo (sin docker)
-	cd backend && python -m laidea.server
+	cd backend && python -m orux.server

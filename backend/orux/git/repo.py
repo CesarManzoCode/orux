@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # repo clonado) bloquea su hilo de `asyncio.to_thread` para siempre y, al
 # agotar el threadpool por defecto, congela el análisis de TODOS los equipos.
 # Es generoso: una operación de red legítima rara vez pasa de esto.
-_GIT_TIMEOUT = float(os.environ.get("LAIDEA_GIT_TIMEOUT", "120"))
+_GIT_TIMEOUT = float(os.environ.get("ORUX_GIT_TIMEOUT", "120"))
 
 # Endurecimiento del subproceso git contra RCE por URL del cliente. La URL
 # de clone/push la elige el usuario; sin esto, `ext::sh -c "..."` o
@@ -101,8 +101,8 @@ def _rama_segura(rama: str) -> bool:
 _ASKPASS = (
     "#!/bin/sh\n"
     'case "$1" in\n'
-    '  *[Uu]sername*) printf "%s" "$LAIDEA_GIT_USER" ;;\n'
-    '  *) printf "%s" "$LAIDEA_GIT_TOKEN" ;;\n'
+    '  *[Uu]sername*) printf "%s" "$ORUX_GIT_USER" ;;\n'
+    '  *) printf "%s" "$ORUX_GIT_TOKEN" ;;\n'
     "esac\n"
 )
 
@@ -204,8 +204,8 @@ class GitRepo:
                 **os.environ,
                 **_GIT_ENV_SEGURO,
                 "GIT_ASKPASS": askpass.name,
-                "LAIDEA_GIT_USER": usuario,
-                "LAIDEA_GIT_TOKEN": token,
+                "ORUX_GIT_USER": usuario,
+                "ORUX_GIT_TOKEN": token,
             }
             try:
                 p = subprocess.run(
@@ -318,7 +318,7 @@ class GitRepo:
         if not _url_segura(url):
             logger.warning("clone rechazado: URL no segura")
             return (False, "URL de repo no válida")
-        tmp = Path(tempfile.mkdtemp(prefix="laidea-clone-"))
+        tmp = Path(tempfile.mkdtemp(prefix="orux-clone-"))
         destino = tmp / "repo"
         try:
             # `--` corta el parseo de opciones: aunque la URL pasara la
@@ -388,12 +388,12 @@ class GitRepo:
         self, usuario: str, token: str, rama: str, url: str | None = None
     ) -> tuple[bool, str, str]:
         """Capa 21: empuja el workspace a `refs/heads/<rama>` (la rama de
-        ESTE equipo, p.ej. `laidea/<team_id>`), NUNCA a `main`. Devuelve
+        ESTE equipo, p.ej. `orux/<team_id>`), NUNCA a `main`. Devuelve
         (ok, detalle, url_pr).
 
-        La rama es de PUBLICACIÓN: laidea es su único escritor; los humanos
+        La rama es de PUBLICACIÓN: orux es su único escritor; los humanos
         integran vía PR DESDE ella en GitHub (la tesis: integración, no
-        reemplazo — laidea no fusiona). Por eso `--force-with-lease` con
+        reemplazo — orux no fusiona). Por eso `--force-with-lease` con
         `fetch` previo: el workspace del equipo es la fuente de verdad
         (tras un clone destructivo la historia local cambia y un push
         normal sería non-ff para siempre); el lease igual RECHAZA si

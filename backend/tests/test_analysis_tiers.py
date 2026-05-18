@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from laidea.analysis import javascript, python, tiers
-from laidea.analysis.modelo import Simbolo, cambios_que_importan_modelo
+from orux.analysis import javascript, python, tiers
+from orux.analysis.modelo import Simbolo, cambios_que_importan_modelo
 
 # (viejo, nuevo) que ejercitan cada rama: eliminado, firma cambiada,
 # construcción de clase, miembro público quitado, def↔class, cuerpo-solo

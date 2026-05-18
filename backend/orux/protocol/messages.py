@@ -422,7 +422,7 @@ class GitResultMessage:
     ok: bool
     detail: str
     # Capa 21: en un push OK a la rama del equipo, link "abrir PR" de
-    # GitHub (vacío si no es GitHub o no aplica). laidea NO crea el PR
+    # GitHub (vacío si no es GitHub o no aplica). orux NO crea el PR
     # —eso es API+scope, y "integración, no reemplazo"—: empuja la rama y
     # te da el link; el humano lo abre y GitHub hace el merge/review.
     pr_url: str = ""
@@ -458,7 +458,7 @@ class PushMessage:
     # Capa 21b: rama destino ELEGIBLE. Vacío = la rama de publicación del
     # equipo (default seguro, force-with-lease + PR). Cualquier otra (p.ej.
     # "main") = push directo SIN forzar (capa 10: non-ff honesto, nunca
-    # pisa historia compartida). laidea decide force-vs-no según si es su
+    # pisa historia compartida). orux decide force-vs-no según si es su
     # propia rama; el usuario solo elige el destino.
     rama: str = ""
     type: Literal["push"] = "push"

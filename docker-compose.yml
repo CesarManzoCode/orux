@@ -1,12 +1,12 @@
-# Despliegue real de laidea: el server Python detrás de Caddy.
+# Despliegue real de orux: el server Python detrás de Caddy.
 #
 # Caddy es lo ÚNICO expuesto a internet (80/443): sirve el cliente estático,
 # termina TLS automático (Let's Encrypt si hay dominio real) y proxya el
-# WebSocket al server. El server `laidea` no publica puertos: solo es
+# WebSocket al server. El server `orux` no publica puertos: solo es
 # alcanzable dentro de la red de compose. El estado vive en un volumen, así
 # sobrevive a recrear los contenedores.
 services:
-  laidea:
+  orux:
     build: .
     restart: unless-stopped
     depends_on:
@@ -17,44 +17,44 @@ services:
       # Capa 15: DSN de Postgres. Mientras el server no esté cableado a la
       # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
       # adaptador sólo se usa cuando el server lo adopte. Vacío = JSON/memoria.
-      - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
+      - ORUX_DB_DSN=postgresql://orux:orux@postgres:5432/orux
       # MISMO secreto que el contenedor `api`: el server WS verifica los
       # tokens de sesión que el callback OAuth firma. Vacío = OAuth
-      # deshabilitado y el server usa su archivo ~/.laidea/secret (igual
+      # deshabilitado y el server usa su archivo ~/.orux/secret (igual
       # que siempre). Generá uno fuerte: `openssl rand -hex 32`.
-      - LAIDEA_SESSION_SECRET=${LAIDEA_SESSION_SECRET:-}
+      - ORUX_SESSION_SECRET=${ORUX_SESSION_SECRET:-}
     volumes:
-      - laidea-data:/data
+      - orux-data:/data
 
   api:
     # Capa 23: API interna de OPERADOR, DESACOPLADA — su propio contenedor
     # (misma imagen, otro comando). No comparte el loop ni el estado del
     # server WS: opera solo sobre Postgres (datos durables). Un fallo acá
     # NO toca la colaboración. No publica puertos (Caddy lo proxya en
-    # /api). Auth por CUENTA: LAIDEA_ADMIN_USER (el usuario operador) +
-    # LAIDEA_ADMIN_TOKEN (secreto de FIRMA, nunca sale del server) vienen
+    # /api). Auth por CUENTA: ORUX_ADMIN_USER (el usuario operador) +
+    # ORUX_ADMIN_TOKEN (secreto de FIRMA, nunca sale del server) vienen
     # del host; sin cualquiera la consola queda cerrada (503).
     build: .
     restart: unless-stopped
     depends_on:
       - postgres
-    command: ["uvicorn", "laidea.api.app:app",
+    command: ["uvicorn", "orux.api.app:app",
               "--host", "0.0.0.0", "--port", "8800"]
     expose:
       - "8800"
     environment:
-      - LAIDEA_DB_DSN=postgresql://laidea:laidea@postgres:5432/laidea
-      - LAIDEA_ADMIN_USER=${LAIDEA_ADMIN_USER:-}
-      - LAIDEA_ADMIN_TOKEN=${LAIDEA_ADMIN_TOKEN:-}
+      - ORUX_DB_DSN=postgresql://orux:orux@postgres:5432/orux
+      - ORUX_ADMIN_USER=${ORUX_ADMIN_USER:-}
+      - ORUX_ADMIN_TOKEN=${ORUX_ADMIN_TOKEN:-}
       # GitHub OAuth (cerrado por defecto: faltando cualquiera, /oauth/* da
-      # 503). LAIDEA_SESSION_SECRET DEBE ser idéntico al del servicio
-      # `laidea`. El callback registrado en la OAuth App de GitHub tiene que
-      # ser EXACTAMENTE LAIDEA_OAUTH_REDIRECT.
-      - LAIDEA_SESSION_SECRET=${LAIDEA_SESSION_SECRET:-}
-      - LAIDEA_GITHUB_CLIENT_ID=${LAIDEA_GITHUB_CLIENT_ID:-}
-      - LAIDEA_GITHUB_CLIENT_SECRET=${LAIDEA_GITHUB_CLIENT_SECRET:-}
-      - LAIDEA_OAUTH_REDIRECT=${LAIDEA_OAUTH_REDIRECT:-}
-      - LAIDEA_APP_URL=${LAIDEA_APP_URL:-/app/}
+      # 503). ORUX_SESSION_SECRET DEBE ser idéntico al del servicio
+      # `orux`. El callback registrado en la OAuth App de GitHub tiene que
+      # ser EXACTAMENTE ORUX_OAUTH_REDIRECT.
+      - ORUX_SESSION_SECRET=${ORUX_SESSION_SECRET:-}
+      - ORUX_GITHUB_CLIENT_ID=${ORUX_GITHUB_CLIENT_ID:-}
+      - ORUX_GITHUB_CLIENT_SECRET=${ORUX_GITHUB_CLIENT_SECRET:-}
+      - ORUX_OAUTH_REDIRECT=${ORUX_OAUTH_REDIRECT:-}
+      - ORUX_APP_URL=${ORUX_APP_URL:-/app/}
     # /api/v1/health no requiere token (capa 23): healthcheck honesto.
     # `curl` ya está en la imagen (capa 20). Unhealthy -> Docker reinicia.
     healthcheck:
@@ -72,13 +72,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=laidea
-      - POSTGRES_PASSWORD=laidea
-      - POSTGRES_DB=laidea
+      - POSTGRES_USER=orux
+      - POSTGRES_PASSWORD=orux
+      - POSTGRES_DB=orux
     volumes:
-      - laidea-pg:/var/lib/postgresql/data
+      - orux-pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U laidea -d laidea"]
+      test: ["CMD-SHELL", "pg_isready -U orux -d orux"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -93,7 +93,7 @@ services:
       dockerfile: Dockerfile.web
     restart: unless-stopped
     depends_on:
-      - laidea
+      - orux
       - api
     ports:
       - "80:80"
@@ -101,14 +101,14 @@ services:
     environment:
       # Dominio real -> TLS automático. Sin dominio queda "localhost" (cert
       # local, el navegador avisa: ok para probar, no para producción real).
-      - LAIDEA_SITE_ADDRESS=${LAIDEA_SITE_ADDRESS:-localhost}
+      - ORUX_SITE_ADDRESS=${ORUX_SITE_ADDRESS:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data       # certificados
       - caddy-config:/config
 
 volumes:
-  laidea-data:
-  laidea-pg:
+  orux-data:
+  orux-pg:
   caddy-data:
   caddy-config:

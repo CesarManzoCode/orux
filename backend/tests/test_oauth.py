@@ -11,7 +11,7 @@ Contrato de seguridad a fijar:
 
 import pytest
 
-from laidea.identity import (
+from orux.identity import (
     UserStore,
     firmar_state,
     identidad_github,
@@ -19,20 +19,20 @@ from laidea.identity import (
     validar_state,
     verificar_password,
 )
-from laidea.identity.oauth import SCOPE
-from laidea.identity.passwords import MARCADOR_EXTERNO
+from orux.identity.oauth import SCOPE
+from orux.identity.passwords import MARCADOR_EXTERNO
 
 
 # --- URL de autorización ---------------------------------------------------
 
 def test_url_autorizacion_lleva_todo_y_es_https_de_github() -> None:
-    u = url_autorizacion("CID", "https://laidea.app/oauth/github/callback",
+    u = url_autorizacion("CID", "https://orux.app/oauth/github/callback",
                           "ST")
     assert u.startswith("https://github.com/login/oauth/authorize?")
     assert "client_id=CID" in u
     assert "state=ST" in u
     # redirect_uri y scope van url-encodeados.
-    assert "redirect_uri=https%3A%2F%2Flaidea.app" in u
+    assert "redirect_uri=https%3A%2F%2Forux.app" in u
     assert "scope=read%3Auser+user%3Aemail" in u
     assert SCOPE == "read:user user:email"
 

@@ -1,6 +1,6 @@
 """Dominio de equipos (capa 15: sistema multi-equipo).
 
-Antes laidea era mono-tenant: un workspace global, un admin global. El
+Antes orux era mono-tenant: un workspace global, un admin global. El
 usuario pidió que sea un sistema de verdad: varios equipos que no se
 enteran del otro. Esta es la pieza pura de "quién es de qué equipo y quién
 manda ahí" — sin red, sin DB, sin Postgres importado.

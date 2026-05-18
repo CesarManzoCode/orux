@@ -10,7 +10,7 @@ Como `DiskStorage`, esto toca el filesystem de verdad: el aislamiento lo da
 
 import subprocess
 
-from laidea.git import GitRepo
+from orux.git import GitRepo
 
 
 def _git(root, *args):
@@ -55,7 +55,7 @@ def test_estado_tras_commit_externo(tmp_path) -> None:
     # git es la fuente de verdad).
     r = GitRepo(tmp_path)
     r.asegurar()
-    _git(tmp_path, "config", "user.email", "dev@laidea.local")
+    _git(tmp_path, "config", "user.email", "dev@orux.local")
     _git(tmp_path, "config", "user.name", "dev")
     (tmp_path / "main.py").write_text("print('hola')\n", encoding="utf-8")
     _git(tmp_path, "add", "-A")
@@ -71,20 +71,20 @@ def test_commitear_crea_commit_con_autor(tmp_path) -> None:
     r = GitRepo(tmp_path)
     r.asegurar()
     (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
-    ok, detalle = r.commitear("primer commit", "ana", "ana@laidea.local")
+    ok, detalle = r.commitear("primer commit", "ana", "ana@orux.local")
     assert ok is True
     e = r.estado()
     assert e.cambios == 0
     assert "primer commit" in e.commits[0]
     log = subprocess.run(["git", "-C", str(tmp_path), "log", "-1", "--format=%an <%ae>"],
                           capture_output=True, text=True).stdout.strip()
-    assert log == "ana <ana@laidea.local>"
+    assert log == "ana <ana@orux.local>"
 
 
 def test_commitear_sin_cambios(tmp_path) -> None:
     r = GitRepo(tmp_path)
     r.asegurar()
-    ok, detalle = r.commitear("nada", "ana", "ana@laidea.local")
+    ok, detalle = r.commitear("nada", "ana", "ana@orux.local")
     assert ok is False
     assert "cambios" in detalle
 
@@ -142,7 +142,7 @@ def test_el_token_no_queda_en_git_config(tmp_path) -> None:
 
 def test_token_no_aparece_en_el_detalle_de_error(tmp_path) -> None:
     ok, detalle = GitRepo(tmp_path / "ws").clonar(
-        "https://host.invalido.laidea/x.git", "user", "TOKEN-XYZ-123"
+        "https://host.invalido.orux/x.git", "user", "TOKEN-XYZ-123"
     )
     assert ok is False
     assert "TOKEN-XYZ-123" not in detalle             # scrub / no-fuga
@@ -154,7 +154,7 @@ def test_push_lleva_el_commit_al_remoto(tmp_path) -> None:
     r = GitRepo(ws)
     assert r.clonar(str(remoto), "u", "t")[0] is True
     (ws / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
-    assert r.commitear("agrega nuevo", "ana", "ana@laidea.local")[0] is True
+    assert r.commitear("agrega nuevo", "ana", "ana@orux.local")[0] is True
     ok, detalle = r.push("u", "t")
     assert ok is True, detalle
     # Clonar el remoto de nuevo, fresco: el commit llegó.
@@ -173,14 +173,14 @@ def test_push_sin_remoto_falla(tmp_path) -> None:
 
 # --- Capa 21: push a la rama del equipo + link de PR ---------------------
 
-from laidea.git.repo import _url_pr  # noqa: E402
+from orux.git.repo import _url_pr  # noqa: E402
 
 
 def test_url_pr_github_ssh_y_https() -> None:
-    assert _url_pr("git@github.com:acme/app.git", "laidea/ef6a") == \
-        "https://github.com/acme/app/pull/new/laidea/ef6a"
-    assert _url_pr("https://github.com/acme/app", "laidea/x") == \
-        "https://github.com/acme/app/pull/new/laidea/x"
+    assert _url_pr("git@github.com:acme/app.git", "orux/ef6a") == \
+        "https://github.com/acme/app/pull/new/orux/ef6a"
+    assert _url_pr("https://github.com/acme/app", "orux/x") == \
+        "https://github.com/acme/app/pull/new/orux/x"
     assert _url_pr("ssh://git@github.com/acme/app.git", "r") == \
         "https://github.com/acme/app/pull/new/r"
 
@@ -198,8 +198,8 @@ def test_push_a_rama_no_toca_main(tmp_path) -> None:
     r = GitRepo(ws)
     assert r.clonar(str(remoto), "u", "t")[0] is True
     (ws / "nuevo.py").write_text("x = 1\n", encoding="utf-8")
-    assert r.commitear("c", "ana", "ana@laidea.local")[0] is True
-    ok, detalle, pr = r.push_a_rama("u", "t", "laidea/eq1")
+    assert r.commitear("c", "ana", "ana@orux.local")[0] is True
+    ok, detalle, pr = r.push_a_rama("u", "t", "orux/eq1")
     assert ok is True, detalle
     assert pr == ""  # remoto local, no github
     # El commit está en la rama del equipo, NO en la default (main).
@@ -207,9 +207,9 @@ def test_push_a_rama_no_toca_main(tmp_path) -> None:
         ["git", "ls-remote", "--heads", str(remoto)],
         capture_output=True, text=True, check=True,
     ).stdout
-    assert "refs/heads/laidea/eq1" in heads
+    assert "refs/heads/orux/eq1" in heads
     verif = tmp_path / "verif"
-    subprocess.run(["git", "clone", "-q", "--branch", "laidea/eq1",
+    subprocess.run(["git", "clone", "-q", "--branch", "orux/eq1",
                     str(remoto), str(verif)], check=True)
     assert (verif / "nuevo.py").exists()
 
@@ -222,13 +222,13 @@ def test_push_a_rama_idempotente_tras_reclone(tmp_path) -> None:
     r = GitRepo(ws)
     r.clonar(str(remoto), "u", "t")
     (ws / "a.py").write_text("1\n", encoding="utf-8")
-    r.commitear("c1", "ana", "ana@laidea.local")
-    assert r.push_a_rama("u", "t", "laidea/eq1")[0] is True
+    r.commitear("c1", "ana", "ana@orux.local")
+    assert r.push_a_rama("u", "t", "orux/eq1")[0] is True
     # Clone destructivo: historia local distinta.
     r.clonar(str(remoto), "u", "t")
     (ws / "b.py").write_text("2\n", encoding="utf-8")
-    r.commitear("c2", "ana", "ana@laidea.local")
-    ok, detalle, _ = r.push_a_rama("u", "t", "laidea/eq1")
+    r.commitear("c2", "ana", "ana@orux.local")
+    ok, detalle, _ = r.push_a_rama("u", "t", "orux/eq1")
     assert ok is True, detalle  # force-with-lease lo permite (rama propia)
 
 
@@ -240,7 +240,7 @@ def test_push_a_main_directo_sin_forzar(tmp_path) -> None:
     r = GitRepo(ws)
     assert r.clonar(str(remoto), "u", "t")[0] is True
     (ws / "directo.py").write_text("x = 1\n", encoding="utf-8")
-    assert r.commitear("c", "ana", "ana@laidea.local")[0] is True
+    assert r.commitear("c", "ana", "ana@orux.local")[0] is True
     # rama=None => HEAD => la rama actual (main del clone): va a main.
     ok, detalle = r.push("u", "t")
     assert ok is True, detalle
@@ -254,13 +254,13 @@ def test_push_a_main_directo_sin_forzar(tmp_path) -> None:
 def test_push_a_rama_nombrada_sin_forzar(tmp_path) -> None:
     # push(rama="X") empuja a refs/heads/X SIN forzar (capa 21b: destino
     # directo elegible). El force-with-lease vive SOLO en push_a_rama
-    # (la rama propia de laidea); a ramas ajenas nunca se fuerza.
+    # (la rama propia de orux); a ramas ajenas nunca se fuerza.
     remoto = _remoto_local(tmp_path)
     ws = tmp_path / "ws"
     r = GitRepo(ws)
     r.clonar(str(remoto), "u", "t")
     (ws / "f.py").write_text("1\n", encoding="utf-8")
-    r.commitear("c", "ana", "ana@laidea.local")
+    r.commitear("c", "ana", "ana@orux.local")
     assert r.push("u", "t", None, "develop")[0] is True
     heads = subprocess.run(
         ["git", "ls-remote", "--heads", str(remoto)],
@@ -271,7 +271,7 @@ def test_push_a_rama_nombrada_sin_forzar(tmp_path) -> None:
 
 # --- Blindaje capa 10: la URL/rama del cliente no debe ser un vector RCE ---
 
-from laidea.git.repo import _url_segura, _rama_segura  # noqa: E402
+from orux.git.repo import _url_segura, _rama_segura  # noqa: E402
 
 
 def test_url_rechaza_transporte_ext_y_fd() -> None:
@@ -297,7 +297,7 @@ def test_url_acepta_remotos_legitimos_y_paths_locales() -> None:
 
 
 def test_rama_rechaza_caracteres_raros_y_dotdot() -> None:
-    assert _rama_segura("laidea/ef6a") is True
+    assert _rama_segura("orux/ef6a") is True
     assert _rama_segura("main") is True
     assert _rama_segura("..") is False
     assert _rama_segura("a/../b") is False

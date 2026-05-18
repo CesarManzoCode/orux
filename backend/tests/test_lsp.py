@@ -15,9 +15,9 @@ import pytest
 
 import re
 
-from laidea.analysis import impacto, motivos
-from laidea.analysis.modelo import cambios_que_importan_modelo
-from laidea.analysis.lsp import (
+from orux.analysis import impacto, motivos
+from orux.analysis.modelo import cambios_que_importan_modelo
+from orux.analysis.lsp import (
     ClienteLSP,
     ErrorLSP,
     SesionLSP,

@@ -1,14 +1,14 @@
 # Caddy: estático + TLS + proxy del WebSocket. Una sola cara pública.
 #
-# LAIDEA_SITE_ADDRESS = dominio real (ej. laidea.midominio.com) y Caddy saca
+# ORUX_SITE_ADDRESS = dominio real (ej. orux.midominio.com) y Caddy saca
 # el certificado solo. Si queda "localhost", usa su CA local (para probar).
-{$LAIDEA_SITE_ADDRESS:localhost} {
+{$ORUX_SITE_ADDRESS:localhost} {
 	encode zstd gzip
 
 	# El WebSocket del server va por /ws. Caddy pasa el upgrade solo.
 	@ws path /ws /ws/*
 	handle @ws {
-		reverse_proxy laidea:8765
+		reverse_proxy orux:8765
 	}
 
 	# Capa 23: API interna de operador, su propio contenedor desacoplado.

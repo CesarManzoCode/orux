@@ -6,7 +6,7 @@ Pieza pura: sin red ni estado. Lo crítico a fijar como contrato:
 - NO explota ni opina cuando el código está a medio escribir (SyntaxError).
 """
 
-from laidea.analysis import (
+from orux.analysis import (
     cambios_que_importan,
     definiciones_top,
     impacto,
@@ -166,7 +166,7 @@ def test_impacto_solo_para_archivos_py() -> None:
 def test_deps_interfaz_python() -> None:
     # Capa 24b: tipos en la interfaz (no en el cuerpo) -> el transitivo
     # propaga por dependencia de tipos en Python.
-    from laidea.analysis.python import _deps_interfaz, _nodos_top
+    from orux.analysis.python import _deps_interfaz, _nodos_top
 
     src = (
         "def make_user(rol: Rol) -> Usuario:\n"
@@ -186,7 +186,7 @@ def test_deps_interfaz_python() -> None:
 
 
 def test_severidad_de() -> None:
-    from laidea.analysis.modelo import severidad_de
+    from orux.analysis.modelo import severidad_de
     assert severidad_de("se eliminó o renombró «X» — el código...") == "alta"
     assert severidad_de("cambió la firma de «f»: (a) → (a, b)") == "alta"
     assert severidad_de("«C» ya no expone: v — quien lo usaba...") == "alta"

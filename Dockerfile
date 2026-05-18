@@ -1,4 +1,4 @@
-# Imagen del servidor laidea. Solo el server Python: el cliente estático
+# Imagen del servidor orux. Solo el server Python: el cliente estático
 # (web/) lo sirve Caddy (ver docker-compose.yml). No agrega nada al producto,
 # solo lo empaqueta para correr en un VPS.
 FROM python:3.12-slim AS base
@@ -24,7 +24,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Usuario no-root: no se corre el server como root en un servidor expuesto.
-RUN useradd --create-home --uid 10001 laidea
+RUN useradd --create-home --uid 10001 orux
 
 WORKDIR /app
 # Instalamos primero solo los metadatos para cachear la capa de dependencias.
@@ -32,7 +32,7 @@ WORKDIR /app
 # por eso las rutas llevan el prefijo. README.md sigue en la raíz (doc del
 # proyecto entero, no del paquete).
 COPY backend/pyproject.toml README.md ./
-COPY backend/laidea ./laidea
+COPY backend/orux ./orux
 RUN pip install --no-cache-dir .
 
 # Capa 17: el paquete pip `pyright` descarga un runtime Node la PRIMERA vez
@@ -48,7 +48,7 @@ RUN pip install --no-cache-dir .
 ENV PYRIGHT_PYTHON_CACHE_DIR=/opt/pyright
 RUN mkdir -p /opt/pyright \
  && (pyright --version || true) \
- && chown -R laidea:laidea /opt/pyright
+ && chown -R orux:orux /opt/pyright
 
 # Capa 18: typescript-language-server + su tsserver (paquete `typescript`),
 # global. Versiones fijas (reproducible). A diferencia de pyright-python NO
@@ -73,7 +73,7 @@ RUN curl -fsSL -o /tmp/ra.gz \
 # (ejecuta `go` para cargar paquetes). Por eso entra el SDK de Go entero
 # (es el costo real de Go, comparable en peso a una JVM). GOCACHE en /tmp
 # (escribible por el user no-root en runtime; misma lección que el cache de
-# pyright). PATH y dirs world-rx para que el usuario `laidea` lo use.
+# pyright). PATH y dirs world-rx para que el usuario `orux` lo use.
 ENV GO_VERSION=1.22.5 \
     GOPATH=/opt/go \
     GOCACHE=/tmp/go-build \
@@ -87,14 +87,14 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
 # Estado persistente (workspace=repo git, users, ownership, secret). Es un
 # VOLUME: vive fuera del contenedor para sobrevivir recrearlo. Propiedad del
 # usuario no-root para que pueda escribir.
-RUN mkdir -p /data && chown -R laidea:laidea /data
+RUN mkdir -p /data && chown -R orux:orux /data
 VOLUME /data
-ENV LAIDEA_DATA=/data \
-    LAIDEA_HOST=0.0.0.0 \
-    LAIDEA_PORT=8765 \
+ENV ORUX_DATA=/data \
+    ORUX_HOST=0.0.0.0 \
+    ORUX_PORT=8765 \
     PYTHONUNBUFFERED=1
 
-USER laidea
+USER orux
 EXPOSE 8765
 
 # Healthcheck: abre un WebSocket REAL y lo cierra. Un connect TCP crudo
@@ -105,4 +105,4 @@ EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD ["python", "-c", "import asyncio, websockets\nasync def m():\n    async with websockets.connect('ws://127.0.0.1:8765'):\n        pass\nasyncio.run(m())"]
 
-CMD ["python", "-m", "laidea.server"]
+CMD ["python", "-m", "orux.server"]

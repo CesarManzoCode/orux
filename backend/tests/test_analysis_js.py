@@ -7,8 +7,8 @@ edición de cuerpo, referencias sin ruido de strings/comentarios, y que
 `impacto` despacha por extensión y NO cruza lenguajes.
 """
 
-from laidea.analysis import impacto
-from laidea.analysis.javascript import (
+from orux.analysis import impacto
+from orux.analysis.javascript import (
     definiciones_top,
     referencias,
     simbolos_cambiados,

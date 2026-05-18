@@ -173,14 +173,14 @@ function onMessage(raw: string) {
   const m = JSON.parse(raw);
   switch (m.type) {
     case "auth_ok":
-      localStorage.setItem("laidea_session", m.token);
-      localStorage.setItem("laidea_user", m.username);
+      localStorage.setItem("orux_session", m.token);
+      localStorage.setItem("orux_user", m.username);
       // Autenticado pero todavía sin equipo: el server manda `lobby` a
       // continuación. La app sigue cerrada un escalón más.
       set({ authed: true, loginError: null, fase: "lobby" });
       break;
     case "auth_error":
-      localStorage.removeItem("laidea_session");
+      localStorage.removeItem("orux_session");
       set({ authed: false, loginError: m.reason, fase: "auth" });
       break;
     case "lobby":
@@ -323,7 +323,7 @@ export function connect() {
   ws = new WebSocket(wsUrl());
   ws.onopen = () => {
     set({ conn: "conectado" });
-    const sess = localStorage.getItem("laidea_session");
+    const sess = localStorage.getItem("orux_session");
     if (sess) send({ type: "session", token: sess });
     else set({ authed: false });
   };
@@ -338,8 +338,8 @@ export function autenticar(tipo: "login" | "register", username: string, passwor
   send({ type: tipo, username, password });
 }
 export function salir() {
-  localStorage.removeItem("laidea_session");
-  localStorage.removeItem("laidea_user");
+  localStorage.removeItem("orux_session");
+  localStorage.removeItem("orux_user");
   location.reload();
 }
 // --- Capa 15: gate de equipo ---

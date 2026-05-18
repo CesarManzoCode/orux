@@ -4,7 +4,7 @@ escala/recurso. Números decretados con el usuario."""
 
 from __future__ import annotations
 
-from laidea import plans
+from orux import plans
 
 
 def test_free_es_el_target_declarado() -> None:

@@ -24,9 +24,9 @@ import pytest_asyncio
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
-from laidea.git import GitRepo
-from laidea.server.sync import SyncServer, TeamRuntime
-from laidea.state import DiskStorage
+from orux.git import GitRepo
+from orux.server.sync import SyncServer, TeamRuntime
+from orux.state import DiskStorage
 
 # Capa 7: la app está cerrada. Cada test necesita usuarios; este contador da
 # nombres únicos para que dos clientes de un test sean identidades distintas.
@@ -1241,16 +1241,16 @@ async def test_push_desde_la_web(tmp_path) -> None:
             # Capa 21: el remoto local NO es GitHub -> sin link de PR, no
             # se inventa. El detalle nombra la rama de publicación.
             assert res["pr_url"] == ""
-            assert "laidea/" in res["detail"]
+            assert "orux/" in res["detail"]
         # NO se pushea a main: el commit vive en la rama del equipo
-        # `laidea/<team_id>`. Lo verificamos sobre el remoto bare.
+        # `orux/<team_id>`. Lo verificamos sobre el remoto bare.
         heads = _sp.run(
             ["git", "ls-remote", "--heads", str(remoto)],
             capture_output=True, text=True, check=True,
         ).stdout
         rama = next(
             ln.split("refs/heads/")[1]
-            for ln in heads.splitlines() if "refs/heads/laidea/" in ln
+            for ln in heads.splitlines() if "refs/heads/orux/" in ln
         )
         verif = tmp_path / "verif"
         _sp.run(["git", "clone", "-q", "--branch", rama,
@@ -1290,7 +1290,7 @@ async def test_push_a_main_es_elegible(tmp_path) -> None:
             capture_output=True, text=True, check=True,
         ).stdout
         assert "refs/heads/main" in heads          # fue a main
-        assert "refs/heads/laidea/" not in heads   # NO a la rama del equipo
+        assert "refs/heads/orux/" not in heads   # NO a la rama del equipo
         verif = tmp_path / "verif"
         _sp.run(["git", "clone", "-q", "--branch", "main",
                  str(remoto), str(verif)], check=True)

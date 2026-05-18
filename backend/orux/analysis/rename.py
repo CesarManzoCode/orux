@@ -17,7 +17,7 @@ Dos piezas:
   miembro removido + 1 agregado en la MISMA clase, mismo tipo de miembro,
   constructor intacto). Ante cualquier duda -> None: el sistema se comporta
   como hoy (aviso de impacto normal) y NO reescribe. Sub-ofrecer es
-  preferible a reescribir mal el código de alguien (un solo "laidea me
+  preferible a reescribir mal el código de alguien (un solo "orux me
   cambió mal el código" mata la confianza ganada en capas 16-21).
 
 - `aplicar_rename(contenido, viejo, nuevo)`: el codemod mecánico mínimo y

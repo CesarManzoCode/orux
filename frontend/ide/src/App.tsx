@@ -22,11 +22,11 @@ export function App() {
   // quiere todo el ancho para el código). La preferencia persiste — una
   // herramienta de uso diario respeta cómo la dejaste.
   const [inspOpen, setInspOpen] = useState(
-    () => localStorage.getItem("laidea_insp") !== "0",
+    () => localStorage.getItem("orux_insp") !== "0",
   );
   const toggleInsp = () => {
     const next = !inspOpen;
-    localStorage.setItem("laidea_insp", next ? "1" : "0");
+    localStorage.setItem("orux_insp", next ? "1" : "0");
     setInspOpen(next);
   };
 

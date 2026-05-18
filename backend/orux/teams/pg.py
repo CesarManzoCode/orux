@@ -14,7 +14,7 @@ from .store import TeamError, _codigo, _id_equipo
 
 class PgTeamStore:
     def __init__(self, db) -> None:
-        self._db = db  # laidea.db.Database
+        self._db = db  # orux.db.Database
 
     async def crear_equipo(self, nombre: str, creador: str) -> dict:
         nombre = (nombre or "").strip()

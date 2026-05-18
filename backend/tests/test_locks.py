@@ -9,7 +9,7 @@ rozada y la capa sería inusable.
 reservadas", que es la otra mitad del lock.
 """
 
-from laidea.state import Roster, lineas_tocadas
+from orux.state import Roster, lineas_tocadas
 
 
 def test_sin_cambios_no_toca_nada() -> None:
@@ -68,7 +68,7 @@ def test_archivo_gigante_no_revienta_y_es_conservador() -> None:
     (congelaría el event loop de TODOS los equipos). Se degrada a la
     comparación posicional: rápida y CONSERVADORA (nunca reporta de menos,
     así la capa 5 sigue protegiendo)."""
-    from laidea.state.locks import _LCS_MAX_CELDAS
+    from orux.state.locks import _LCS_MAX_CELDAS
 
     n = int(_LCS_MAX_CELDAS**0.5) + 50  # n·n por encima del tope -> fallback
     viejo = "\n".join(f"linea {i}" for i in range(n))
@@ -85,7 +85,7 @@ def test_archivo_gigante_no_revienta_y_es_conservador() -> None:
 def test_fallback_nunca_subreporta_una_linea_borrada() -> None:
     """Propiedad de seguridad del fallback: una línea vieja que desaparece
     SIEMPRE cuenta como tocada (sub-reportar dejaría pasar una colisión)."""
-    from laidea.state.locks import _tocadas_posicional
+    from orux.state.locks import _tocadas_posicional
 
     a = ["a", "b", "c", "d"]
     b = ["a", "X"]  # b, c, d ya no están / cambiaron

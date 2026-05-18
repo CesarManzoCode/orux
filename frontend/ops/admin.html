@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>laidea · operador</title>
+<title>orux · operador</title>
 <!--
   Capa 23 (+ auth por cuenta): panel de OPERADOR (vos), NO el cliente del
   IDE. Vanilla, una página, sin build, separada de todo. Entrás con TU
   cuenta ya registrada (usuario+contraseña, el mismo login del IDE); el
-  server (LAIDEA_ADMIN_USER) verifica que sos el operador y emite un token
+  server (ORUX_ADMIN_USER) verifica que sos el operador y emite un token
   de SESIÓN firmado. Ese token (no un secreto compartido) vive solo en
   sessionStorage. Esto es la consola de cobro manual: alguien paga → premium.
 
@@ -598,7 +598,7 @@ table#teams td {
       <div class="gate-logo">
         <div class="gate-logo-mark">L</div>
         <div class="gate-logo-text">
-          <strong>laidea</strong>
+          <strong>orux</strong>
           <span>Consola de operador</span>
         </div>
       </div>
@@ -635,7 +635,7 @@ table#teams td {
     <div class="panel-brand">
       <div class="panel-logo-mark">L</div>
       <div class="panel-brand-text">
-        <strong>laidea</strong>
+        <strong>orux</strong>
         <span>Consola de operador</span>
       </div>
     </div>
@@ -687,11 +687,11 @@ table#teams td {
 <!-- ───────────────────────────────────────────────────────────────────────
      SCRIPT: auth ahora por cuenta (POST /api/v1/login -> token de sesión).
      El resto del contrato se preserva: api()/setPlan()/cargar(), Bearer,
-     sessionStorage("laidea_op"), endpoints /teams /users /teams/:id/plan.
+     sessionStorage("orux_op"), endpoints /teams /users /teams/:id/plan.
 ─────────────────────────────────────────────────────────────────────────── -->
 <script>
 const API = "/api/v1";
-function tok() { return sessionStorage.getItem("laidea_op") || ""; }
+function tok() { return sessionStorage.getItem("orux_op") || ""; }
 function H() { return { "Authorization": "Bearer " + tok() }; }
 
 async function api(path, opts) {
@@ -728,7 +728,7 @@ async function entrar() {
                        || ("HTTP " + r.status));
     }
     const { token } = await r.json();
-    sessionStorage.setItem("laidea_op", token);
+    sessionStorage.setItem("orux_op", token);
     document.getElementById("pwd").value = "";   // no dejar la pass en el DOM
     _abrirPanel();
   } catch (e) {
@@ -740,7 +740,7 @@ async function entrar() {
 // Cerrar sesión: borra el token de sesión y vuelve al login. Antes no
 // existía -> el token quedaba en sessionStorage hasta cerrar la pestaña.
 function salir() {
-  sessionStorage.removeItem("laidea_op");
+  sessionStorage.removeItem("orux_op");
   document.getElementById("panel").style.display = "none";
   document.getElementById("msg").textContent = "";
   document.getElementById("gmsg").textContent = "";
@@ -756,7 +756,7 @@ async function _reanudar() {
     await api("/teams");
     _abrirPanel();
   } catch (_e) {
-    sessionStorage.removeItem("laidea_op");
+    sessionStorage.removeItem("orux_op");
   }
 }
 

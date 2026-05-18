@@ -1,17 +1,17 @@
-# laidea
+# Orux
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
 ## Estado actual: capa 8 — integración con Git (prototipo completo)
 
-**Las 8 capas del README están implementadas.** El workspace persistido **es un repositorio git real**: `git clone ~/.laidea/workspace` te da el código, sin formato propietario — la herramienta vive *sobre* Git, no lo reemplaza. El cliente muestra un panel de solo lectura (rama, cambios sin commitear, últimos commits, botón "actualizar"). El commit/push/branch lo hace el dev en su terminal; la tool no se interpone. Alcance mínimo deliberado: no hay commit/push/PRs desde la herramienta (eso necesitaría credenciales git por usuario — otra capa).
+**Las 8 capas del README están implementadas.** El workspace persistido **es un repositorio git real**: `git clone ~/.orux/workspace` te da el código, sin formato propietario — la herramienta vive *sobre* Git, no lo reemplaza. El cliente muestra un panel de solo lectura (rama, cambios sin commitear, últimos commits, botón "actualizar"). El commit/push/branch lo hace el dev en su terminal; la tool no se interpone. Alcance mínimo deliberado: no hay commit/push/PRs desde la herramienta (eso necesitaría credenciales git por usuario — otra capa).
 
 ## Despliegue (Docker)
 
 El prototipo está empaquetado para correr en un VPS — **sin features nuevas**, solo desplegable y sólido. Caddy es lo único expuesto: sirve el cliente estático, termina TLS automático y proxya el WebSocket; el server Python no publica puertos. El estado (workspace=repo git, usuarios, ownership, secreto) vive en un volumen y sobrevive a recrear los contenedores. Sin base de datos a propósito: para 2–50 personas, JSON + git sobre un volumen persistente es lo correcto y coherente con "un `git clone` basta".
 
 ```bash
-cp .env.example .env          # poné tu dominio en LAIDEA_SITE_ADDRESS
+cp .env.example .env          # poné tu dominio en ORUX_SITE_ADDRESS
 make up                       # build + levanta server + Caddy
 make logs                     # seguir logs   |   make down para apagar
 ```
@@ -20,7 +20,7 @@ Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lis
 
 ### Capa 7 — identidad real
 
-La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.laidea/` (`users.json`, `ownership.json`, `secret`, `workspace/`).
+La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.orux/` (`users.json`, `ownership.json`, `secret`, `workspace/`).
 
 ### Capa 6 — análisis semántico de impacto
 
@@ -38,7 +38,7 @@ El dueño es el **usuario autenticado** (capa 7): el ownership se persiste por u
 
 ### Capa 3 — persistencia
 
-El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`~/.laidea/workspace` por defecto —fuera del repo a propósito, para no disparar el auto-reload de servidores estáticos que vigilan la carpeta—, o `LAIDEA_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
+El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`~/.orux/workspace` por defecto —fuera del repo a propósito, para no disparar el auto-reload de servidores estáticos que vigilan la carpeta—, o `ORUX_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
 
 ### Capa 2 — presencia
 
@@ -57,7 +57,7 @@ El repo está separado en dos raíces (más orquestación en la raíz): el backe
 ```bash
 cd backend
 pip install -e ".[dev]"
-python -m laidea.server
+python -m orux.server
 ```
 
 El cliente del IDE (React) corre con `cd frontend/ide && npm install && npm run dev`. Las pestañas/clientes conectados se sincronizan en tiempo real.
@@ -70,9 +70,9 @@ cd backend && pytest
 
 ### Estructura
 
-- `backend/laidea/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
-- `backend/laidea/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
-- `backend/laidea/server/` — servidor WebSocket de sincronización.
+- `backend/orux/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
+- `backend/orux/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
+- `backend/orux/server/` — servidor WebSocket de sincronización.
 - `backend/tests/` — tests de protocolo, estado e integración.
 - `frontend/ide/` — cliente React del IDE (era `client/`). `frontend/landing/` — landing de marketing. `frontend/ops/` — panel de operador.
 

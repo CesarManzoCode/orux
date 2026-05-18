@@ -9,7 +9,7 @@ archivos los referencian.
 
 **Por qué Python primero** (decisión del usuario, el README sugería TS): es el
 stack del proyecto, `ast` está en la stdlib (cero toolchain externo) y permite
-dogfooding sobre el propio laidea.
+dogfooding sobre el propio orux.
 
 **Alcance mínimo, deuda consciente (README riesgo #2):**
 

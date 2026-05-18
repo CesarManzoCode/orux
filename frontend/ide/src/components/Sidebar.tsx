@@ -75,7 +75,7 @@ function PanelGit() {
           {s.gitResult && (
             <div className={"res " + (s.gitResult.ok ? "ok" : "bad")}>
               {s.gitResult.detail}
-              {/* Capa 21: laidea pusheó la rama del equipo; el PR lo
+              {/* Capa 21: orux pusheó la rama del equipo; el PR lo
                   abre el humano en GitHub (integración, no reemplazo). */}
               {s.gitResult.pr_url && (
                 <a

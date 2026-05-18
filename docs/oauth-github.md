@@ -13,13 +13,13 @@ hoy. El protocolo WebSocket no cambia ni un byte.
 
 ## Backend (ya implementado)
 
-- `laidea/identity/oauth.py` — lógica pura (URL de autorización, identidad
+- `orux/identity/oauth.py` — lógica pura (URL de autorización, identidad
   `gh:<login>`, `state` CSRF firmado con vencimiento). Testeada en sandbox
   (`tests/test_oauth.py`).
 - `UserStore.asegurar_externo` / `PgUserStore.asegurar_externo` — crea la
   cuenta `gh:<login>` sin contraseña (no se puede entrar a ella por
   password; `existe()` sí, para que `SessionMessage` la acepte).
-- `laidea/api/app.py` — rutas HTTP (contenedor `api`, Starlette):
+- `orux/api/app.py` — rutas HTTP (contenedor `api`, Starlette):
   - `GET /oauth/github/login` → 302 a GitHub con `state` firmado.
   - `GET /oauth/github/callback` → valida `state`, canjea `code`, deriva
     `gh:<login>`, asegura la cuenta, emite el token y **redirige al SPA**.
@@ -43,7 +43,7 @@ UI es deuda cosmética (se pule luego con un display-name), no se negocia.
    diera 503, pero no es necesario para un primer corte.
 
 2. **Al volver al SPA** (`/app/`), leer los query params:
-   - Éxito: `?session=<token>`. Tratarlo **idéntico** a `laidea_session`
+   - Éxito: `?session=<token>`. Tratarlo **idéntico** a `orux_session`
      de localStorage hoy: guardarlo y mandar `SessionMessage(token)` por el
      WebSocket. Es el mismo token de la capa 7 — el flujo auth→lobby→equipo
      no cambia. Limpiar el query de la URL después (history.replaceState)
@@ -59,19 +59,19 @@ UI es deuda cosmética (se pule luego con un display-name), no se negocia.
 
 Ver `.env.example` (sección GitHub OAuth): crear la OAuth App en GitHub con
 callback `https://TU_DOMINIO/oauth/github/callback`, y setear
-`LAIDEA_SESSION_SECRET` (mismo valor para los servicios `laidea` y `api`),
-`LAIDEA_GITHUB_CLIENT_ID`, `LAIDEA_GITHUB_CLIENT_SECRET`,
-`LAIDEA_OAUTH_REDIRECT`.
+`ORUX_SESSION_SECRET` (mismo valor para los servicios `orux` y `api`),
+`ORUX_GITHUB_CLIENT_ID`, `ORUX_GITHUB_CLIENT_SECRET`,
+`ORUX_OAUTH_REDIRECT`.
 
 ## Follow-ups conscientes (NO hechos a propósito)
 
 - Email real de commit: la identidad sigue siendo `gh:<login>` y
-  `_autor_git` produce el email sintético `…@laidea.local`. Traer el email
+  `_autor_git` produce el email sintético `…@orux.local`. Traer el email
   verificado de GitHub requiere propagar un campo email por todo el stack
   (hoy la identidad es un solo string). Diferido.
 - Display-name (mostrar `octocat` en vez de `gh:octocat` en presencia/
   commits/panel) — cosmético, diferido.
 - `exp` en el token de sesión (hallazgo de la auditoría de robustez, ver
-  memoria `laidea_blindaje_pendiente`): ortogonal a OAuth, sigue pendiente.
+  memoria `orux_blindaje_pendiente`): ortogonal a OAuth, sigue pendiente.
 - Scope `repo` para autocompletar clone/push: descartado por ahora
   (consentimiento mínimo, decisión del usuario).

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from laidea.api import service
-from laidea.teams import MemTeamStore
+from orux.api import service
+from orux.teams import MemTeamStore
 
 
 class _UsersFake:
@@ -59,7 +59,7 @@ async def test_cambiar_plan_ok_invalido_y_inexistente() -> None:
 # deploy es PgUserStore (async); acá un wrapper async sobre el UserStore
 # en memoria: misma superficie `verificar`, sin Postgres.
 
-from laidea.identity.store import UserStore  # noqa: E402
+from orux.identity.store import UserStore  # noqa: E402
 
 
 class _UsersAuth:
@@ -114,7 +114,7 @@ async def test_login_operador_cerrado_si_no_configurado() -> None:
 
 def test_operador_de_token_rechaza_falsos_y_no_configurado() -> None:
     tok = __import__(
-        "laidea.identity.tokens", fromlist=["crear_token"]
+        "orux.identity.tokens", fromlist=["crear_token"]
     ).crear_token("ana", "FIRMA")
     assert service.operador_de_token(tok, "ana", "FIRMA") == "ana"
     # Firma con otro secreto -> None (no lo emitió este server).

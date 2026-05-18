@@ -112,12 +112,12 @@ def _autor_git(usuario: str) -> tuple[str, str]:
 
     Si el usuario parece un email lo usamos como email y el nombre es la
     parte antes de la @. Si no, nombre = usuario y email sintético
-    `usuario@laidea.local` (git exige un email; no tenemos uno real y no lo
+    `usuario@orux.local` (git exige un email; no tenemos uno real y no lo
     inventamos bonito a propósito — es honesto que sea sintético).
     """
     if "@" in usuario:
         return usuario.split("@", 1)[0], usuario
-    return usuario, f"{usuario}@laidea.local"
+    return usuario, f"{usuario}@orux.local"
 
 
 class _UsuariosAsync:
@@ -1254,12 +1254,12 @@ class SyncServer:
             else:
                 # Capa 21b: la rama destino la ELIGE el usuario.
                 # Vacío = la rama de publicación del equipo (default
-                # seguro: force-with-lease + PR; laidea es su único
+                # seguro: force-with-lease + PR; orux es su único
                 # escritor). Cualquier otra (p.ej. main) = push
                 # normal SIN forzar (capa 10: non-ff honesto, jamás
-                # pisa historia compartida). laidea decide force-o-no
+                # pisa historia compartida). orux decide force-o-no
                 # por el destino; el usuario solo elige a dónde.
-                rama_eq = f"laidea/{rt.team_id}"
+                rama_eq = f"orux/{rt.team_id}"
                 destino = (message.rama or "").strip() or rama_eq
                 async with rt._git_lock:
                     if destino == rama_eq:
@@ -1310,7 +1310,7 @@ class SyncServer:
         # Configurable por si el operador del VPS quiere ajustar RAM vs
         # latencia-de-reentrada. Pagar el reindex ocasional << retener
         # cientos de MB de equipos que ya no están.
-        ttl = float(os.environ.get("LAIDEA_LSP_IDLE_SEC", "1200"))
+        ttl = float(os.environ.get("ORUX_LSP_IDLE_SEC", "1200"))
         async with serve(self.handle, host, port):
             logger.info("servidor escuchando en ws://%s:%d", host, port)
             asyncio.create_task(self._barrer_lsp_ociosas(ttl))

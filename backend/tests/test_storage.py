@@ -12,7 +12,7 @@ ser rechazado, no escrito.
 
 import pytest
 
-from laidea.state import DiskStorage, Workspace
+from orux.state import DiskStorage, Workspace
 
 
 def test_guardar_y_cargar_roundtrip(tmp_path) -> None:

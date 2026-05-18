@@ -7,7 +7,7 @@ primero, no en los tests de integración (que son más lentos y dan menos pistas
 sobre la causa).
 """
 
-from laidea.state import Workspace
+from orux.state import Workspace
 
 
 def test_workspace_empezando_vacio() -> None:

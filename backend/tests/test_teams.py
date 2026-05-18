@@ -10,7 +10,7 @@ que el adaptador Postgres). Lo crítico a fijar como contrato:
 
 import pytest
 
-from laidea.teams import MemTeamStore, TeamError
+from orux.teams import MemTeamStore, TeamError
 
 
 async def test_crear_equipo_hace_admin_al_creador() -> None:

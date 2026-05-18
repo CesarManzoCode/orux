@@ -7,7 +7,7 @@ ruido — lo mínimo para que el fan-out tenga un símbolo que resolver.
 
 from __future__ import annotations
 
-from laidea.analysis import go, rust, tiers
+from orux.analysis import go, rust, tiers
 
 
 def test_go_definiciones_top() -> None:

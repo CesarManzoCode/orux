@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from laidea.identity.store import UserStore
-from laidea.state.ownership import Ownership
+from orux.identity.store import UserStore
+from orux.state.ownership import Ownership
 
 
 # --- UserStore.admin(): el primero registrado, sin tocar el schema ---

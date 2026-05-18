@@ -23,6 +23,7 @@ export function Editor() {
   const gutRef = useRef<HTMLDivElement>(null);
   const presRef = useRef<HTMLDivElement>(null);
   const activaRef = useRef<HTMLDivElement>(null);
+  const gutActRef = useRef<HTMLDivElement>(null);
   const presScrollRef = useRef<HTMLDivElement>(null);
   const gutMarksRef = useRef<HTMLDivElement>(null);
   const selRef = useRef<{ s: number; e: number } | null>(null);
@@ -74,10 +75,11 @@ export function Editor() {
       presScrollRef.current.style.transform = `translateY(${-st}px)`;
     if (gutMarksRef.current)
       gutMarksRef.current.style.transform = `translateY(${-st}px)`;
-    if (activaRef.current) {
+    if (activaRef.current || gutActRef.current) {
       const ln = lineaActual();
-      activaRef.current.style.top =
-        PAD_TOP + (ln - 1) * LINE_H - st + "px";
+      const y = PAD_TOP + (ln - 1) * LINE_H - st + "px";
+      if (activaRef.current) activaRef.current.style.top = y;
+      if (gutActRef.current) gutActRef.current.style.top = y;
     }
   }
 
@@ -243,6 +245,11 @@ export function Editor() {
         onSelect={guardarSel}
       />
       <div className="ed-gutter">
+        <div
+          className="ed-gutter-active"
+          ref={gutActRef}
+          style={{ display: path ? "block" : "none" }}
+        />
         <div className="ed-gutter-scroll" ref={gutRef} />
         <div className="ed-gutter-marks" ref={gutMarksRef} />
       </div>

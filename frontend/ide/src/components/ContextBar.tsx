@@ -1,4 +1,4 @@
-import { KeyRound, Radio, Waypoints } from "lucide-react";
+import { KeyRound, Radio, Waypoints, Pencil, GitPullRequest } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   reclamar, nombreDe, impactosQueAfectan, severidadMax, presentesEn,
@@ -17,9 +17,40 @@ export function ContextBar() {
   const due = s.owners[path];
   const esMio = s.yo && due === s.yo.client_id;
   const riesgo = severidadMax(impactosQueAfectan(path));
+  // Modo de edición REAL (derivado, no inventado): si el archivo es tuyo o
+  // no tiene dueño, escribís directo; si es de otro, lo que tipees se le
+  // propone. Es el titular de la barra — lo que el dev necesita saber
+  // ANTES de tocar una tecla.
+  const proponiendo = !!due && !esMio;
 
   return (
     <div className="ctxbar">
+      <span
+        className={"ctx-mode " + (proponiendo ? "prop" : "live")}
+        title={
+          proponiendo
+            ? "tus cambios se proponen al dueño; no se aplican hasta que apruebe"
+            : "editás directo: tus cambios se aplican en vivo"
+        }
+      >
+        {proponiendo ? <GitPullRequest size={12} /> : <Pencil size={12} />}
+        {proponiendo ? (
+          <>modo propuesta <i className="ctx-arrow">→</i> {nombreDe(due!)}</>
+        ) : (
+          <>edición directa</>
+        )}
+      </span>
+
+      {/* La tesis, visible (no escondida en un tooltip): por qué tocar
+          algo ajeno no rompe nada. Sólo cuando aplica. */}
+      {proponiendo && (
+        <span className="ctx-nota">
+          no se aplica hasta que <b>{nombreDe(due!)}</b> lo apruebe
+        </span>
+      )}
+
+      <span className="ctx-div" />
+
       <span className="ctx-seg">
         <Radio size={12} className="ctx-i" />
         {aqui.length === 0 ? (
@@ -35,25 +66,24 @@ export function ContextBar() {
         )}
       </span>
 
-      <span className="ctx-div" />
-
-      <span className="ctx-seg">
-        <KeyRound size={12} className="ctx-i" />
-        {!due ? (
-          <button className="reclamar" onClick={() => reclamar(path)}>
-            reclamar este archivo
-          </button>
-        ) : esMio ? (
-          <span className="otag tuyo">tuyo</span>
-        ) : (
-          <>
-            <span className="otag ajeno">de {nombreDe(due)}</span>
-            <span className="ctx-nota">
-              lo que escribas se le propone — no se aplica hasta que apruebe
-            </span>
-          </>
-        )}
-      </span>
+      {/* Ownership: sólo cuando aporta algo el chip de modo no dijo ya.
+          Si es de otro, el chip de modo "modo propuesta → X" ya lo cubre
+          (no se duplica). Acá vive la ACCIÓN (reclamar) y el sello "tuyo". */}
+      {(!due || esMio) && (
+        <>
+          <span className="ctx-div" />
+          <span className="ctx-seg">
+            <KeyRound size={12} className="ctx-i" />
+            {!due ? (
+              <button className="reclamar" onClick={() => reclamar(path)}>
+                reclamar este archivo
+              </button>
+            ) : (
+              <span className="otag tuyo">tuyo · lo editás directo</span>
+            )}
+          </span>
+        </>
+      )}
 
       {riesgo && (
         <>

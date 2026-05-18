@@ -20,7 +20,7 @@ class PgUserStore:
     verificar), normalizando el usuario igual."""
 
     def __init__(self, db) -> None:
-        self._db = db  # laidea.db.Database
+        self._db = db  # orux.db.Database
 
     async def existe(self, username: str) -> bool:
         return bool(await self._db.fetchval(

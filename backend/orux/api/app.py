@@ -11,11 +11,11 @@ gratis). NO es API pública: token de OPERADOR de plataforma (vos), rol
 distinto del admin-de-equipo de capa 12/15.
 
 Seguridad (una vez): el operador es una CUENTA ya registrada
-(`LAIDEA_ADMIN_USER`) que entra con su usuario+contraseña normales y
-recibe un token de SESIÓN firmado (HMAC; secreto `LAIDEA_ADMIN_TOKEN` que
+(`ORUX_ADMIN_USER`) que entra con su usuario+contraseña normales y
+recibe un token de SESIÓN firmado (HMAC; secreto `ORUX_ADMIN_TOKEN` que
 NUNCA sale del server — solo firma/verifica). Antes el cliente mandaba el
 secreto crudo en cada request; ahora no transmite ningún secreto. Sin
-`LAIDEA_ADMIN_USER` o sin `LAIDEA_ADMIN_TOKEN` la API queda CERRADA (503),
+`ORUX_ADMIN_USER` o sin `ORUX_ADMIN_TOKEN` la API queda CERRADA (503),
 nunca abierta. La lógica (PBKDF2 + firmar/validar) vive en `service.py` y
 se prueba 100% en sandbox; acá solo HTTP. Los stores viven en `app.state`
 (deploy: Postgres en startup; tests: inyectados) — UN set de handlers.
@@ -53,26 +53,26 @@ logger = logging.getLogger(__name__)
 
 # Quién es el operador (una cuenta registrada) y el secreto de FIRMA de sus
 # tokens de sesión (nunca se manda al cliente). Faltando cualquiera: 503.
-_ADMIN_USER = os.environ.get("LAIDEA_ADMIN_USER", "")
-_SECRET = os.environ.get("LAIDEA_ADMIN_TOKEN", "")
+_ADMIN_USER = os.environ.get("ORUX_ADMIN_USER", "")
+_SECRET = os.environ.get("ORUX_ADMIN_TOKEN", "")
 
 # --- GitHub OAuth (capa nueva, superficie PÚBLICA, no la de operador) -----
 #
 # Cerrado por defecto: faltando cualquier pieza, /oauth/github/* responde
 # 503 y NUNCA inicia un flujo a medias (mismo principio que la consola de
 # operador). `_SESSION_SECRET` es el MISMO que verifica el server WS
-# (LAIDEA_SESSION_SECRET inyectado a ambos contenedores): el token que se
+# (ORUX_SESSION_SECRET inyectado a ambos contenedores): el token que se
 # emite acá lo acepta `SessionMessage` tal cual, sin tocar el protocolo.
-_GH_CLIENT_ID = os.environ.get("LAIDEA_GITHUB_CLIENT_ID", "")
-_GH_CLIENT_SECRET = os.environ.get("LAIDEA_GITHUB_CLIENT_SECRET", "")
+_GH_CLIENT_ID = os.environ.get("ORUX_GITHUB_CLIENT_ID", "")
+_GH_CLIENT_SECRET = os.environ.get("ORUX_GITHUB_CLIENT_SECRET", "")
 # URL EXACTA registrada en la OAuth App de GitHub. Explícita a propósito:
 # derivarla del header Host sería spoofeable (open redirect / robo de code).
-_GH_REDIRECT = os.environ.get("LAIDEA_OAUTH_REDIRECT", "")
-_SESSION_SECRET = os.environ.get("LAIDEA_SESSION_SECRET", "")
+_GH_REDIRECT = os.environ.get("ORUX_OAUTH_REDIRECT", "")
+_SESSION_SECRET = os.environ.get("ORUX_SESSION_SECRET", "")
 # A dónde vuelve el navegador con el token ya emitido. El front (otra
 # sesión) lo lee de `?session=` y manda `SessionMessage`, igual que el
-# auto-login con `laidea_session`. Default razonable: el SPA en /app/.
-_APP_URL = os.environ.get("LAIDEA_APP_URL", "/app/")
+# auto-login con `orux_session`. Default razonable: el SPA en /app/.
+_APP_URL = os.environ.get("ORUX_APP_URL", "/app/")
 
 
 def _oauth_ok() -> bool:
@@ -113,7 +113,7 @@ def _intercambiar(code: str) -> dict:
         headers={
             "Authorization": f"Bearer {tok}",
             "Accept": "application/vnd.github+json",
-            "User-Agent": "laidea",
+            "User-Agent": "orux",
         },
     )
     with urllib.request.urlopen(r2, timeout=10) as resp:
@@ -172,7 +172,7 @@ def _gate(req: Request) -> JSONResponse | None:
     if not _ADMIN_USER or not _SECRET:
         return JSONResponse(
             {"error": "API de operador no configurada (falta "
-                      "LAIDEA_ADMIN_USER / LAIDEA_ADMIN_TOKEN)"},
+                      "ORUX_ADMIN_USER / ORUX_ADMIN_TOKEN)"},
             status_code=503,
         )
     cab = req.headers.get("authorization", "")
@@ -287,9 +287,9 @@ def crear_app(users, teams) -> Starlette:
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: Starlette):
-    dsn = os.environ.get("LAIDEA_DB_DSN", "")
+    dsn = os.environ.get("ORUX_DB_DSN", "")
     if not dsn:
-        raise RuntimeError("LAIDEA_DB_DSN requerido para la API de operador")
+        raise RuntimeError("ORUX_DB_DSN requerido para la API de operador")
     db = await Database.conectar(dsn)
     app.state.users = PgUserStore(db)
     app.state.teams = PgTeamStore(db)

@@ -5,8 +5,8 @@ Ciclos, profundidad y presupuesto acotan sin colgar ni mentir."""
 
 from __future__ import annotations
 
-from laidea.analysis.modelo import Simbolo
-from laidea.analysis.transitive import impacto_transitivo
+from orux.analysis.modelo import Simbolo
+from orux.analysis.transitive import impacto_transitivo
 
 
 def _sim(nombre, fuente, firma="", superficie=()):

@@ -8,9 +8,9 @@ codemod es mecánico, acotado y conservador.
 
 from __future__ import annotations
 
-from laidea import plans
-from laidea.analysis.modelo import Simbolo
-from laidea.analysis.rename import (
+from orux import plans
+from orux.analysis.modelo import Simbolo
+from orux.analysis.rename import (
     aplicar_rename,
     detectar_rename,
     texto_sugerencia,
@@ -92,7 +92,7 @@ def test_codemod_respeta_limite_de_palabra_y_es_idempotente() -> None:
 
 
 def test_texto_sugerencia_es_accionable() -> None:
-    from laidea.analysis.rename import Rename
+    from orux.analysis.rename import Rename
 
     t = texto_sugerencia(Rename(clase="C", viejo="variable", nuevo="name"))
     assert "variable" in t and "name" in t and "C" in t

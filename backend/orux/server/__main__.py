@@ -1,11 +1,11 @@
-"""Punto de entrada: `python -m laidea.server` o `laidea-server`.
+"""Punto de entrada: `python -m orux.server` o `orux-server`.
 
 Aquí —y solo aquí— se cablea la persistencia real (capa 3). El `SyncServer`
 no sabe de directorios por sí mismo: recibe un `DiskStorage` inyectado. Eso
 mantiene los tests arrancando en memoria y deja la decisión de "dónde se
 guarda" en un único lugar visible.
 
-**Por qué el directorio por defecto está FUERA del repo** (`~/.laidea/...`):
+**Por qué el directorio por defecto está FUERA del repo** (`~/.orux/...`):
 en desarrollo el cliente se sirve con un servidor estático que vigila la
 carpeta del proyecto y recarga el navegador ante cualquier cambio de archivo
 (p. ej. Live Server). Si la persistencia escribiera dentro del repo, cada vez
@@ -17,7 +17,7 @@ ese ciclo de raíz, sin depender de configurar el editor de cada quien.
 Cuando llegue la integración con Git (capa final) esa capa decidirá su propia
 ubicación dentro del repo del usuario; ese es su problema, no el del runtime.
 
-Se puede sobreescribir con la variable de entorno `LAIDEA_DATA`. Si la
+Se puede sobreescribir con la variable de entorno `ORUX_DATA`. Si la
 apuntas dentro del repo, acuérdate de excluirla del watcher (en `.gitignore`
 ya está `workspace_data/`).
 """
@@ -35,16 +35,16 @@ from ..identity import UserStore
 from ..state import DiskStorage, Ownership
 from .sync import SyncServer, TeamRuntime
 
-# Todo el estado de ejecución vive bajo ~/.laidea, FUERA del árbol del
+# Todo el estado de ejecución vive bajo ~/.orux, FUERA del árbol del
 # proyecto a propósito (ver más abajo). El workspace en un subdir; usuarios,
 # ownership y el secreto de firma como archivos hermanos.
-BASE_POR_DEFECTO = Path.home() / ".laidea"
+BASE_POR_DEFECTO = Path.home() / ".orux"
 
 
 def _secreto(base: Path) -> str:
     """Secreto para firmar tokens de sesión, estable entre reinicios.
 
-    Prioridad: `LAIDEA_SESSION_SECRET` (env) > archivo `~/.laidea/secret`.
+    Prioridad: `ORUX_SESSION_SECRET` (env) > archivo `~/.orux/secret`.
 
     El env existe para GitHub OAuth: el callback corre en OTRO proceso (el
     contenedor `api`/Starlette) y tiene que firmar el token de sesión con el
@@ -54,12 +54,12 @@ def _secreto(base: Path) -> str:
     (archivo): backward-compatible, y OAuth simplemente queda deshabilitado
     (cerrado por defecto), nunca a medias.
 
-    El archivo se guarda en `~/.laidea/secret` y se genera la primera vez.
+    El archivo se guarda en `~/.orux/secret` y se genera la primera vez.
     Estable = los tokens de sesión guardados en los clientes siguen valiendo
     tras reiniciar el server (no obliga a re-loguear a todos). Si alguien
     borra el archivo, simplemente todos re-loguean una vez.
     """
-    env = os.environ.get("LAIDEA_SESSION_SECRET", "").strip()
+    env = os.environ.get("ORUX_SESSION_SECRET", "").strip()
     if env:
         return env
     f = base / "secret"
@@ -87,13 +87,13 @@ def _secreto(base: Path) -> str:
 
 async def _amain() -> None:
     log = logging.getLogger(__name__)
-    env = os.environ.get("LAIDEA_DATA")
+    env = os.environ.get("ORUX_DATA")
     base = Path(env) if env else BASE_POR_DEFECTO
     base.mkdir(parents=True, exist_ok=True)
     secret = _secreto(base)
-    host = os.environ.get("LAIDEA_HOST", "localhost")
-    port = int(os.environ.get("LAIDEA_PORT", "8765"))
-    dsn = os.environ.get("LAIDEA_DB_DSN", "").strip()
+    host = os.environ.get("ORUX_HOST", "localhost")
+    port = int(os.environ.get("ORUX_PORT", "8765"))
+    dsn = os.environ.get("ORUX_DB_DSN", "").strip()
 
     if dsn:
         # Capa 15 (sistema real): metadatos en Postgres; el workspace de
@@ -129,7 +129,7 @@ async def _amain() -> None:
     else:
         # Sin DSN: modo en memoria/JSON de un solo equipo implícito (dev /
         # arranque sin DB). Los equipos NO sobreviven a reiniciar — por eso
-        # producción DEBE setear LAIDEA_DB_DSN (docker-compose ya lo hace).
+        # producción DEBE setear ORUX_DB_DSN (docker-compose ya lo hace).
         ws = base / "workspace"
         server = SyncServer(
             storage=DiskStorage(ws),
@@ -139,7 +139,7 @@ async def _amain() -> None:
             git=GitRepo(ws),
         )
         log.warning(
-            "sin LAIDEA_DB_DSN: equipos EFÍMEROS (memoria). Sólo dev. "
+            "sin ORUX_DB_DSN: equipos EFÍMEROS (memoria). Sólo dev. "
             "estado en %s", base,
         )
 

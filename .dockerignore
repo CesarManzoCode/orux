@@ -17,7 +17,7 @@ frontend/ide/dist/
 frontend/landing/node_modules/
 frontend/landing/dist/
 workspace_data/
-.laidea/
+.orux/
 Dockerfile
 docker-compose.yml
 Caddyfile

@@ -3,7 +3,7 @@
 Decisiones DECRETADAS con el usuario (no re-litigar): la espina es **tiers
 por escala**, no un medidor que se agota (en coordinación continua eso se
 lee como bait-and-switch y mata el "que vean el valor total"). El free es
-PERMANENTE y laidea funciona de verdad ahí: no se tiera la tesis, se tieran
+PERMANENTE y orux funciona de verdad ahí: no se tiera la tesis, se tieran
 escala/profundidad alrededor. Los únicos límites del free son de
 escala/recurso (se sienten justos: "creciste, pagás"), nunca de capacidad
 ("te quitamos lo bueno").

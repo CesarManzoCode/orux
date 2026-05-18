@@ -20,19 +20,19 @@ from ..plans import PLANES
 
 # --- Auth del operador por CUENTA (no por token estático) ----------------
 #
-# Antes: un único `LAIDEA_ADMIN_TOKEN` que el cliente MANDABA en cada
+# Antes: un único `ORUX_ADMIN_TOKEN` que el cliente MANDABA en cada
 # request (un secreto compartido viajando por la red, sin identidad, sin
 # rotación por cuenta). Ahora: el operador es una CUENTA ya registrada
-# (env `LAIDEA_ADMIN_USER`); entra con su usuario+contraseña normales
+# (env `ORUX_ADMIN_USER`); entra con su usuario+contraseña normales
 # (verificadas contra el store con PBKDF2, igual que el login del IDE,
 # capa 7) y recibe un token de SESIÓN firmado con HMAC. El secreto de
-# firma (`LAIDEA_ADMIN_TOKEN`, reusado y resignificado) NUNCA sale del
+# firma (`ORUX_ADMIN_TOKEN`, reusado y resignificado) NUNCA sale del
 # server: solo firma/verifica; el cliente jamás lo ve ni lo transmite.
 #
 # Reusa las primitivas ya endurecidas de la capa 7 (`passwords` PBKDF2 +
 # `tokens` HMAC): cero criptografía nueva. Deuda consciente heredada de
 # capa 7 (anotada una vez): el token de sesión no expira todavía; rotar
-# `LAIDEA_ADMIN_TOKEN` invalida todos. Suficiente para una consola de un
+# `ORUX_ADMIN_TOKEN` invalida todos. Suficiente para una consola de un
 # solo operador; expiración = pieza chica futura (el payload ya es dict).
 
 

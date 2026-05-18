@@ -4,7 +4,7 @@ Por qué LSP: hasta capa 16 el análisis era heurístico — Python-`ast` aísla
 interfaz pero NO resuelve cross-módulo (sigue siendo "¿qué archivo tiene el
 token X?"). Un language server (pyright) mantiene un índice semántico real:
 sabe quién *importa y usa de verdad* un símbolo. Eso mata los falsos
-positivos = la confianza que hace que alguien cambie su IDE. laidea habla UN
+positivos = la confianza que hace que alguien cambie su IDE. orux habla UN
 solo protocolo (LSP) y enchufa el server que haya; el primero, pyright.
 
 **Sync y bloqueante a propósito.** La interfaz de los tiers (capa 16) es
@@ -36,7 +36,7 @@ from typing import Protocol
 
 from .modelo import Simbolo
 
-_log = logging.getLogger("laidea.lsp")
+_log = logging.getLogger("orux.lsp")
 
 
 class Transporte(Protocol):
@@ -91,7 +91,7 @@ def _leer_mensaje(transporte: Transporte) -> dict | None:
 
 class ErrorLSP(RuntimeError):
     """El server respondió un error JSON-RPC, o murió. El tier lo captura y
-    degrada al siguiente (tree-sitter): nunca propaga al server de laidea."""
+    degrada al siguiente (tree-sitter): nunca propaga al server de orux."""
 
 
 class ClienteLSP:

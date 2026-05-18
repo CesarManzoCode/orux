@@ -64,6 +64,17 @@
   --info: #62a8f0; --info-bg: rgba(98, 168, 240, 0.13);
   --vio: #a98bf0;  --vio-bg: rgba(169, 139, 240, 0.13);
 
+  /* ── Superficie de código: tokens NUEVOS y aislados (no tocan la
+       geometría sagrada, sólo el aspecto del "pozo" donde se escribe).
+       Las guías de indentación son la firma de un IDE de verdad: muy
+       tenues en reposo, una más visible para la columna activa. ── */
+  --ed-line: rgba(255, 255, 255, 0.032);     /* banda de línea activa    */
+  --ed-line-edge: rgba(76, 195, 138, 0.55);  /* filo izq. de esa banda   */
+  --ed-guide: rgba(255, 255, 255, 0.075);    /* guía de indentación      */
+  --ed-ruler: rgba(255, 255, 255, 0.05);     /* regla de columna (96)    */
+  --ed-gutter-bg: #08090c;                   /* canaleta, un punto + honda */
+  --ed-blueprint: rgba(255, 255, 255, 0.016);/* trama del vacío          */
+
   /* ── Elevación: sombra real + hairline = objeto táctil. Sin neón. Tres
        niveles para jerarquía (isla < flotante < modal). ── */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
@@ -639,22 +650,54 @@ button:active { transform: translateY(1px); }
    editor es la superficie MÁS PROFUNDA (un "pozo" --bg bajo la isla
    --surface) → el código es el foco, hay profundidad real. */
 .editorwrap { flex: 1; position: relative; display: flex; min-height: 0; background: var(--bg); }
-.editorwrap.off { background: var(--surface); }
-/* Estado vacío del editor: invitación, no error. */
+/* Vacío: NO un void muerto. Trama de plano técnico (blueprint) muy tenue,
+   enmascarada al centro, + un guion vertical de "regla" — superficie de
+   instrumento en reposo, no rectángulo negro. */
+.editorwrap.off {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.012), transparent 60%),
+    var(--bg);
+}
+.editorwrap.off::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(var(--ed-blueprint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ed-blueprint) 1px, transparent 1px);
+  background-size: 22px 22px, 33.6px 22px;
+  -webkit-mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
+  mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
+}
+/* Estado vacío del editor: invitación tipográfica con jerarquía, no una
+   sola línea suelta de error. */
 .editorwrap.off::after {
-  content: "Ningún archivo abierto · elegí uno en la izquierda o creá uno nuevo";
+  content: "ningún archivo abierto\A elegí uno en el árbol o creá uno nuevo";
   position: absolute; inset: 0; display: grid; place-items: center;
   text-align: center; padding: 2rem; color: var(--faint);
-  font-size: var(--t-base); pointer-events: none; white-space: pre-wrap;
-  letter-spacing: -0.005em;
+  font-family: var(--font-mono); font-size: var(--t-sm);
+  letter-spacing: 0.06em; text-transform: uppercase; line-height: 2.1;
+  pointer-events: none; white-space: pre-wrap; z-index: 1;
 }
-/* Banda de línea activa: neutra y discreta, con un filo de acento a la
-   izquierda. (left/height SAGRADOS — solo cambia el aspecto.) */
+/* Banda de línea activa PREMIUM: degradado lateral muy sutil (luz que cae
+   del filo de acento, no un bloque plano) + filo de acento a la izquierda
+   y costuras hairline arriba/abajo que la "asientan" en el código.
+   (left/right/height SAGRADOS — sólo cambia el aspecto.) */
 .ed-active {
   position: absolute; left: 52px; right: 0; height: 22px;
-  background: rgba(255, 255, 255, 0.022); z-index: 0;
+  z-index: 0; pointer-events: none;
+  background: linear-gradient(90deg,
+    rgba(76, 195, 138, 0.05), var(--ed-line) 96px, var(--ed-line));
+  box-shadow:
+    inset 2px 0 0 var(--ed-line-edge),
+    inset 0 1px 0 rgba(255, 255, 255, 0.022),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.022);
+}
+/* El "premium" continúa dentro de la canaleta: el nº de línea actual se
+   asienta sobre un realce gemelo de la banda (misma altura/aritmética). */
+.ed-gutter-active {
+  position: absolute; left: 0; width: 52px; height: 22px; z-index: 0;
   pointer-events: none;
-  box-shadow: inset 2px 0 0 var(--accent-line);
+  background: linear-gradient(90deg, transparent, var(--ed-line));
+  box-shadow: inset 2px 0 0 var(--ed-line-edge);
 }
 .ed-hl {
   position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
@@ -662,7 +705,31 @@ button:active { transform: translateY(1px); }
   line-height: 22px; padding: 20px 24px 20px 64px; white-space: pre;
   tab-size: 4; color: var(--text); background: transparent;
 }
-.ed-hl code { display: block; font: inherit; }
+/* GUÍAS DE INDENTACIÓN + REGLA DE COLUMNA — la firma de un IDE de verdad.
+   Van sobre el <code>, que es el ÚNICO elemento que se traslada con el
+   scroll (transform en sincronizarScroll): así las guías acompañan al
+   código en X e Y sin una sola línea de JS ni tocar la geometría sagrada.
+   `ch` aquí = celda monoespaciada exacta (mismo font 14px), por eso una
+   guía cae JUSTO en cada parada de 4 espacios (tab-size 4). En reposo son
+   un hairline casi imperceptible; no compiten con el código, lo estructuran.
+   La regla de columna (~96) es un único filo, aún más discreto. */
+.ed-hl code {
+  display: block; font: inherit;
+  /* La caja del <code> DEBE abarcar la línea más larga: el fondo sólo se
+     pinta dentro de la caja, y al hacer scroll horizontal el <code> se
+     translada — si la caja fuese sólo el viewport, las guías se quedarían
+     sin pintar a la derecha. max-content = se ajusta al renglón más largo;
+     min-width cubre el viewport y garantiza la regla de columna aunque
+     ningún renglón llegue a 96. min-height llena el alto en archivos
+     cortos para que la rejilla no muera antes de tiempo. */
+  width: max-content; min-width: max(100%, 96ch); min-height: 100%;
+  background-image:
+    linear-gradient(90deg, transparent calc(96ch - 1px),
+      var(--ed-ruler) calc(96ch - 1px), var(--ed-ruler) 96ch, transparent 96ch),
+    repeating-linear-gradient(90deg,
+      transparent 0 calc(4ch - 1px), var(--ed-guide) calc(4ch - 1px) 4ch);
+  background-position: 0 0;
+}
 .ed-pres { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
 .ed-pres-scroll { position: absolute; left: 0; right: 0; top: 0; }
 .marca { position: absolute; left: 0; right: 0; height: 22px; }
@@ -688,25 +755,51 @@ button:active { transform: translateY(1px); }
 .ed-gutter {
   position: absolute; left: 0; top: 0; bottom: 0; width: 52px;
   overflow: hidden; pointer-events: none; z-index: 3;
-  background: var(--bg);
+  background: var(--ed-gutter-bg);
   border-right: 1px solid var(--border-soft);
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.3);
   font-family: var(--font-mono); font-size: 14px; line-height: 22px;
 }
-.ed-gutter-scroll { padding: 20px 10px 0 0; text-align: right; color: var(--faint); white-space: pre; }
-.editorwrap.off .ed-gutter, .editorwrap.off .ed-active { display: none; }
+.ed-gutter-scroll {
+  position: relative; z-index: 1;
+  padding: 20px 10px 0 0; text-align: right;
+  color: var(--faint); white-space: pre;
+}
+.editorwrap.off .ed-gutter,
+.editorwrap.off .ed-active,
+.editorwrap.off .ed-gutter-active { display: none; }
+/* En vacío manda UN solo mensaje: el ::after con jerarquía. El textarea
+   sigue presente (es el editor real) pero su placeholder NO compite —
+   se calla para no duplicar el aviso con otras palabras. */
+.editorwrap.off .ed-ta::placeholder { color: transparent; -webkit-text-fill-color: transparent; }
 
 /* Tokens de Prism con NUESTRA paleta (sin su theme). Calibrados para
-   contraste cómodo sobre el "pozo" --bg, sin saturación de juguete. */
-.token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--faint); font-style: italic; }
+   JERARQUÍA, no para colorido: lo que MÁS leés —identificadores y
+   variables— se queda en --text (lo más brillante); la sintaxis (azúcar,
+   puntuación, comentarios) RECEDE. Tipos ≠ funciones ≠ builtins: tres
+   familias frías distintas para escanear estructura sin esfuerzo. Sin
+   saturación de juguete, contraste AA sobre el pozo. */
+.token.comment, .token.prolog, .token.doctype, .token.cdata {
+  color: #7c8598; font-style: italic;  /* 2º plano pero AA real sobre el pozo */
+}
 .token.punctuation { color: var(--muted); }
-.token.keyword, .token.boolean, .token.important, .token.atrule { color: #c08fd6; }
+.token.operator, .token.entity { color: var(--text-2); }
+.token.url { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+.token.keyword, .token.boolean, .token.important, .token.atrule { color: #c79ce0; }
 .token.string, .token.char, .token.attr-value, .token.regex { color: #d8b35e; }
 .token.number, .token.unit { color: #dd9266; }
-.token.function, .token.class-name, .token.maybe-class-name { color: #4cc38a; }
+/* función ≠ marca: verde calmo, NO el accent del producto (no compite
+   con la UI viva). */
+.token.function, .token.maybe-class-name { color: #5cc8a2; }
+/* tipos/clases: cian frío, su propia familia (se despegan de funciones
+   y de los builtins azules). */
+.token.class-name, .token.title.class-name { color: #4fc4c9; }
 .token.builtin, .token.tag, .token.selector, .token.attr-name,
 .token.property, .token.constant, .token.symbol { color: #66aef0; }
-.token.operator, .token.entity, .token.url { color: var(--text-2); }
-.token.decorator, .token.namespace { color: #56d98a; }
+/* decoradores/anotaciones/namespace = meta: su propia familia (lavanda
+   apagada), bien separada del gris de la puntuación y del púrpura vivo
+   del keyword — no se confunde con ninguno. */
+.token.decorator, .token.annotation, .token.namespace { color: #9d8fc4; }
 .token.deleted { color: var(--bad); }
 .token.inserted { color: var(--ok); }
 
@@ -1238,6 +1331,21 @@ button:active { transform: translateY(1px); }
 .ctxbar.vacia { min-height: 34px; }
 .ctx-seg { display: inline-flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
 .ctx-seg .ctx-i { color: var(--faint); flex-shrink: 0; }
+/* Chip de MODO: el titular de la barra colaborativa. No es un tag más —
+   tiene peso, su propio relleno y color = estado (verde = editás en
+   vivo · azul frío = le proponés a otra persona). Lo primero que el ojo
+   agarra al abrir un archivo. */
+.ctx-mode {
+  display: inline-flex; align-items: center; gap: 0.42rem;
+  font-size: var(--t-xs); font-weight: 700; line-height: 1;
+  padding: 0.28rem 0.62rem; border-radius: var(--r-sm);
+  border: 1px solid transparent; letter-spacing: -0.005em;
+  text-transform: lowercase; cursor: default; flex-shrink: 0;
+}
+.ctx-mode svg { flex-shrink: 0; }
+.ctx-mode.live { background: var(--ok-bg); color: var(--ok); }
+.ctx-mode.prop { background: var(--info-bg); color: var(--info); }
+.ctx-mode .ctx-arrow { font-style: normal; opacity: 0.65; padding: 0 1px; }
 .ctx-div { width: 1px; align-self: stretch; margin: 0.28rem 0.15rem; background: var(--border-soft); }
 .ctx-mut { color: var(--faint); font-size: var(--t-xs); }
 .otag.r-baja { background: var(--surface-2); color: var(--faint); }

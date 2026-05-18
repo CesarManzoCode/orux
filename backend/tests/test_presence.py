@@ -6,8 +6,8 @@ fijamos a nivel unidad que la identidad se deriva del usuario (mismo usuario
 efímera (reconectar no te devuelve a donde estabas).
 """
 
-from laidea.state import Roster
-from laidea.state.presence import color_de
+from orux.state import Roster
+from orux.state.presence import color_de
 
 
 def test_usuarios_distintos_identidades_distintas() -> None:

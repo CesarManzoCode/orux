@@ -25,7 +25,7 @@ class Database:
 
     @classmethod
     async def conectar(cls, dsn: str) -> "Database":
-        # Import perezoso: que `import laidea.db` no exija asyncpg instalado
+        # Import perezoso: que `import orux.db` no exija asyncpg instalado
         # (en el sandbox no lo está; los tests no llaman acá).
         import asyncpg  # noqa: PLC0415
 

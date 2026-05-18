@@ -9,7 +9,7 @@ Lo crítico a fijar como contrato de seguridad:
 
 import pytest
 
-from laidea.identity import (
+from orux.identity import (
     UserStore,
     crear_token,
     hash_password,

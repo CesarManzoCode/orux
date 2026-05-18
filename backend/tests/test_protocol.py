@@ -8,7 +8,7 @@ que estos pasan.
 
 import pytest
 
-from laidea.protocol import (
+from orux.protocol import (
     AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,

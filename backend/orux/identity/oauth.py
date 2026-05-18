@@ -2,7 +2,7 @@
 
 Por qué OAuth y por qué así (decisión del usuario):
 
-- El público de laidea (open source, founders técnicos, equipos 2-50) YA
+- El público de orux (open source, founders técnicos, equipos 2-50) YA
   tiene GitHub. La identidad de sesión pasa a ser una identidad real y
   verificada, sin contraseñas que guardar ni superficie de fuerza bruta
   (eso lo delega GitHub). Encaja con la tesis "todo vive sobre Git".
@@ -77,7 +77,7 @@ def url_autorizacion(
 
 
 def identidad_github(perfil: dict) -> str:
-    """Identidad laidea a partir del JSON de `GET /user` de GitHub.
+    """Identidad orux a partir del JSON de `GET /user` de GitHub.
 
     `gh:` + login normalizado (trim+minúsculas, igual que toda la identidad
     de la capa 7, para que el ownership no se parta por mayúsculas). El
