@@ -818,10 +818,18 @@ _MODELS_V2 = "class Usuario:\n    def __init__(self):\n        self.activo = Tru
 _AUTH = "from models import Usuario\n\n\ndef login():\n    return Usuario()\n"
 
 
-async def test_impacto_transitivo_solo_en_premium(servidor) -> None:
-    # Capa 24: free = directo (cadena vacía, ya cubierto byte-idéntico por
-    # el resto de la suite). Premium = transitivo: el aviso trae la CADENA
-    # de hops. Mismo flujo que el directo + plan premium.
+async def test_premium_no_es_peor_que_free_aviso_directo_correcto(
+    servidor,
+) -> None:
+    # Capa 24 (rehecho — bugs #2 y #3): el bug era que premium hacía
+    # `return` ANTES del directo y solo mandaba la onda transitiva, mal
+    # etiquetada (decía "cambió <símbolo terminal>" cuando lo que cambió
+    # era OTRO). Ahora premium = free + cadena: el aviso DIRECTO de alto
+    # valor se manda SIEMPRE (símbolo real + severidad real), y los hops
+    # terminales redundantes con el directo se descartan (decisión del
+    # usuario). Este es exactamente el escenario del reporte: B usa el
+    # símbolo cambiado en el CUERPO -> antes premium daba BAJA mal
+    # etiquetada; ahora da el directo correcto.
     srv, port = servidor
     async with connect(f"ws://localhost:{port}") as a, connect(
         f"ws://localhost:{port}"
@@ -846,11 +854,16 @@ async def test_impacto_transitivo_solo_en_premium(servidor) -> None:
         await a.send(json.dumps({"type": "save", "path": "models.py"}))
         aviso = await recv_tipo(b, "impact")
         assert aviso["affected_path"] == "auth.py"
-        assert aviso["symbols"] == ["login"]          # el símbolo de B afectado
-        # La cadena: el cambio salió de models.py:Usuario y llegó a login.
-        assert aviso["cadena"] == ["models.py:Usuario", "auth.py:login"]
+        # #2 ARREGLADO: el encabezado nombra lo que REALMENTE cambió
+        # (Usuario, en models.py), no el símbolo terminal (login).
+        assert aviso["symbols"] == ["Usuario"]
+        # #3 ARREGLADO: vuelve el aviso de ALTO VALOR (no la BAJA terminal).
+        assert "construye" in aviso["motivos"][0]
+        assert aviso["severidades"] == ["alta"]
+        # El terminal redundante con el directo se descartó: sin cadena
+        # ruidosa (premium no peor que free en este caso).
+        assert aviso["cadena"] == []
         assert aviso["author_name"] == wa["you"]["name"]
-        assert "cuerpo" in aviso["motivos"][0]  # uso en cuerpo => terminal
 
 
 async def test_impacto_avisa_al_dueno_del_afectado(server_port: int) -> None:

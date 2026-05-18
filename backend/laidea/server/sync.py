@@ -406,78 +406,12 @@ class SyncServer:
         plan = await self.teams.plan(rt.team_id)
         cap_langs = limites(plan)["max_langs"]
 
-        # Capa 24: premium = impacto TRANSITIVO (la onda por interfaz
-        # contaminada). Free = exactamente el camino directo de capas
-        # 17-21, intacto y byte-idéntico (return antes de tocarlo).
-        if limites(plan)["impacto"] == "transitivo":
-            def _trans():
-                lang = lenguaje_de(path)
-                tier = tiers.tier_para(path)
-                if tier is None or lang is None:
-                    return {}, False
-                cambiados = list(tiers.cambios(path, viejo, nuevo))
-                if not cambiados:
-                    return {}, False
-
-                # El token-scan canónico por-símbolo es
-                # `tiers.archivos_afectados` (camino directo, capas 17-21);
-                # acá es el MISMO scan pero con el índice memoizado para
-                # multi-hop (NO se reusa aquella para no tocar el camino
-                # free byte-idéntico).
-                # Perf (capa 24c): el índice de referencias se computa UNA
-                # vez por análisis (antes: tier.referencias por archivo POR
-                # hop = D×N parseos). `extraer` se memoiza por contenido.
-                # Mismos resultados, mucho menos parseo. Aristas por nombre
-                # (capa 16): el filtro de ruido es la contaminación de
-                # interfaz, no la arista (LSP por hop = futuro, caro).
-                refs_idx = {
-                    f: tier.referencias(c)
-                    for f, c in snap.items()
-                    if lenguaje_de(f) == lang
-                }
-
-                def _fan(s: str, origen: str) -> set[str]:
-                    return {
-                        f for f, r in refs_idx.items()
-                        if f != origen and s in r
-                    }
-
-                _cache: dict[str, dict] = {}
-
-                def _extraer(c: str):
-                    if c not in _cache:
-                        _cache[c] = tier.simbolos(c) or {}
-                    return _cache[c]
-
-                return impacto_transitivo(
-                    snap, path, cambiados, fan_out=_fan,
-                    extraer=_extraer, lenguaje_de=lenguaje_de,
-                )
-
-            out, trunc = await asyncio.to_thread(_trans)
-            sufijo = (
-                " · análisis truncado (cambio muy amplio)" if trunc else ""
-            )
-            for af, items in out.items():
-                dueño = rt.ownership.owner(af)
-                if dueño is None or dueño == autor_id:
-                    continue
-                items = sorted(items, key=lambda d: (d["sym"],
-                                                     len(d["cadena"])))
-                await self._enviar_a(
-                    rt, dueño,
-                    encode(ImpactMessage(
-                        source_path=path,
-                        author_name=autor_nombre,
-                        affected_path=af,
-                        symbols=[d["sym"] for d in items],
-                        motivos=[d["motivo"] + sufijo for d in items],
-                        severidades=[severidad_de(d["motivo"]) for d in items],
-                        cadena=items[0]["cadena"],
-                    )),
-                )
-            return
-
+        # Capa 24 (rehecho): el camino DIRECTO (capas 17-21) corre SIEMPRE,
+        # free y premium. Es el aviso de alto valor ("cambió la firma de X
+        # → revisá las llamadas", severidad real). Antes premium hacía
+        # `return` ANTES de esto y solo mandaba la onda transitiva: te dejaba
+        # SIN el aviso bueno y encima mal etiquetado. Bug arreglado: premium
+        # = free + cadena (la cadena se agrega DESPUÉS, sin reemplazar nada).
         def _analizar() -> tuple[dict, dict]:
             ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
             af = impacto(snap, path, viejo, nuevo, ses)
@@ -516,6 +450,92 @@ class SyncServer:
                         severidades=[
                             severidad_de(razones.get(s, "")) for s in syms
                         ],
+                    )
+                ),
+            )
+
+        # --- Capa 24 (premium) = free + cadena -----------------------------
+        # El directo de arriba YA se mandó (free y premium igual). Premium
+        # AGREGA la onda por interfaz contaminada que llega MÁS ALLÁ del
+        # directo. Decisión del usuario: se descartan (a) los hops
+        # TERMINALES (uso en cuerpo: no se propaga, era ruido redundante con
+        # el directo) y (b) los archivos que el directo YA cubrió (el
+        # cliente deduplica por source+affected: un 2º mensaje los pisaría).
+        # Resultado: premium NUNCA peor que free; la cadena solo suma valor.
+        if limites(plan)["impacto"] != "transitivo":
+            return
+        directos = set(por_archivo)
+
+        def _trans():
+            lang = lenguaje_de(path)
+            tier = tiers.tier_para(path)
+            if tier is None or lang is None:
+                return {}, False
+            cambiados = list(tiers.cambios(path, viejo, nuevo))
+            if not cambiados:
+                return {}, False
+            # Perf (capa 24c): índice de referencias 1 vez/análisis;
+            # `extraer` memoizado por contenido (no D×N parseos).
+            refs_idx = {
+                f: tier.referencias(c)
+                for f, c in snap.items()
+                if lenguaje_de(f) == lang
+            }
+
+            def _fan(s: str, origen: str) -> set[str]:
+                return {
+                    f for f, r in refs_idx.items()
+                    if f != origen and s in r
+                }
+
+            _cache: dict[str, dict] = {}
+
+            def _extraer(c: str):
+                if c not in _cache:
+                    _cache[c] = tier.simbolos(c) or {}
+                return _cache[c]
+
+            return impacto_transitivo(
+                snap, path, cambiados, fan_out=_fan,
+                extraer=_extraer, lenguaje_de=lenguaje_de,
+            )
+
+        out, trunc = await asyncio.to_thread(_trans)
+        sufijo = (
+            " · análisis truncado (cambio muy amplio)" if trunc else ""
+        )
+        for af, items in out.items():
+            if af in directos:
+                continue  # ya lo cubrió el directo (no duplicar/pisar)
+            dueño = rt.ownership.owner(af)
+            if dueño is None or dueño == autor_id:
+                continue
+            # Solo la propagación REAL (interfaz contaminada). Terminal =
+            # uso en cuerpo: no es la onda, es ruido (decisión del usuario).
+            props = [d for d in items if not d["terminal"]]
+            if not props:
+                continue
+            props.sort(key=lambda d: (d["cadena"][0], len(d["cadena"])))
+            # Bug #2 arreglado: el encabezado nombra lo que REALMENTE
+            # cambió (el símbolo ORIGEN de la cadena, que vive en
+            # source_path), no el símbolo terminal. `cadena[0]` =
+            # "<path>:<sym_original>" -> el sym es lo de después del último
+            # ":" (los paths del workspace y los símbolos no llevan ":").
+            syms = [d["cadena"][0].rsplit(":", 1)[1] for d in props]
+            await self._enviar_a(
+                rt,
+                dueño,
+                encode(
+                    ImpactMessage(
+                        source_path=path,
+                        author_name=autor_nombre,
+                        affected_path=af,
+                        symbols=syms,
+                        motivos=[d["motivo"] + sufijo for d in props],
+                        severidades=[
+                            severidad_de(d["motivo"]) for d in props
+                        ],
+                        cadena=props[0]["cadena"],
                     )
                 ),
             )
