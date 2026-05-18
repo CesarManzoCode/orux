@@ -70,8 +70,8 @@
        tenues en reposo, una más visible para la columna activa. ── */
   --ed-line: rgba(255, 255, 255, 0.032);     /* banda de línea activa    */
   --ed-line-edge: rgba(76, 195, 138, 0.55);  /* filo izq. de esa banda   */
-  --ed-guide: rgba(255, 255, 255, 0.075);    /* guía de indentación      */
-  --ed-ruler: rgba(255, 255, 255, 0.05);     /* regla de columna (96)    */
+  --ed-guide: rgba(255, 255, 255, 0.085);    /* guía de indentación      */
+  --ed-guide-activa: rgba(76, 195, 138, 0.5);/* guía del scope activo    */
   --ed-gutter-bg: #08090c;                   /* canaleta, un punto + honda */
   --ed-blueprint: rgba(255, 255, 255, 0.016);/* trama del vacío          */
 
@@ -705,31 +705,78 @@ button:active { transform: translateY(1px); }
   line-height: 22px; padding: 20px 24px 20px 64px; white-space: pre;
   tab-size: 4; color: var(--text); background: transparent;
 }
-/* GUÍAS DE INDENTACIÓN + REGLA DE COLUMNA — la firma de un IDE de verdad.
-   Van sobre el <code>, que es el ÚNICO elemento que se traslada con el
-   scroll (transform en sincronizarScroll): así las guías acompañan al
-   código en X e Y sin una sola línea de JS ni tocar la geometría sagrada.
-   `ch` aquí = celda monoespaciada exacta (mismo font 14px), por eso una
-   guía cae JUSTO en cada parada de 4 espacios (tab-size 4). En reposo son
-   un hairline casi imperceptible; no compiten con el código, lo estructuran.
-   La regla de columna (~96) es un único filo, aún más discreto. */
+/* El <code> sólo aloja el texto resaltado. Las guías de indentación YA NO
+   se pintan aquí con un repeating-gradient full-screen (esa rejilla de
+   juguete a lo largo y ancho de TODO el editor era la queja): ahora son
+   una capa propia (.ed-guides) calculada del código real, sólo dentro de
+   bloques. width:max-content sigue siendo necesario para que el scroll
+   horizontal arrastre el bloque entero; min-height llena archivos cortos. */
 .ed-hl code {
   display: block; font: inherit;
-  /* La caja del <code> DEBE abarcar la línea más larga: el fondo sólo se
-     pinta dentro de la caja, y al hacer scroll horizontal el <code> se
-     translada — si la caja fuese sólo el viewport, las guías se quedarían
-     sin pintar a la derecha. max-content = se ajusta al renglón más largo;
-     min-width cubre el viewport y garantiza la regla de columna aunque
-     ningún renglón llegue a 96. min-height llena el alto en archivos
-     cortos para que la rejilla no muera antes de tiempo. */
-  width: max-content; min-width: max(100%, 96ch); min-height: 100%;
-  background-image:
-    linear-gradient(90deg, transparent calc(96ch - 1px),
-      var(--ed-ruler) calc(96ch - 1px), var(--ed-ruler) 96ch, transparent 96ch),
-    repeating-linear-gradient(90deg,
-      transparent 0 calc(4ch - 1px), var(--ed-guide) calc(4ch - 1px) 4ch);
-  background-position: 0 0;
+  width: max-content; min-width: 100%; min-height: 100%;
+  background: none;
 }
+/* ── GUÍAS DE INDENTACIÓN reales (firma de IDE pro) ──────────────────
+   Una capa scroll-sincronizada (transform en sincronizarScroll, igual
+   que el <code> y la presencia: sin geometría nueva, reusa LINE_H/
+   PAD_TOP). Cada guía es un filo vertical que vive SÓLO el alto de su
+   bloque — no una rejilla. En reposo recede; la del scope que envuelve
+   al cursor se enciende en acento (como PyCharm). `ch` = celda mono
+   exacta (font 14px heredado), por eso cae justo en cada parada de 4. */
+.ed-guides {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  pointer-events: none; font: 14px/22px var(--font-mono);
+}
+.ed-guides-scroll { position: absolute; inset: 0; will-change: transform; }
+.ed-guide-line {
+  position: absolute; width: 1px;
+  background: var(--ed-guide);
+  transition: background var(--tr);
+}
+.ed-guide-line.activa {
+  background: var(--ed-guide-activa);
+  box-shadow: 0 0 0 0.5px var(--ed-guide-activa);
+}
+/* ── Plegado: marca "⋯" tras la cabecera contraída (look PyCharm) ──
+   Capa scroll-sincronizada (translate -sl,-st) igual que el código,
+   posicionada en `ch` exactos para caer justo donde termina el texto
+   de la cabecera. No intercepta el mouse: el textarea sigue editable. */
+.ed-folds {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  pointer-events: none; font: 14px/22px var(--font-mono);
+}
+.ed-folds-scroll { position: absolute; inset: 0; will-change: transform; }
+.ed-foldmark {
+  position: absolute; height: 22px; line-height: 22px;
+  padding: 0 7px; color: var(--muted);
+  background: var(--accent-weak);
+  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+  font-size: 11px; font-family: var(--font-ui); letter-spacing: 0.06em;
+  display: flex; align-items: center; transform: translateY(1px);
+}
+/* ── Flecha de plegado en la canaleta ────────────────────────────────
+   El gutter es pointer-events:none (overlay); SOLO la flecha recibe
+   click. Discreta en reposo, nítida al pasar el mouse o si está
+   plegada — afordancia clara sin ruido visual. */
+.ed-gutter-fold {
+  position: absolute; left: 0; top: 0; right: 0;
+  z-index: 2; pointer-events: none; will-change: transform;
+}
+.ed-chevron {
+  position: absolute; left: 1px; width: 16px; height: 22px;
+  display: grid; place-items: center; padding: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--faint); opacity: 0; pointer-events: auto;
+  transition: opacity var(--tr), color var(--tr);
+}
+.ed-gutter:hover .ed-chevron { opacity: 0.55; }
+.ed-chevron:hover { color: var(--text); opacity: 1; }
+.ed-chevron.plegada {
+  opacity: 1; color: var(--accent);
+}
+/* Plegada = flecha apuntando a la derecha (rotación del mismo glifo). */
+.ed-chevron.plegada svg { transform: rotate(-90deg); }
+.ed-chevron svg { transition: transform var(--tr); }
 .ed-pres { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
 .ed-pres-scroll { position: absolute; left: 0; right: 0; top: 0; }
 .marca { position: absolute; left: 0; right: 0; height: 22px; }
@@ -743,6 +790,13 @@ button:active { transform: translateY(1px); }
   font-weight: 750; white-space: nowrap; font-family: var(--font-ui);
   letter-spacing: -0.01em; box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.6);
 }
+/* Peer cuyo cursor cae en un bloque QUE YO plegué: no se pierde (tesis
+   "el sistema sabe"). No pinto la banda de línea (no está en ESA línea):
+   solo su etiqueta sobre la cabecera, con "⋯", + el punto del gutter
+   anillado para distinguir "está adentro, contraído". */
+.marca.oculto .tinte, .marca.oculto .raya { opacity: 0; }
+.marca.oculto .etiqueta { opacity: 0.92; }
+.gmark.oculto { box-shadow: 0 0 0 1.5px var(--ed-gutter-bg), 0 0 0 2.5px currentColor; }
 .ed-ta {
   flex: 1; position: relative; z-index: 1; background: transparent;
   color: transparent; -webkit-text-fill-color: transparent;

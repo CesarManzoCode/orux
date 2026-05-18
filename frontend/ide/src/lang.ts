@@ -143,6 +143,68 @@ export function diffLineas(viejo: string, nuevo: string): Fila[] {
   return filas;
 }
 
+// Guías de indentación estilo IDE pro (PyCharm/VSCode): UNA línea vertical
+// por nivel de bloque, dibujada SÓLO donde hay bloque — no una rejilla
+// full-screen como el hack CSS anterior (eso era lo que se veía "toy").
+// Las líneas en blanco heredan el nivel MÍNIMO de sus vecinas no vacías:
+// así la guía cruza los huecos internos de un bloque pero NO se extiende
+// más allá de su fin. Pura, sin estado: la geometría la pone el Editor.
+const INDENT = 4;
+export interface Guia { col: number; linea: number; alto: number }
+export function guiasIndent(texto: string): Guia[] {
+  const lineas = texto.split("\n");
+  const n = lineas.length;
+  // nivel por línea; null = en blanco (se resuelve por vecindad después)
+  const nivel: (number | null)[] = lineas.map((l) => {
+    if (l.trim() === "") return null;
+    let sp = 0;
+    for (const c of l) {
+      if (c === " ") sp++;
+      else if (c === "\t") sp += INDENT;
+      else break;
+    }
+    return Math.floor(sp / INDENT);
+  });
+  const res: number[] = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    if (nivel[i] != null) { res[i] = nivel[i]!; continue; }
+    let p = i - 1; while (p >= 0 && nivel[p] == null) p--;
+    let q = i + 1; while (q < n && nivel[q] == null) q++;
+    const a = p >= 0 ? nivel[p]! : 0;
+    const b = q < n ? nivel[q]! : 0;
+    res[i] = Math.min(a, b);
+  }
+  // Por cada columna de indentación k, agrupar las corridas verticales
+  // de líneas cuyo nivel la supera = un segmento de guía contiguo.
+  let maxLv = 0;
+  for (const v of res) if (v > maxLv) maxLv = v;
+  const guias: Guia[] = [];
+  for (let k = 0; k < maxLv; k++) {
+    let i = 0;
+    while (i < n) {
+      if (res[i] > k) {
+        let j = i;
+        while (j < n && res[j] > k) j++;
+        guias.push({ col: k * INDENT, linea: i + 1, alto: j - i });
+        i = j;
+      } else i++;
+    }
+  }
+  return guias;
+}
+
+// Nivel de indentación resuelto de UNA línea (1-based) — para saber qué
+// guía es la del bloque que contiene al cursor (se resalta como en
+// PyCharm: la del scope activo brilla, el resto recede).
+export function nivelLinea(texto: string, linea1: number): number {
+  const g = guiasIndent(texto);
+  let max = -1;
+  for (const x of g) {
+    if (linea1 >= x.linea && linea1 < x.linea + x.alto && x.col > max) max = x.col;
+  }
+  return max; // columna de la guía más interna que lo envuelve, -1 si ninguna
+}
+
 // Inicial para los puntos de presencia.
 export function inicial(name: string): string {
   const m = name.match(/(\d+)$/);
