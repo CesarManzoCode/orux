@@ -18,6 +18,7 @@ Decisiones de prototipo, documentadas porque no son obvias:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from .passwords import MARCADOR_EXTERNO, hash_password, verificar_password
@@ -49,9 +50,15 @@ class UserStore:
         if self._path is None:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
-            json.dumps(self._usuarios), encoding="utf-8"
-        )
+        # Atómico (robustez B-varios): temporal + os.replace, igual que
+        # ownership.json. Un crash a mitad de `write_text` dejaba
+        # `users.json` truncado; al reiniciar, `__init__` traga el
+        # ValueError y arranca con CERO usuarios — todo el equipo pierde su
+        # cuenta en silencio. El rename atómico nunca deja el archivo a
+        # medias: o están todos los usuarios viejos, o todos los nuevos.
+        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self._usuarios), encoding="utf-8")
+        os.replace(tmp, self._path)
 
     def existe(self, username: str) -> bool:
         return normalizar(username) in self._usuarios

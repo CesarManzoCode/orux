@@ -101,6 +101,7 @@ from ..state import (
     Roster,
     Workspace,
     lineas_tocadas,
+    path_seguro,
 )
 from ..teams import MemTeamStore, TeamError
 
@@ -189,6 +190,19 @@ class TeamRuntime:
         # Serializa commit/clone/push de ESTE equipo (subprocess+fs sobre su
         # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
         self._git_lock = asyncio.Lock()
+        # Robustez (auditoría C1/C2/A1/A2): serializa los tramos
+        # read-modify-write del equipo (Update/Save/Resolve/Delete/Claim/
+        # AdminAssign + el reinicio tras clone). Sin esto, dos handlers que
+        # hacen "leo snapshot -> await (análisis en hilo / broadcast) ->
+        # muto/difundo" se intercalan en el await y pisan estado con una
+        # foto vieja (lost update en _propagar_rename; el `claim` del
+        # creador corría DESPUÉS de un await; Resolve aceptaba contenido
+        # obsoleto). Por-equipo: el de un equipo no frena al de otro. La
+        # presencia (cursor) y git NO lo toman: siguen ágiles aunque un
+        # análisis de Save esté corriendo. Trade-off aceptado: los Save de
+        # UN equipo se serializan (son por Ctrl+S, no por tecla; la
+        # coherencia del baseline lo exige).
+        self._estado_lock = asyncio.Lock()
 
     def lsp_sesion(self, lang: str | None, cap_langs: float | None = None):
         """Sesión LSP de ESTE equipo para `lang`, tibia: se arranca UNA vez
@@ -285,6 +299,16 @@ class SyncServer:
         # sync de tests; PgUserStore pasa tal cual).
         self.users = _wrap_users(users)
         self._secret = secret if secret is not None else token_hex(32)
+        # Robustez (seguridad M1): vida del token de sesión. Default 30 días
+        # — cómodo para el dev (no re-loguea cada rato) y a la vez una fuga
+        # tiene ventana acotada en vez de ser una llave eterna. `0` = sin
+        # expiración (opt-out del operador; comportamiento legacy).
+        try:
+            self._token_ttl = int(
+                os.environ.get("ORUX_TOKEN_TTL_SEC", str(30 * 24 * 3600))
+            )
+        except ValueError:
+            self._token_ttl = 30 * 24 * 3600
         # Capa 15: equipos/membresía/invitaciones (async; None = memoria).
         self.teams = teams if teams is not None else MemTeamStore()
 
@@ -692,47 +716,68 @@ class SyncServer:
         devuelve el usuario normalizado. Mientras no lo logre responde
         `auth_error` y sigue escuchando en la MISMA conexión. None si la
         conexión se cierra sin autenticarse.
+
+        Robustez (auditoría seguridad A1): la compuerta es la única
+        superficie de fuerza bruta / DoS de almacenamiento. PBKDF2 240k
+        limita el rate pero no lo impide. Defensa por-conexión (sin store
+        compartido — eso sería otra capa): cada fallo suma un backoff
+        creciente ANTES de volver a escuchar (un atacante que prueba miles
+        de contraseñas sobre UN socket se vuelve lentísimo), y pasado un
+        tope de fallos se corta el socket (lo obliga a re-hacer el handshake
+        TCP/WS cada N intentos — fricción real, sin castigar al usuario que
+        se equivoca un par de veces). El register exitoso retorna ya: el
+        tope de fallos también acota el DoS de cuentas basura por conexión.
         """
+        fallos = 0
+        # Tan alto que un humano que se equivoca tecleando jamás lo alcanza,
+        # tan bajo que el atacante re-paga el handshake muy seguido.
+        MAX_FALLOS = 12
+
+        async def _fallo(reason: str) -> bool:
+            """Responde el error, aplica el backoff y dice si hay que cortar
+            (tope alcanzado). El sleep va DESPUÉS de enviar el error: el
+            cliente legítimo ve el mensaje al instante; el costo es del que
+            sigue intentando."""
+            nonlocal fallos
+            fallos += 1
+            await websocket.send(encode(AuthErrorMessage(reason=reason)))
+            if fallos >= MAX_FALLOS:
+                logger.warning(
+                    "auth: %d fallos en una conexión, se corta", fallos
+                )
+                return True
+            # Lineal y modesto (0.3s, 0.6s, ...) tope 3s: invisible para un
+            # error humano aislado, asfixiante para miles automatizados.
+            await asyncio.sleep(min(3.0, 0.3 * fallos))
+            return False
+
         async for raw in websocket:
             try:
                 msg = decode(raw)
             except ValueError:
-                await websocket.send(
-                    encode(AuthErrorMessage(reason="mensaje inválido"))
-                )
+                if await _fallo("mensaje inválido"):
+                    return None
                 continue
             if isinstance(msg, RegisterMessage):
                 try:
                     return await self.users.registrar(msg.username, msg.password)
                 except ValueError as e:
-                    await websocket.send(
-                        encode(AuthErrorMessage(reason=str(e)))
-                    )
+                    if await _fallo(str(e)):
+                        return None
             elif isinstance(msg, LoginMessage):
                 if await self.users.verificar(msg.username, msg.password):
                     return normalizar(msg.username)
-                await websocket.send(
-                    encode(
-                        AuthErrorMessage(
-                            reason="usuario o contraseña incorrectos"
-                        )
-                    )
-                )
+                if await _fallo("usuario o contraseña incorrectos"):
+                    return None
             elif isinstance(msg, SessionMessage):
                 user = usuario_de_token(msg.token, self._secret)
                 if user is not None and await self.users.existe(user):
                     return user
-                await websocket.send(
-                    encode(
-                        AuthErrorMessage(reason="sesión inválida, inicia sesión")
-                    )
-                )
+                if await _fallo("sesión inválida, inicia sesión"):
+                    return None
             else:
-                await websocket.send(
-                    encode(
-                        AuthErrorMessage(reason="debes autenticarte primero")
-                    )
-                )
+                if await _fallo("debes autenticarte primero"):
+                    return None
         return None
 
     async def _lobby(
@@ -795,7 +840,9 @@ class SyncServer:
             encode(
                 AuthOkMessage(
                     username=usuario,
-                    token=crear_token(usuario, self._secret),
+                    token=crear_token(
+                        usuario, self._secret, self._token_ttl
+                    ),
                 )
             )
         )
@@ -905,7 +952,70 @@ class SyncServer:
             )
 
 
+    # Mensajes que mutan estado compartido del equipo (workspace/ownership/
+    # proposals): se procesan bajo `rt._estado_lock` para que su tramo
+    # read-modify-write no se intercale con otro. El resto (presencia, git
+    # con su _git_lock, invitaciones) NO toma el lock: sigue ágil.
+    _MUTAN_ESTADO = (
+        UpdateMessage,
+        SaveMessage,
+        DeleteMessage,
+        ClaimMessage,
+        AdminAssignMessage,
+        AdminAssignManyMessage,
+        ResolveMessage,
+    )
+
+    # Mensajes con UN path de cliente que se valida en la frontera y, si es
+    # inseguro, hace descartar el mensaje entero. AdminAssignMany NO está
+    # acá: lleva una LISTA y se filtra path-a-path en `_aplicar` (un path
+    # basura no debe anular un reparto masivo legítimo). Resolve tampoco:
+    # usa el path de la propuesta, estado del server ya validado al crearse.
+    _CON_PATH_CLIENTE = (
+        UpdateMessage,
+        SaveMessage,
+        DeleteMessage,
+        ClaimMessage,
+        AdminAssignMessage,
+        PresenceMessage,
+    )
+
     async def _despachar(
+        self,
+        rt: TeamRuntime,
+        websocket: ServerConnection,
+        yo,
+        team_id: str,
+        message,
+    ) -> None:
+        """Router: valida el path de la frontera y decide si el mensaje va
+        bajo el lock de estado del equipo. El trabajo real lo hace
+        `_aplicar`. Separado para que la guarda y el lock estén en UN lugar,
+        no esparcidos por cada rama.
+        """
+        # --- Guarda de path (robustez M1): un path peligroso (`../x`,
+        # absoluto, vacío, con NUL) NO debe entrar al estado en memoria ni
+        # difundirse como archivo fantasma, aunque el disco lo bloquee
+        # después. Se valida al RECIBIR, no solo en la frontera de disco.
+        # PresenceMessage.path puede ser None (conectado, sin archivo
+        # abierto): None es válido; un str sí se valida.
+        if isinstance(message, self._CON_PATH_CLIENTE):
+            p = message.path
+            permiso = p is None and isinstance(message, PresenceMessage)
+            if not permiso and not path_seguro(p):
+                logger.warning(
+                    "path inseguro descartado de %s en equipo %s: %r (%s)",
+                    yo.client_id, team_id, p, type(message).__name__,
+                )
+                return
+
+        if isinstance(message, self._MUTAN_ESTADO):
+            async with rt._estado_lock:
+                await self._aplicar(rt, websocket, yo, team_id, message)
+        else:
+            await self._aplicar(rt, websocket, yo, team_id, message)
+
+    async def _aplicar(
         self,
         rt: TeamRuntime,
         websocket: ServerConnection,
@@ -918,7 +1028,10 @@ class SyncServer:
         Extraido del bucle (capa de robustez): aislado para que una
         excepcion aqui la capture el llamador y NO mate la conexion. El
         antiguo `continue` de capa 5 (rebote del lock) es ahora `return`:
-        en un metodo, "saltar este mensaje" = volver.
+        en un metodo, "saltar este mensaje" = volver. Cuando lo invoca
+        `_despachar` para un mensaje que muta estado, corre bajo
+        `rt._estado_lock` (los helpers que llama NO re-toman el lock: se
+        adquiere una sola vez por mensaje, no es reentrante).
         """
         if isinstance(message, UpdateMessage):
             dueño = rt.ownership.owner(message.path)
@@ -1105,7 +1218,10 @@ class SyncServer:
                 aplicado = False
                 if valido:
                     for p in message.paths:
-                        if not isinstance(p, str) or not p:
+                        # Robustez M1: filtrá path-a-path (no el reparto
+                        # entero) — un path inseguro en la lista no debe
+                        # meter ownership fantasma ni anular el resto.
+                        if not path_seguro(p):
                             continue
                         if destino:
                             rt.ownership.asignar(p, destino)
@@ -1240,7 +1356,13 @@ class SyncServer:
                         message.url, message.username, message.token,
                     )
                     if ok:
-                        await self._reiniciar_para_todos(rt)
+                        # El clone reemplaza TODO el workspace/ownership:
+                        # tomá también el lock de estado para que un Update
+                        # concurrente no aplique sobre el árbol viejo justo
+                        # mientras se reinicia. Orden git->estado (nunca al
+                        # revés en ningún handler) => sin deadlock.
+                        async with rt._estado_lock:
+                            await self._reiniciar_para_todos(rt)
                 await self._enviar_a(
                     rt, yo.client_id,
                     encode(GitResultMessage(ok, detalle)),

@@ -1,0 +1,267 @@
+"""Tests de las mejoras de robustez a nivel sistema (no features).
+
+Cubren lo que la auditoría había DIFERIDO y ahora se cerró:
+
+- M1: validación de path en la frontera del MENSAJE (no solo en disco) —
+  un path peligroso no entra al estado en memoria ni se difunde.
+- M1 seguridad: expiración de tokens de sesión.
+- B-varios: escrituras JSON atómicas (no quedan `.tmp` ni archivos a
+  medias) y guard de `aplicar_rename` con argumento degenerado.
+- C/A: el lock de estado por equipo no rompe convergencia ni deadlockea.
+
+Los tests de integración levantan un server real (mismo patrón que
+test_sync) pero son self-contained: un solo cliente por test, server
+fresco por test => sin coordinación de equipo entre tests.
+"""
+
+import asyncio
+import json
+import time
+
+import pytest
+import pytest_asyncio
+from websockets.asyncio.client import connect
+from websockets.asyncio.server import serve
+
+from orux.analysis.rename import aplicar_rename
+from orux.identity import crear_token, usuario_de_token
+from orux.identity.store import UserStore
+from orux.server.sync import SyncServer
+from orux.state import DiskStorage, path_seguro
+
+# --- Unitarios puros: path_seguro -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "malo",
+    [
+        "",                 # vacío
+        "../etc/passwd",    # escape de directorio
+        "a/../../x",        # escape enterrado
+        "/etc/shadow",      # absoluto POSIX
+        "C:\\Windows",      # absoluto Windows + backslash
+        "a\\b",             # backslash (evasión/ambigüedad)
+        "a//b",             # segmento vacío
+        "a/./b",            # segmento "."
+        "a/..",             # termina en ".."
+        "x\x00.py",         # NUL
+        "linea\nrota.py",   # control char
+        ".",
+        "..",
+        None,               # ni siquiera un str
+        123,
+    ],
+)
+def test_path_seguro_rechaza_lo_peligroso(malo):
+    assert path_seguro(malo) is False
+
+
+@pytest.mark.parametrize(
+    "bueno",
+    ["a.py", "src/auth.py", "a/b/c/d.ts", "Carpeta Con Espacios/x.go",
+     "._oculto_pero_valido.py", "a..b.py"],
+)
+def test_path_seguro_acepta_paths_normales(bueno):
+    assert path_seguro(bueno) is True
+
+
+# --- Unitarios puros: expiración de tokens --------------------------------
+
+
+def test_token_con_ttl_valido_dentro_de_ventana():
+    t = crear_token("ana", "secreto", ttl_seg=3600)
+    assert usuario_de_token(t, "secreto") == "ana"
+
+
+def test_token_expirado_se_rechaza():
+    # ttl negativo => exp en el pasado: ya caducó.
+    t = crear_token("ana", "secreto", ttl_seg=-1)
+    assert usuario_de_token(t, "secreto") is None
+
+
+def test_token_legacy_sin_exp_sigue_valido():
+    # ttl None/0 = comportamiento histórico (sin exp): no se rompen
+    # sesiones vivas durante la migración.
+    t = crear_token("ana", "secreto")  # sin ttl
+    assert usuario_de_token(t, "secreto") == "ana"
+    assert usuario_de_token(
+        crear_token("ana", "secreto", ttl_seg=0), "secreto"
+    ) == "ana"
+
+
+def test_token_exp_corrupto_es_invalido_fail_closed():
+    # Un exp no numérico no debe interpretarse como "sin expiración".
+    import base64
+
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"user": "ana", "exp": "pronto"}).encode()
+    ).decode().rstrip("=")
+    import hmac
+    from hashlib import sha256
+
+    firma = hmac.new(b"secreto", payload.encode(), sha256).hexdigest()
+    assert usuario_de_token(f"{payload}.{firma}", "secreto") is None
+
+
+def test_token_firma_sigue_protegiendo_con_exp():
+    t = crear_token("ana", "secreto", ttl_seg=3600)
+    assert usuario_de_token(t, "otro-secreto") is None
+
+
+# --- Unitarios: escrituras atómicas y guard de rename ---------------------
+
+
+def test_diskstorage_guardar_no_deja_tmp(tmp_path):
+    s = DiskStorage(tmp_path)
+    s.guardar("src/a.py", "x = 1")
+    assert (tmp_path / "src" / "a.py").read_text() == "x = 1"
+    # Ningún temporal sobreviviente tras un guardado exitoso.
+    assert not list(tmp_path.rglob("*.tmp"))
+
+
+def test_diskstorage_cargar_ignora_tmp_de_crash(tmp_path):
+    # Simula un crash duro: quedó un .tmp a medias junto al archivo bueno.
+    (tmp_path / "real.py").write_text("ok")
+    (tmp_path / "real.py.1234.tmp").write_text("a-medias")
+    cargado = DiskStorage(tmp_path).cargar()
+    assert cargado == {"real.py": "ok"}
+
+
+def test_userstore_guardar_es_atomico_y_relee(tmp_path):
+    ruta = tmp_path / "users.json"
+    s = UserStore(ruta)
+    s.registrar("Joaquin", "pw")
+    assert not list(tmp_path.glob("*.tmp"))
+    # Reabrir desde disco => el usuario está (no se perdió, no truncado).
+    assert UserStore(ruta).verificar("joaquin", "pw") is True
+
+
+def test_aplicar_rename_guard_argumento_vacio():
+    src = "self.x = obj.y.z\n"
+    # viejo vacío: NO debe convertir el patrón en `\.\b` y pisar cada punto.
+    assert aplicar_rename(src, "", "nuevo") == src
+    assert aplicar_rename(src, "x", "") == src
+
+
+# --- Integración: el server con las mejoras puestas -----------------------
+
+
+@pytest_asyncio.fixture
+async def srv(tmp_path):
+    """SyncServer real con disco (para ver si un path malo tocó el disco)."""
+    s = SyncServer(
+        storage=DiskStorage(tmp_path),
+        users=UserStore(),
+        ownership=None,
+    )
+    ws = await serve(s.handle, "localhost", 0)
+    port = ws.sockets[0].getsockname()[1]
+    try:
+        yield s, port, tmp_path
+    finally:
+        ws.close()
+        await ws.wait_closed()
+
+
+async def _entrar(ws, user="dev"):
+    """auth + crear equipo + consumir handshake. Un cliente, server fresco."""
+    await ws.send(json.dumps(
+        {"type": "register", "username": user, "password": "pw"}))
+    assert json.loads(await ws.recv())["type"] == "auth_ok"
+    assert json.loads(await ws.recv())["type"] == "lobby"
+    await ws.send(json.dumps({"type": "create_team", "nombre": "eq"}))
+    assert json.loads(await ws.recv())["type"] == "team_ready"
+    for esperado in ("init", "welcome", "ownership", "admin_info"):
+        assert json.loads(await ws.recv())["type"] == esperado
+
+
+async def test_path_inseguro_no_entra_al_estado_ni_tumba_la_conexion(srv):
+    s, port, root = srv
+    async with connect(f"ws://localhost:{port}") as ws:
+        await _entrar(ws)
+        # Update con path de escape: NO debe difundirse ni persistirse.
+        await ws.send(json.dumps(
+            {"type": "update", "path": "../evil.py", "content": "PWN"}))
+        # Y la conexión sigue viva: un update legítimo después funciona.
+        await ws.send(json.dumps(
+            {"type": "update", "path": "bueno.py", "content": "ok"}))
+        # El server difunde el ownership del archivo creado legítimo: eso
+        # confirma que procesó el 2º mensaje (no murió con el 1º).
+        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert msg["type"] == "ownership"
+        assert "bueno.py" in msg["owners"]
+
+    # El estado del equipo no tiene el path malicioso (ni memoria ni disco).
+    rt = next(iter(s._runtimes.values()))
+    snap = rt.workspace.snapshot()
+    assert "../evil.py" not in snap and "bueno.py" in snap
+    assert not (root / "evil.py").exists()
+    # Tampoco quedó como ownership/fantasma.
+    assert "../evil.py" not in rt.ownership.snapshot()
+
+
+async def test_lock_de_estado_no_deadlockea_ni_pierde_convergencia(srv):
+    """Smoke del lock por equipo: dos clientes editando en paralelo
+    convergen y nadie se cuelga (si el lock deadlockeara, esto colgaría
+    hasta el timeout)."""
+    s, port, _ = srv
+    async with connect(f"ws://localhost:{port}") as a:
+        await _entrar(a, user="a")
+        # 2º cliente: se une por invitación del admin (a).
+        async with connect(f"ws://localhost:{port}") as b:
+            await b.send(json.dumps(
+                {"type": "register", "username": "b", "password": "pw"}))
+            assert json.loads(await b.recv())["type"] == "auth_ok"
+            assert json.loads(await b.recv())["type"] == "lobby"
+            await a.send(json.dumps({"type": "create_invite"}))
+            ic = None
+            while ic is None:
+                m = json.loads(await asyncio.wait_for(a.recv(), timeout=2))
+                if m["type"] == "invite_created":
+                    ic = m
+            await b.send(json.dumps(
+                {"type": "redeem_invite", "code": ic["code"]}))
+            assert json.loads(await b.recv())["type"] == "team_ready"
+            for _ in range(4):
+                await b.recv()  # init/welcome/ownership/admin_info
+
+            # a crea f1 (queda dueño), b crea f2 (queda dueño): dos
+            # read-modify-write concurrentes que el lock serializa.
+            await asyncio.gather(
+                a.send(json.dumps(
+                    {"type": "update", "path": "f1.py", "content": "1"})),
+                b.send(json.dumps(
+                    {"type": "update", "path": "f2.py", "content": "2"})),
+            )
+            await asyncio.sleep(0.2)
+
+    rt = next(iter(s._runtimes.values()))
+    snap = rt.workspace.snapshot()
+    assert snap.get("f1.py") == "1" and snap.get("f2.py") == "2"
+    own = rt.ownership.snapshot()
+    # El claim del creador ya NO corre tras un await sin protección:
+    # ambos archivos quedan con dueño (la ventana A2 está cerrada).
+    assert own.get("f1.py") == "a" and own.get("f2.py") == "b"
+
+
+async def test_auth_backoff_no_rompe_el_login_correcto(srv):
+    """El throttle castiga el fallo, no al usuario que acierta luego."""
+    s, port, _ = srv
+    async with connect(f"ws://localhost:{port}") as ws:
+        await ws.send(json.dumps(
+            {"type": "register", "username": "neo", "password": "pw"}))
+        assert json.loads(await ws.recv())["type"] == "auth_ok"
+    # Nueva conexión: una contraseña mala (recibe auth_error al instante),
+    # y el login correcto después sigue funcionando.
+    async with connect(f"ws://localhost:{port}") as ws:
+        await ws.send(json.dumps(
+            {"type": "login", "username": "neo", "password": "MAL"}))
+        t0 = time.monotonic()
+        err = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        # El error llega rápido (el backoff es DESPUÉS de enviarlo).
+        assert err["type"] == "auth_error"
+        assert time.monotonic() - t0 < 1.0
+        await ws.send(json.dumps(
+            {"type": "login", "username": "neo", "password": "pw"}))
+        ok = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
+        assert ok["type"] == "auth_ok"

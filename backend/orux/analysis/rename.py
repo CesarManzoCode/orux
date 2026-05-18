@@ -109,7 +109,15 @@ def aplicar_rename(contenido: str, viejo: str, nuevo: str) -> str:
     No pretende ser perfecto — el dueño revisa el diff antes de aprobar la
     propuesta (capa 4 = la red de seguridad). Idempotente y conservador:
     `\\b` evita pisar `.variableX`; si no hay nada que cambiar, devuelve el
-    mismo texto (el server entonces no propone nada a ese archivo)."""
+    mismo texto (el server entonces no propone nada a ese archivo).
+
+    Guard de robustez (B-varios): `viejo`/`nuevo` vacío => no-op. Hoy
+    `detectar_rename` ya garantiza ambos no vacíos, pero esta función es
+    pública y reutilizable; con `viejo=""` el patrón sería `\\.\\b` y
+    reescribiría cada punto del archivo (corrupción masiva). Fail-safe: ante
+    un argumento degenerado, no tocar nada."""
+    if not viejo or not nuevo:
+        return contenido
     patron = re.compile(r"\." + re.escape(viejo) + r"\b")
     return patron.sub("." + nuevo, contenido)
 

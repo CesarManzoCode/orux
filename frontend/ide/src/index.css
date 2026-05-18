@@ -885,6 +885,27 @@ button:active { transform: translateY(1px); }
  * :root global ni el editor sagrado.
  * ───────────────────────────────────────────────────────────────────── */
 
+/* ── IDENTIDAD ACERO, sólo en las pantallas de acceso. NO toca el :root
+   global (el IDE sigue verde): se redefinen los tokens de marca/CTA
+   dentro de .landing/.login. El verde queda reservado a "vivo" (se
+   re-apunta a --ok donde antes era marca). Lobby reusa .login/.login-card
+   → hereda el acero, coherente y sin romper su estructura. ── */
+.landing, .login {
+  --steel: #5d7fa6;
+  --steel-fill: linear-gradient(180deg, #4c6f97, #3c5a7e);
+  --steel-ink: #eef4fb;
+  --accent: #5d7fa6;                       /* marca/acento = acero      */
+  --accent-2: #7b9cc3;
+  --accent-weak: rgba(93, 127, 166, 0.13);
+  --accent-soft: rgba(93, 127, 166, 0.20);
+  --accent-line: rgba(123, 156, 195, 0.50);
+  --grad: var(--steel-fill);               /* CTA primario = acero mate */
+}
+/* Foco accesible en acero dentro del acceso (el IDE conserva el suyo). */
+.landing :focus-visible, .login :focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-line);
+}
+
 /* Contenedor centrado (lo usa Lobby; Login usa .landing). Fondo sobrio,
    sin radial de marca: plano técnico + vignette fría. */
 .login {
@@ -950,9 +971,10 @@ button:active { transform: translateY(1px); }
 }
 .login-card .fila button { flex: 1; }
 .login-card .primario {
-  background: var(--grad); color: #04130c; font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 4px 14px -8px rgba(52, 217, 191, 0.5);
+  background: var(--grad); color: var(--steel-ink); font-weight: 650;
+  border-color: var(--accent-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -14px rgba(60, 90, 126, 0.7);
 }
 .login-card .primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .login-card .primario:active { transform: translateY(1px); }
@@ -964,7 +986,7 @@ button:active { transform: translateY(1px); }
 }
 .login-card .spin {
   width: 13px; height: 13px; border-radius: 50%; flex: none;
-  border: 2px solid rgba(4, 19, 12, 0.3); border-top-color: #04130c;
+  border: 2px solid rgba(238, 244, 251, 0.32); border-top-color: var(--steel-ink);
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -982,9 +1004,14 @@ button:active { transform: translateY(1px); }
   place-items: center; font-size: 10px; font-weight: 800; flex-shrink: 0;
 }
 .login-card .cardfoot {
-  margin-top: 0.5rem; font-size: 11px; color: var(--faint);
-  line-height: 1.5; border-top: 1px solid var(--border-soft);
-  padding-top: 0.7rem;
+  margin-top: 0.7rem; font-size: 11px; color: var(--faint);
+  line-height: 1.55; border-top: 1px solid var(--border-soft);
+  padding-top: 0.8rem;
+}
+.login-card .cardfoot code {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2);
+  background: var(--surface-2); padding: 1px 5px; border-radius: 4px;
+  border: 1px solid var(--border-soft); margin: 0 2px;
 }
 .login-card .lazo {
   background: none; border: none; color: var(--muted); cursor: pointer;
@@ -1020,6 +1047,16 @@ button:active { transform: translateY(1px); }
   -webkit-mask-image: radial-gradient(95% 80% at 20% 20%, #000, transparent 80%);
   mask-image: radial-gradient(95% 80% at 20% 20%, #000, transparent 80%);
 }
+/* Traza de relación: un haz diagonal finísimo (el sistema "mirando"
+   vínculos). Casi subliminal, en acero — coherente con la landing. */
+.landing-pitch::after {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(116deg, transparent 0 49.9%, rgba(123, 156, 195, 0.05) 50%, transparent 50.1% 100%),
+    linear-gradient(62deg, transparent 0 38.9%, rgba(123, 156, 195, 0.03) 39%, transparent 39.1% 100%);
+  -webkit-mask-image: radial-gradient(110% 90% at 25% 18%, #000, transparent 72%);
+  mask-image: radial-gradient(110% 90% at 25% 18%, #000, transparent 72%);
+}
 .landing-pitch .lp-inner {
   position: relative; z-index: 1; max-width: 460px;
   animation: rise-in .55s var(--ease-in) both;
@@ -1042,7 +1079,7 @@ button:active { transform: translateY(1px); }
   margin-bottom: 1.1rem;
 }
 .lp-eyebrow i {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
   box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.55);
   animation: lp-ping 2.6s ease-out infinite;
 }
@@ -1090,7 +1127,7 @@ button:active { transform: translateY(1px); }
   padding-bottom: 9px; border-bottom: 1px solid var(--border-soft);
 }
 .lp-feed .lf-live {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
   box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.5);
   animation: lp-ping 2.6s ease-out infinite;
 }
@@ -1109,16 +1146,67 @@ button:active { transform: translateY(1px); }
 }
 .lp-feed .lf-row em.ok { color: var(--ok); background: var(--ok-bg); border-color: rgba(76, 201, 138, 0.35); }
 .lp-feed .lf-row em.wt { color: var(--warn); background: var(--warn-bg); border-color: rgba(216, 169, 62, 0.35); }
+/* Tira de sistema: registro enterprise, datos no adjetivos. Cierra el
+   relato con la misma sobriedad que la tira de métricas de la landing. */
+.lp-sys {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 1.5rem;
+  padding-top: 1.1rem; border-top: 1px solid var(--border-soft);
+  animation: rise-in .55s .45s var(--ease-in) both;
+}
+.lp-sys span {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.lp-sys span::before {
+  content: ""; width: 5px; height: 5px; border-radius: 1px;
+  transform: rotate(45deg); background: var(--accent-line);
+}
+.lp-sys b { color: var(--text-2); font-weight: 600; }
 .landing-auth {
+  position: relative;
   display: flex; align-items: center; justify-content: center;
   padding: clamp(1.5rem, 4vw, 3rem);
   background:
     radial-gradient(120vw 60vh at 70% -10%, rgba(255, 255, 255, 0.016), transparent 60%),
     var(--bg-deep);
 }
+/* Costura de profundidad entre relato y consola: hairline + caída sutil. */
+.landing-auth::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 120px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.35), transparent);
+}
 .landing-auth .login-card {
-  width: min(420px, 100%);
+  width: min(430px, 100%);
+  padding: 2.1rem 2rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.014), transparent 30%),
+    var(--surface);
+  box-shadow:
+    0 30px 80px -22px rgba(0, 0, 0, 0.72),
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 var(--hl);
   animation: rise-in .55s .1s var(--ease-in) both;
+}
+/* Filo de acero superior: la consola "respira" enterprise sin glow. */
+.landing-auth .login-card::before {
+  content: ""; position: absolute; left: 1.6rem; right: 1.6rem; top: 0;
+  height: 1px; background: linear-gradient(90deg,
+    transparent, var(--accent-line) 30%, var(--accent-line) 70%, transparent);
+}
+/* Trío de garantías de seguridad bajo la consola (registro enterprise). */
+.login-card .seclist {
+  display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 0.45rem;
+}
+.login-card .seclist span {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+  color: var(--faint);
+}
+.login-card .seclist span::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-line);
 }
 
 @media (max-width: 860px) {

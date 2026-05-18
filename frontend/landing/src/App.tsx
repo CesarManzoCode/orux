@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 
-/* Landing de Orux — dirección de arte v2 "Coordination Instrument".
-   No es una landing SaaS: es la ficha de una capa de infraestructura
-   para equipos de ingeniería. Composición asimétrica, escena de
-   producto cinematográfica, color como estado (no decoración), cero
-   gradiente en titulares. El copy es honesto: producto real en
-   producción, sin humo de "IA". Continuidad visual con el IDE. */
+/* Landing de laidea — dirección de arte v3 "Infraestructura / Sala de
+   control". No es una landing SaaS: es la ficha de una capa de
+   coordinación para equipos de ingeniería. Identidad ACERO (mate, sin
+   gradiente de hue); el verde es estado "vivo", no marca. Composición
+   asimétrica, escena de producto cinematográfica, copy honesto: producto
+   real en producción, sin humo de "IA". Continuidad visual con el IDE. */
 
 const APP = "/app"; // el IDE vive acá (capa 23b) — estos enlaces deben seguir
 
@@ -52,6 +52,17 @@ function Head({ k, children, sub }: { k: string; children: ReactNode; sub?: Reac
       <Reveal delay={0.06}><h2 className="lead">{children}</h2></Reveal>
       {sub && <Reveal delay={0.1}><p className="sec-sub">{sub}</p></Reveal>}
     </>
+  );
+}
+
+/* Marca con logomark de acero (rombo = nodo de coordinación). */
+function Brand({ href = "#top", tag }: { href?: string; tag?: boolean }) {
+  return (
+    <a className="brand" href={href}>
+      <span className="mk" aria-hidden />
+      la<b>idea</b>
+      {tag && <span className="tag">coordination layer</span>}
+    </a>
   );
 }
 
@@ -115,12 +126,22 @@ const PRO = [
   "Todos los lenguajes, análisis siempre tibio, integraciones",
 ];
 
+/* Tira de métricas del sistema — registro enterprise, sustituye al
+   slogan: datos, no adjetivos. */
+const TRUST = [
+  { k: "Modelo", v: <>Sobre <b>Git</b> · <i>git clone</i> basta</> },
+  { k: "Conflictos", v: <>Se <b>previene</b>, no se fusiona · sin CRDT</> },
+  { k: "Granularidad", v: <>Presencia <b>por línea</b>, no por archivo</> },
+  { k: "Estado", v: <><i>en producción</i> · equipos reales</> },
+];
+
 /* Escena del producto del hero: evoca el IDE real (rail con ownership,
    editor con presencia, status bar) + tarjetas flotantes de impacto y
    propuesta. aria-hidden — vende continuidad y "sistema en marcha". */
 function Stage() {
   return (
     <div className="stage" aria-hidden>
+      <div className="stage-back2" />
       <div className="stage-back" />
       <div className="ide">
         <div className="ide-bar">
@@ -128,9 +149,9 @@ function Stage() {
           <span className="ide-path">workspace · <span className="br">main</span></span>
           <span className="ide-live">
             <span className="faces">
-              <i className="face" style={{ background: "#46c08a" }}>T</i>
-              <i className="face" style={{ background: "#5fa8f5" }}>A</i>
-              <i className="face" style={{ background: "#d9a441" }}>K</i>
+              <i className="face" style={{ background: "#43b98a" }}>T</i>
+              <i className="face" style={{ background: "#6ea8e6" }}>A</i>
+              <i className="face" style={{ background: "#d6a341" }}>K</i>
             </span>
             <span>4 en vivo</span>
           </span>
@@ -142,7 +163,7 @@ function Stage() {
             <span className="f"><span className="dirn">›</span> sync.py <em className="own peer">Ana</em></span>
             <span className="f"><span className="dirn">›</span> impact.py</span>
             <span className="f"><span className="dirn">›</span> git.py</span>
-            <div className="rail-h" style={{ marginTop: 10 }}>api /</div>
+            <div className="rail-h" style={{ marginTop: 12 }}>api /</div>
             <span className="f"><span className="dirn">›</span> routes.py</span>
           </aside>
           <div className="ide-code">
@@ -207,14 +228,12 @@ export function App() {
   return (
     <>
       <div className="grid-bg" aria-hidden />
+      <div className="traces" aria-hidden />
       <div className="vignette" aria-hidden />
 
       <nav className={"nav" + (scrolled ? " scrolled" : "")}>
         <div className="wrap">
-          <a className="brand" href="#top">
-            la<b>idea</b>
-            <span className="tag">coordination layer</span>
-          </a>
+          <Brand tag />
           <div className="nav-links">
             <a href="#problema">El problema</a>
             <a href="#pilares">Qué hace</a>
@@ -242,22 +261,22 @@ export function App() {
           >
             <motion.div variants={fadeUp}>
               <span className="eyebrow">
-                <span className="live" /> En producción · probándose con equipos reales
+                <span className="live" /> En producción · equipos reales coordinando
               </span>
             </motion.div>
             <motion.h1 variants={fadeUp}>
               Tu equipo toca el código.{" "}
-              <span className="dim">El sistema se encarga de que nada se rompa.</span>
+              <span className="dim">El sistema coordina el riesgo.</span>
             </motion.h1>
             <motion.p className="sub" variants={fadeUp}>
               Una capa de coordinación en tiempo real sobre Git, para equipos
-              de 2 a 50. Presencia, ownership e impacto resueltos antes de que
+              de 2 a 50. Ownership, presencia e impacto resueltos antes de que
               el cambio llegue a producción — sin la ceremonia de branches,
               PRs y reviews.
             </motion.p>
             <motion.div className="cta" variants={fadeUp}>
               <a className="btn primary lg" href={APP}>
-                Probar Orux <span className="arr">→</span>
+                Entrar a laidea <span className="arr">→</span>
               </a>
               <a className="btn ghost lg" href="#como">Ver cómo funciona</a>
             </motion.div>
@@ -269,22 +288,24 @@ export function App() {
           </motion.div>
 
           <motion.div
-            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 22 }}
+            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.85, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
             <Stage />
           </motion.div>
         </div>
       </header>
 
-      {/* ── Tira técnica (estática, registro enterprise) ── */}
+      {/* ── Tira de métricas del sistema (estática, registro enterprise) ── */}
       <div className="trust">
         <div className="wrap">
-          <span className="ti"><b>Sobre Git</b> · <i>git clone</i> basta</span>
-          <span className="ti">Sin CRDT · se previene, no se fusiona</span>
-          <span className="ti">Python · TypeScript · Go · Rust</span>
-          <span className="ti">Presencia por línea, no por archivo</span>
+          {TRUST.map((t) => (
+            <div className="ti" key={t.k}>
+              <span className="tk">{t.k}</span>
+              <span className="tv">{t.v}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -293,7 +314,7 @@ export function App() {
         <span className="sec-line" />
         <div className="wrap">
           <Head
-            k="El problema"
+            k="01 · El problema"
             sub="Dos personas tocan archivos relacionados. Nadie lo ve. El conflicto y el cambio que rompe a un tercero aparecen al final, en el merge — cuando ya cuesta caro."
           >
             El riesgo no está en el código.{" "}
@@ -304,11 +325,11 @@ export function App() {
               <div className="risk-col">
                 <div className="risk-h">Ahora · sin coordinación</div>
                 <div className="dev">
-                  <span className="av" style={{ background: "#46c08a" }}>T</span>
+                  <span className="av" style={{ background: "#43b98a" }}>T</span>
                   <span className="nm">Vos · <em>roster.py</em></span>
                 </div>
                 <div className="dev">
-                  <span className="av" style={{ background: "#5fa8f5" }}>A</span>
+                  <span className="av" style={{ background: "#6ea8e6" }}>A</span>
                   <span className="nm">Ana · <em>sync.py → usa claim()</em></span>
                 </div>
               </div>
@@ -338,10 +359,10 @@ export function App() {
         <span className="sec-line" />
         <div className="wrap">
           <Head
-            k="Qué hace, de verdad"
+            k="02 · Qué hace, de verdad"
             sub="Tres mecanismos reales, funcionando hoy. Ninguno es humo: corren en producción con devs reales."
           >
-            Orux lo detecta solo,{" "}
+            laidea lo detecta solo,{" "}
             <span className="soft">sin que nadie le pregunte.</span>
           </Head>
           <Reveal delay={0.12}>
@@ -349,7 +370,8 @@ export function App() {
               {/* Presencia */}
               <div className="mod">
                 <div className="mod-h">
-                  <span className="d" style={{ background: "var(--acc)" }} /> Presencia
+                  <span className="d" style={{ background: "var(--live)" }} /> Presencia
+                  <span className="ix">01 / 03</span>
                 </div>
                 <div className="mod-screen">
                   <div className="scr-pres">
@@ -369,6 +391,7 @@ export function App() {
               <div className="mod">
                 <div className="mod-h">
                   <span className="d" style={{ background: "var(--peer)" }} /> Ownership
+                  <span className="ix">02 / 03</span>
                 </div>
                 <div className="mod-screen">
                   <div className="scr-own">
@@ -387,7 +410,8 @@ export function App() {
               {/* Impacto */}
               <div className="mod">
                 <div className="mod-h">
-                  <span className="d" style={{ background: "var(--warn)" }} /> Impacto
+                  <span className="d" style={{ background: "var(--risk)" }} /> Impacto
+                  <span className="ix">03 / 03</span>
                 </div>
                 <div className="mod-screen">
                   <div className="scr-imp">
@@ -415,7 +439,7 @@ export function App() {
         <span className="sec-line" />
         <div className="wrap">
           <Head
-            k="Coordinación en tiempo real"
+            k="03 · Coordinación en tiempo real"
             sub="Lo que antes era rama → PR → review → merge, ahora es proponer → aprobar → aplicar. Mismo control, sin la ceremonia."
           >
             La negociación ocurre dentro del editor,{" "}
@@ -441,7 +465,7 @@ export function App() {
         <span className="sec-line" />
         <div className="wrap">
           <Head
-            k="Cómo funciona"
+            k="04 · Cómo funciona"
             sub="La tesis, en tres tiempos. Misma seguridad que tu flujo actual; el sistema sabe sin que nadie le pregunte."
           >
             Editás primero. Se negocia después.{" "}
@@ -469,7 +493,7 @@ export function App() {
       <section>
         <span className="sec-line" />
         <div className="wrap">
-          <Head k="Lo que NO somos">
+          <Head k="05 · Lo que NO somos">
             Vendemos coordinación,{" "}
             <span className="soft">no control.</span>
           </Head>
@@ -495,7 +519,7 @@ export function App() {
         <span className="sec-line" />
         <div className="wrap">
           <Head
-            k="Precio"
+            k="06 · Precio"
             sub="Gratis de verdad para empezar, sin asteriscos. Pagás cuando el equipo escala y necesita más profundidad."
           >
             Para equipos nuevos sin inercia,{" "}
@@ -521,7 +545,7 @@ export function App() {
               <h4>Cuando crecés</h4>
               <p className="price-sub">Más equipo, más repos, análisis más profundo y conocimiento distribuido.</p>
               <ul>{PRO.map((f) => <li key={f}>{f}</li>)}</ul>
-              <a className="btn primary full" href={APP}>Entrar a Orux <span className="arr">→</span></a>
+              <a className="btn primary full" href={APP}>Entrar a laidea <span className="arr">→</span></a>
             </motion.div>
           </motion.div>
         </div>
@@ -539,7 +563,7 @@ export function App() {
             </p>
           </Reveal>
           <Reveal delay={0.12} className="final-cta">
-            <a className="btn primary lg" href={APP}>Entrar a Orux <span className="arr">→</span></a>
+            <a className="btn primary lg" href={APP}>Entrar a laidea <span className="arr">→</span></a>
             <a className="btn ghost lg" href="#como">Cómo funciona</a>
           </Reveal>
         </div>
@@ -548,7 +572,7 @@ export function App() {
       <footer>
         <div className="wrap">
           <div className="foot-l">
-            <a className="brand" href="#top">la<b>idea</b></a>
+            <Brand />
             <p>multiplayer semantic coding · misma vida, menos dolor</p>
           </div>
           <div className="foot-r">

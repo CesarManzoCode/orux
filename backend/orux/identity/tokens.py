@@ -4,12 +4,24 @@ El problema que resuelve: hoy (identidad mínima) el cliente manda un token
 anónimo SIN firmar en la URL — cualquiera puede inventar el de otro. Aquí el
 token va firmado con HMAC y un secreto del servidor: el cliente lo guarda y lo
 presenta al reconectar, y el servidor confirma que lo emitió él y no fue
-manipulado. No es una sesión completa (sin expiración todavía: deuda
-consciente del prototipo, fácil de sumar porque el payload es estructurado).
+manipulado.
 
-Formato: `<payload_b64url>.<hmac_hex>`. El payload hoy solo lleva el usuario;
-es un dict serializado para poder añadir `exp` u otros campos sin cambiar el
-formato del token.
+Robustez (auditoría seguridad M1): el token ahora caduca. Antes vivía para
+siempre — uno filtrado (logs, historial del navegador, copy/paste) era una
+llave permanente, sin forma de revocarlo salvo rotar el secreto (que tira
+TODAS las sesiones). Ahora el payload lleva `exp` (epoch UTC) y se rechaza
+pasado ese instante: una fuga tiene ventana acotada. Sin lista de revocación
+activa todavía (rotar el secreto sigue siendo el botón de pánico global);
+acotar la vida del token es la mitigación barata que el formato ya soportaba.
+
+Migración sin romper sesiones vivas: un token LEGACY (sin `exp`) se sigue
+aceptando como antes. Los emitidos de ahora en más llevan `exp`; cuando el
+parque rote naturalmente, todos caducan. Opt-out explícito: `ttl_seg=0` (o
+None) emite sin `exp` (mismo comportamiento histórico, por si el operador lo
+necesita).
+
+Formato: `<payload_b64url>.<hmac_hex>`. El payload es un dict serializado
+(`user`, opcional `exp`): añadir campos no cambia el formato del token.
 """
 
 from __future__ import annotations
@@ -17,6 +29,7 @@ from __future__ import annotations
 import base64
 import hmac
 import json
+import time
 from hashlib import sha256
 
 
@@ -35,9 +48,19 @@ def _firma(payload_b64: str, secret: str) -> str:
     ).hexdigest()
 
 
-def crear_token(username: str, secret: str) -> str:
-    """Emite un token de sesión firmado para `username`."""
-    payload_b64 = _b64(json.dumps({"user": username}).encode("utf-8"))
+def crear_token(
+    username: str, secret: str, ttl_seg: int | None = None
+) -> str:
+    """Emite un token de sesión firmado para `username`.
+
+    `ttl_seg`: segundos de validez. Si es un entero > 0, el token lleva
+    `exp = ahora + ttl_seg` y caduca. None o 0 = sin `exp` (token legacy,
+    no caduca: opt-out explícito del operador).
+    """
+    datos: dict[str, object] = {"user": username}
+    if ttl_seg:
+        datos["exp"] = int(time.time()) + int(ttl_seg)
+    payload_b64 = _b64(json.dumps(datos).encode("utf-8"))
     return f"{payload_b64}.{_firma(payload_b64, secret)}"
 
 
@@ -57,6 +80,18 @@ def usuario_de_token(token: str, secret: str) -> str | None:
     try:
         datos = json.loads(_unb64(payload_b64))
         usuario = datos["user"]
-        return usuario if isinstance(usuario, str) and usuario else None
+        if not (isinstance(usuario, str) and usuario):
+            return None
+        exp = datos.get("exp")
+        # `exp` ausente = token legacy (pre-robustez): se sigue aceptando
+        # para no tumbar sesiones vivas. Presente: debe ser un número y NO
+        # haber pasado. Un `exp` corrupto (no numérico) => token inválido,
+        # no "sin expiración" (fail-closed: ante la duda, no autentica).
+        if exp is not None:
+            if not isinstance(exp, (int, float)) or isinstance(exp, bool):
+                return None
+            if time.time() >= exp:
+                return None
+        return usuario
     except (ValueError, KeyError, TypeError):
         return None

@@ -30,6 +30,7 @@ Decisiones de esta capa:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -70,10 +71,27 @@ class DiskStorage:
         Last-write-wins igual que en memoria: sobrescribe el archivo entero.
         Cuando llegue el CRDT, lo que se persista será el estado del CRDT, no
         un volcado de texto plano — pero esa decisión es de la capa 4.
+
+        Atómico (robustez B-varios): se escribe a un temporal en la MISMA
+        carpeta y se hace `os.replace` (rename atómico en el mismo
+        filesystem). Sin esto, un crash/disco-lleno a mitad de `write_text`
+        deja el archivo del workspace TRUNCADO en disco; al reiniciar, ese
+        archivo a medias se carga como la verdad y el dev pierde código en
+        silencio. `ownership.json` ya se arregló así — este era el mismo
+        agujero en el dato que más duele perder. El temporal lleva el pid
+        para que dos escrituras del mismo path no pisen su propio temporal.
         """
         destino = self._destino(path)
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(content, encoding="utf-8")
+        tmp = destino.with_name(f"{destino.name}.{os.getpid()}.tmp")
+        try:
+            tmp.write_text(content, encoding="utf-8")
+            os.replace(tmp, destino)
+        except Exception:
+            # Si falló a mitad, no dejes el .tmp tirado contaminando el
+            # workspace (se cargaría como un archivo más al reiniciar).
+            tmp.unlink(missing_ok=True)
+            raise
 
     def borrar(self, path: str) -> None:
         """Borra el archivo de disco. Valida el path igual que `guardar`.
@@ -107,6 +125,12 @@ class DiskStorage:
             # de git, no archivos del proyecto. Si lo cargáramos, el workspace
             # se llenaría de basura y, peor, se re-persistiría pisando el repo.
             if ".git" in partes:
+                continue
+            # Temporal de una escritura atómica que un crash duro (corte de
+            # luz entre write_text y os.replace) dejó a medias: NO es un
+            # archivo del proyecto. Cargarlo sería resucitar basura
+            # truncada justo lo que la escritura atómica vino a evitar.
+            if p.name.endswith(".tmp"):
                 continue
             rel = p.relative_to(self.root).as_posix()
             try:

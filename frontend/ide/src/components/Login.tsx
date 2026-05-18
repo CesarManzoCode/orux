@@ -50,11 +50,11 @@ export function Login() {
             la<b>idea</b><span>coordination layer</span>
           </div>
           <div className="lp-eyebrow">
-            <i /> capa de coordinación · sobre Git
+            <i /> capa de coordinación · en producción
           </div>
           <h1 className="lp-tag">
-            Editás en equipo, en tiempo real.{" "}
-            <span className="soft">Sin pisarte con nadie.</span>
+            Tu equipo toca el código.{" "}
+            <span className="soft">El sistema coordina el riesgo.</span>
           </h1>
           <p className="lp-tesis">
             Misma seguridad que branches, PRs y reviews — sin la
@@ -72,13 +72,20 @@ export function Login() {
           <div className="lp-feed" aria-hidden>
             <div className="lf-h"><span className="lf-live" /> coordinación en vivo</div>
             <div className="lf-row">
-              <span className="who" style={{ background: "#5fa8f5" }}>A</span>
+              <span className="who" style={{ background: "#6ea8e6" }}>A</span>
               Ana → roster.py <em className="ok">propuesta aprobada</em>
             </div>
             <div className="lf-row">
-              <span className="who" style={{ background: "#d9a441" }}>K</span>
+              <span className="who" style={{ background: "#d6a341" }}>K</span>
               Kai → sync.py <em className="wt">impacto: 4 usos · avisado</em>
             </div>
+          </div>
+
+          {/* Tira de sistema: datos, no adjetivos. */}
+          <div className="lp-sys" aria-hidden>
+            <span>sobre <b>Git</b></span>
+            <span>presencia <b>por línea</b></span>
+            <span>se <b>previene</b>, no se fusiona</span>
           </div>
         </div>
       </section>
@@ -128,7 +135,13 @@ export function Login() {
             {s.loginError || (offline ? "Sin conexión con el servidor — reintentá." : "")}
           </div>
           <div className="cardfoot">
-            Tu sesión viaja cifrada. El workspace es un repo Git real.
+            Tu sesión viaja cifrada. El workspace es un repo Git real —
+            <code>git clone</code> basta.
+          </div>
+          <div className="seclist" aria-hidden>
+            <span>sesión HMAC</span>
+            <span>cuenta cerrada</span>
+            <span>sin telemetría</span>
           </div>
         </div>
       </section>
