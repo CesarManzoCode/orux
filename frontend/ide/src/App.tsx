@@ -12,11 +12,23 @@ import { Trays } from "./components/Trays";
 import { Editor } from "./components/Editor";
 import { StatusBar } from "./components/StatusBar";
 import { AdminModal } from "./components/AdminModal";
+import { Inspector } from "./components/Inspector";
 
 export function App() {
   const s = useStore();
   const [vista, setVista] = useState<"archivos" | "git">("archivos");
   const [adminOpen, setAdminOpen] = useState(false);
+  // Capa 26: el inspector se puede colapsar (pantallas medianas, o quien
+  // quiere todo el ancho para el código). La preferencia persiste — una
+  // herramienta de uso diario respeta cómo la dejaste.
+  const [inspOpen, setInspOpen] = useState(
+    () => localStorage.getItem("laidea_insp") !== "0",
+  );
+  const toggleInsp = () => {
+    const next = !inspOpen;
+    localStorage.setItem("laidea_insp", next ? "1" : "0");
+    setInspOpen(next);
+  };
 
   // Si dejás de ser admin (re-init tras un clone), el modal se cierra solo.
   useEffect(() => { if (!s.esAdmin && adminOpen) setAdminOpen(false); }, [s.esAdmin, adminOpen]);
@@ -43,10 +55,16 @@ export function App() {
   if (s.fase !== "team") return <Lobby />;
 
   return (
-    <div className="app">
+    <div className={"app" + (inspOpen ? "" : " sin-insp")}>
       <TopBar />
       <div className="layout">
-        <Rail vista={vista} setVista={setVista} abrirAdmin={() => setAdminOpen(true)} />
+        <Rail
+          vista={vista}
+          setVista={setVista}
+          abrirAdmin={() => setAdminOpen(true)}
+          inspOpen={inspOpen}
+          toggleInsp={toggleInsp}
+        />
         <Sidebar vista={vista} />
         <main className="main isla">
           <Tabs />
@@ -54,6 +72,7 @@ export function App() {
           <Trays />
           <Editor />
         </main>
+        {inspOpen && <Inspector onClose={toggleInsp} />}
       </div>
       <StatusBar />
       {adminOpen && s.esAdmin && <AdminModal onClose={() => setAdminOpen(false)} />}

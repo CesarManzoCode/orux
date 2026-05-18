@@ -25,6 +25,20 @@ export interface Impact {
 export interface GitStatus {
   available: boolean; branch: string; changes: number; commits: string[];
 }
+// Capa 26 (rediseño enterprise): bitácora de coordinación SOLO en el
+// cliente. No es protocolo nuevo — se deriva de los mensajes que ya
+// llegan. Es el "feed de actividad" del inspector: hechos discretos de
+// coordinación (entró/salió, propuesta, impacto, ownership, git), NO el
+// stream de tecleo (eso ya lo dicen la presencia y el dirty). Honesto:
+// el `update` del server no trae autor, así que NO inventamos quién
+// editó — solo registramos lo que sí tiene actor real.
+export type ActKind =
+  | "join" | "leave" | "propuesta" | "impacto"
+  | "ownership" | "git" | "delete" | "workspace";
+export interface ActItem {
+  id: number; ts: number; kind: ActKind;
+  actor: string; path: string | null; text: string;
+}
 export interface State {
   conn: "conectando" | "conectado" | "desconectado" | "error";
   authed: boolean;
@@ -53,6 +67,12 @@ export interface State {
   equipoError: string;
   equipo: { id: string; nombre: string; rol: string } | null;
   inviteCode: string;  // último código emitido por el admin (para compartir)
+  // Capa 26: bitácora de sesión (más reciente primero, acotada) + caret
+  // del archivo abierto (línea/columna 1-based). El caret NO viaja al
+  // server (eso ya lo hace `presence` con la línea); vive acá solo para
+  // que la status bar y el inspector lo muestren.
+  actividad: ActItem[];
+  caret: { line: number; col: number };
 }
 
 const inicial: State = {
@@ -64,6 +84,7 @@ const inicial: State = {
     location.hostname && location.hostname !== "localhost"
       ? location.hostname : "local",
   fase: "auth", equipos: [], equipoError: "", equipo: null, inviteCode: "",
+  actividad: [], caret: { line: 1, col: 1 },
 };
 
 let state: State = inicial;
@@ -77,6 +98,56 @@ export function subscribe(l: () => void) {
   return () => { listeners.delete(l); };
 }
 export function getState() { return state; }
+
+// --- Capa 26: bitácora de coordinación (cliente puro) ---
+let actSeq = 0;
+const ACT_CAP = 80;          // techo: es un feed, no un historial
+const ACT_COALESCE = 9000;   // mismo hecho repetido < 9s = se refresca, no se duplica
+function act(kind: ActKind, actor: string, text: string, path: string | null = null) {
+  const ahora = Date.now();
+  const prev = state.actividad[0];
+  // Coalescer ruido: el MISMO hecho (tipo+actor+path) muy seguido sube
+  // su timestamp en vez de apilar filas idénticas (p.ej. impacto que se
+  // recalcula al tipear). El feed se mantiene legible.
+  if (prev && prev.kind === kind && prev.actor === actor && prev.path === path
+      && ahora - prev.ts < ACT_COALESCE) {
+    const [, ...resto] = state.actividad;
+    set({ actividad: [{ ...prev, ts: ahora }, ...resto] });
+    return;
+  }
+  const item: ActItem = { id: ++actSeq, ts: ahora, kind, actor, path, text };
+  set({ actividad: [item, ...state.actividad].slice(0, ACT_CAP) });
+}
+
+// --- Capa 26: selectores derivados (reusados por FileTree e Inspector;
+// una sola fuente de verdad para "¿este archivo tiene señal?") ---
+export function impactosQueAfectan(path: string): Impact[] {
+  return Object.values(state.impacts).filter((i) => i.affected_path === path);
+}
+export function propuestasDe(path: string): Proposal[] {
+  return Object.values(state.proposals).filter((p) => p.path === path);
+}
+const _SEVR: Record<string, number> = { alta: 3, media: 2, baja: 1 };
+// Severidad máxima de una lista de impactos -> etiqueta o null.
+export function severidadMax(ims: Impact[]): "alta" | "media" | "baja" | null {
+  let mx = 0;
+  for (const im of ims)
+    for (let i = 0; i < im.symbols.length; i++) {
+      const s = (im.severidades && im.severidades[i]) || "media";
+      mx = Math.max(mx, _SEVR[s] || 2);
+    }
+  return mx >= 3 ? "alta" : mx === 2 ? "media" : mx === 1 ? "baja" : null;
+}
+// Presentes (otros) en un archivo concreto, para badges del árbol/inspector.
+export function presentesEn(path: string): Peer[] {
+  return Object.values(state.peers).filter(
+    (p) => p.path === path && (!state.yo || p.client_id !== state.yo.client_id),
+  );
+}
+export function setCaret(line: number, col: number) {
+  if (state.caret.line === line && state.caret.col === col) return;
+  set({ caret: { line, col } });
+}
 
 // URL del WS: dev (Vite 5173 / localhost / file) -> server suelto en 8765;
 // deploy -> mismo host, wss, ruta /ws (Caddy proxya). Igual criterio que
@@ -124,6 +195,8 @@ function onMessage(raw: string) {
         // estado de equipo anterior, limpio (por si se cambió de equipo).
         files: {}, owners: {}, peers: {}, proposals: {}, impacts: {},
         dirty: {}, currentPath: null, inviteCode: "",
+        // Equipo nuevo = sesión nueva: la bitácora arranca limpia.
+        actividad: [], caret: { line: 1, col: 1 },
       });
       break;
     case "invite_created":
@@ -142,6 +215,7 @@ function onMessage(raw: string) {
         dirty: {},
       });
       if (primero) presence(primero, 1);
+      act("workspace", "", `workspace cargado · ${Object.keys(files).length} archivos`);
       break;
     }
     case "update": {
@@ -163,6 +237,7 @@ function onMessage(raw: string) {
       delete dirty[m.path];
       let cur = state.currentPath;
       if (cur === m.path) cur = Object.keys(files).sort()[0] ?? null;
+      act("delete", "", "se eliminó", m.path);
       set({ files, dirty, currentPath: cur });
       break;
     }
@@ -173,6 +248,15 @@ function onMessage(raw: string) {
       break;
     }
     case "presence":
+      // Llega presencia de alguien que no teníamos (y no soy yo) = entró
+      // al equipo. Los movimientos de línea NO se registran (sería ruido;
+      // eso ya se ve en vivo en el editor y el árbol).
+      if (
+        !(m.client_id in state.peers) &&
+        (!state.yo || m.client_id !== state.yo.client_id)
+      ) {
+        act("join", m.name, "se conectó al equipo");
+      }
       set({
         peers: {
           ...state.peers,
@@ -185,18 +269,40 @@ function onMessage(raw: string) {
       break;
     case "leave": {
       const peers = { ...state.peers };
+      const ido = peers[m.client_id];
       delete peers[m.client_id];
+      if (ido) act("leave", ido.name, "se desconectó");
       set({ peers });
       break;
     }
-    case "ownership":
+    case "ownership": {
+      // Diff contra lo anterior: registramos QUÉ ownership cambió. En un
+      // reparto masivo (admin) serían decenas de filas idénticas -> lo
+      // resumimos en una sola. Honesto y legible.
+      const antes = state.owners, ahora = m.owners as Record<string, string>;
+      const cambiados: string[] = [];
+      for (const p of new Set([...Object.keys(antes), ...Object.keys(ahora)]))
+        if (antes[p] !== ahora[p]) cambiados.push(p);
+      if (cambiados.length > 3) {
+        act("ownership", "", `reparto de ownership · ${cambiados.length} archivos`);
+      } else {
+        for (const p of cambiados) {
+          const due = ahora[p];
+          act("ownership", "", due ? `${nombreDe(due)} ahora posee` : "sin dueño", p);
+        }
+      }
       set({ owners: { ...m.owners } });
       break;
+    }
     case "proposal":
+      act("propuesta", m.proposal.author_name,
+        "propuso cambios", m.proposal.path);
       set({ proposals: { ...state.proposals, [m.proposal.id]: m.proposal } });
       break;
     case "impact": {
       const key = m.source_path + "::" + m.affected_path;
+      act("impacto", m.author_name,
+        `tocó ${m.source_path} — afecta`, m.affected_path);
       set({ impacts: { ...state.impacts, [key]: m } });
       break;
     }
@@ -207,6 +313,7 @@ function onMessage(raw: string) {
       set({ git: m });
       break;
     case "git_result":
+      act("git", "", (m.ok ? "✓ " : "✗ ") + String(m.detail).split("\n")[0]);
       set({ gitResult: { ok: m.ok, detail: m.detail, pr_url: m.pr_url || "" } });
       break;
   }

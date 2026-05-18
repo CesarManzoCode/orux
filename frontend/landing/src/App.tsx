@@ -1,25 +1,26 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 
-/* Landing de laidea — nivel premium, coherente con la identidad del IDE
-   (continuidad landing→app). Mismo sistema de diseño que el editor: negros
-   fríos, acento verde→cian, patrón "isla", motion orquestado. El copy es
-   honesto: producto real en producción, sin humo de "IA". */
+/* Landing de laidea — dirección de arte v2 "Coordination Instrument".
+   No es una landing SaaS: es la ficha de una capa de infraestructura
+   para equipos de ingeniería. Composición asimétrica, escena de
+   producto cinematográfica, color como estado (no decoración), cero
+   gradiente en titulares. El copy es honesto: producto real en
+   producción, sin humo de "IA". Continuidad visual con el IDE. */
 
 const APP = "/app"; // el IDE vive acá (capa 23b) — estos enlaces deben seguir
 
-/* --- Motion: variantes base. Se neutralizan vía prefers-reduced-motion --- */
+/* --- Motion: revelados mínimos y precisos. Se neutralizan vía
+   prefers-reduced-motion (Framer + el bloque CSS). --- */
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 26 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
 };
 const stagger: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.1 } },
+  show: { transition: { staggerChildren: 0.08 } },
 };
 
-/* Reveal: entrada al hacer scroll. Si el usuario pide menos movimiento,
-   Framer (useReducedMotion) hace que las variantes no desplacen nada. */
 function Reveal({
   children,
   delay = 0,
@@ -35,7 +36,7 @@ function Reveal({
       variants={fadeUp}
       initial="hidden"
       whileInView="show"
-      viewport={{ once: true, amount: 0.35 }}
+      viewport={{ once: true, amount: 0.4 }}
       transition={{ delay }}
     >
       {children}
@@ -43,28 +44,16 @@ function Reveal({
   );
 }
 
-const PILARES = [
-  {
-    ic: "◐",
-    t: "Presencia en tiempo real",
-    d: "Ves quién trabaja dónde, línea por línea. Nunca dos personas a la vez en la misma línea: se previene antes, no se resuelve después.",
-  },
-  {
-    ic: "⬡",
-    t: "Ownership invisible",
-    d: "El sistema sabe de quién es cada zona sin que nadie pida permiso. Tocás lo que necesites; si hay dueño, tu cambio se propone y se aprueba con un clic.",
-  },
-  {
-    ic: "✦",
-    t: "Impacto con resolución real",
-    d: "Cambiás una firma y avisa, solo, a quién la usa de verdad — resolución cruzada, no coincidencia de texto. Sin falsos positivos.",
-  },
-  {
-    ic: "⎇",
-    t: "Todo sobre Git",
-    d: "Un git clone basta. Commits, ramas, push y PRs siguen existiendo. laidea es una capa de coordinación, no un reemplazo.",
-  },
-];
+/* Cabecera de sección reutilizable: kicker mono + lead sólido. */
+function Head({ k, children, sub }: { k: string; children: ReactNode; sub?: ReactNode }) {
+  return (
+    <>
+      <Reveal><div className="kicker">{k}</div></Reveal>
+      <Reveal delay={0.06}><h2 className="lead">{children}</h2></Reveal>
+      {sub && <Reveal delay={0.1}><p className="sec-sub">{sub}</p></Reveal>}
+    </>
+  );
+}
 
 /* Los 3 tiempos del producto — el corazón de la tesis. */
 const PASOS = [
@@ -76,7 +65,7 @@ const PASOS = [
   {
     n: "02",
     t: "Se negocia después",
-    d: "Si tocás zona con dueño, tu cambio viaja como propuesta. El dueño lo aprueba con un clic. El impacto semántico avisa, solo, a quién depende de eso.",
+    d: "Si tocás zona con dueño, tu cambio viaja como propuesta. El dueño la aprueba con un clic. El impacto avisa, solo, a quién depende de eso.",
   },
   {
     n: "03",
@@ -85,16 +74,31 @@ const PASOS = [
   },
 ];
 
-const MARQUEE = [
-  "Python", "TypeScript", "Go", "Rust",
-  "presencia en vivo", "ownership invisible", "impacto real",
-  "tentativo", "sobre Git", "sin CRDT", "sin ceremonia",
+const FLOW = [
+  {
+    n: "01 · PROPONE",
+    t: "El cambio viaja como propuesta",
+    d: "Tocás una zona con dueño y seguís editando. Tu cambio no se descarta ni te frena: queda en cola, atado al archivo y a vos.",
+    chip: { txt: "diff listo · sin rama", cls: "" },
+  },
+  {
+    n: "02 · RESUELVE",
+    t: "El dueño decide con un clic",
+    d: "Le llega la propuesta con el impacto ya calculado. Aprueba o pide ajuste. Sin reunión, sin PR, sin esperar al líder.",
+    chip: { txt: "pendiente · 1 clic", cls: "wt" },
+  },
+  {
+    n: "03 · APLICA",
+    t: "Se integra para todo el equipo",
+    d: "Aprobado, el cambio aparece en el editor de todos al instante y queda como commit Git real. Nadie quedó desincronizado.",
+    chip: { txt: "aplicado · en Git", cls: "go" },
+  },
 ];
 
 const NOTS = [
   "No es governance corporativo, permisos ni vigilancia.",
-  "No reemplaza Git, GitHub ni tu IDE.",
-  "No te bloquea antes de intentar: editar primero, siempre.",
+  "No reemplaza Git, GitHub ni tu IDE: es una capa encima.",
+  "No te bloquea antes de intentar — editar primero, siempre.",
   "No es un chatbot pegado a un editor.",
 ];
 
@@ -107,40 +111,81 @@ const FREE = [
 const PRO = [
   "Equipos grandes, multi-proyecto y organización",
   "Impacto transitivo y entre repos",
-  "Distribución de conocimiento: el líder deja de ser cuello de botella",
+  "Conocimiento distribuido: el líder deja de ser cuello de botella",
   "Todos los lenguajes, análisis siempre tibio, integraciones",
 ];
 
-/* Mockup del producto en el hero: una "isla" que evoca el IDE real
-   (sidebar de archivos + editor con presencia y aviso de impacto).
-   Es decorativo — aria-hidden — pero vende la continuidad visual. */
-function ProductPeek() {
+/* Escena del producto del hero: evoca el IDE real (rail con ownership,
+   editor con presencia, status bar) + tarjetas flotantes de impacto y
+   propuesta. aria-hidden — vende continuidad y "sistema en marcha". */
+function Stage() {
   return (
-    <div className="peek" aria-hidden>
-      <div className="peek-bar">
-        <span className="tl tl-r" /><span className="tl tl-y" /><span className="tl tl-g" />
-        <span className="peek-title">workspace · laidea</span>
-        <span className="peek-live"><i />3 en vivo</span>
-      </div>
-      <div className="peek-body">
-        <aside className="peek-side">
-          <span className="pf on">core/</span>
-          <span className="pf"> sync.py</span>
-          <span className="pf claim"> roster.py <em>Ana</em></span>
-          <span className="pf"> impact.py</span>
-          <span className="pf"> git.py</span>
-        </aside>
-        <div className="peek-code">
-          <div className="ln"><span className="lnn">12</span><code><span className="kw">def</span> <span className="fn">claim</span>(path, user):</code></div>
-          <div className="ln me"><span className="lnn">13</span><code>    owners[path] = user  <span className="cm"># vos</span></code></div>
-          <div className="ln"><span className="lnn">14</span><code>    <span className="kw">return</span> Ownership(path)</code></div>
-          <div className="ln other"><span className="lnn">15</span><code>    broadcast(owners)  <span className="cm"># Ana</span></code></div>
-          <div className="ln"><span className="lnn">16</span><code></code></div>
-          <div className="peek-toast">
-            <b>Impacto</b> · cambiar <code>claim()</code> afecta a 4 usos reales →
-            <span className="ok">se avisó solo</span>
+    <div className="stage" aria-hidden>
+      <div className="stage-back" />
+      <div className="ide">
+        <div className="ide-bar">
+          <span className="tl r" /><span className="tl y" /><span className="tl g" />
+          <span className="ide-path">workspace · <span className="br">main</span></span>
+          <span className="ide-live">
+            <span className="faces">
+              <i className="face" style={{ background: "#46c08a" }}>T</i>
+              <i className="face" style={{ background: "#5fa8f5" }}>A</i>
+              <i className="face" style={{ background: "#d9a441" }}>K</i>
+            </span>
+            <span>4 en vivo</span>
+          </span>
+        </div>
+        <div className="ide-body">
+          <aside className="ide-rail">
+            <div className="rail-h">core /</div>
+            <span className="f on"><span className="dirn">›</span> roster.py <em className="own me">vos</em></span>
+            <span className="f"><span className="dirn">›</span> sync.py <em className="own peer">Ana</em></span>
+            <span className="f"><span className="dirn">›</span> impact.py</span>
+            <span className="f"><span className="dirn">›</span> git.py</span>
+            <div className="rail-h" style={{ marginTop: 10 }}>api /</div>
+            <span className="f"><span className="dirn">›</span> routes.py</span>
+          </aside>
+          <div className="ide-code">
+            <div className="ln"><span className="n">11</span><code><span className="kw">def</span> <span className="fn">claim</span>(path, user):</code></div>
+            <div className="ln me"><span className="n">12</span><code>    owners[path] = user  <span className="cm"># vos</span></code></div>
+            <div className="ln"><span className="n">13</span><code>    <span className="kw">return</span> Ownership(path)</code></div>
+            <div className="ln"><span className="n">14</span><code></code></div>
+            <div className="ln peer"><span className="n">15</span><code><span className="kw">def</span> <span className="fn">presence</span>(line):</code><span className="cursor">Ana</span></div>
+            <div className="ln"><span className="n">16</span><code>    roster.touch(line)</code></div>
+            <div className="ln"><span className="n">17</span><code>    broadcast(<span className="st">"presence"</span>)</code></div>
           </div>
         </div>
+        <div className="ide-status">
+          <span className="s acc"><span className="dotg" /> main</span>
+          <span className="s">↑2 ↓0</span>
+          <span className="s">4 en vivo</span>
+          <span className="s acc">sin colisiones</span>
+          <span className="s push">Python · UTF-8</span>
+        </div>
+      </div>
+
+      <div className="float card-impact">
+        <div className="ft"><span className="ic">▲</span> Análisis de impacto</div>
+        <div className="body">
+          Cambiar <code>claim()</code> afecta <b>4 usos reales</b> — resolución
+          cruzada, no coincidencia de texto.
+        </div>
+        <div className="uses">
+          <span>server/sync.py:142</span>
+          <span>api/routes.py:88</span>
+          <span>tests/test_own.py:23</span>
+        </div>
+        <div className="auto">Se avisó solo a quien depende de esto</div>
+      </div>
+
+      <div className="float card-prop">
+        <div className="ft"><span className="ic">◇</span> Propuesta de Ana</div>
+        <div className="meta">sync.py · <b>+12 −3</b> · impacto calculado</div>
+        <div className="acts">
+          <span className="ap">Aprobar</span>
+          <span className="vw">Ver diff</span>
+        </div>
+        <div className="pend">pendiente · un clic la integra</div>
       </div>
     </div>
   );
@@ -151,115 +196,262 @@ export function App() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 24);
+    const on = () => setScrolled(window.scrollY > 16);
     on();
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
 
-  // whileInView con reduce: mostramos el estado final sin animar.
-  const reveal = reduce
-    ? { initial: "show" as const }
-    : { initial: "hidden" as const, whileInView: "show" as const };
+  const heroInit = reduce ? "show" : "hidden";
 
   return (
     <>
-      {/* Fondo: aurora que deriva lento + rejilla técnica enmascarada.
-          El motion del aurora se apaga vía CSS (prefers-reduced-motion). */}
-      <div className="aurora" aria-hidden>
-        <i /><i /><i />
-      </div>
       <div className="grid-bg" aria-hidden />
+      <div className="vignette" aria-hidden />
 
       <nav className={"nav" + (scrolled ? " scrolled" : "")}>
         <div className="wrap">
-          <a className="brand" href="#top">la<b>idea</b></a>
+          <a className="brand" href="#top">
+            la<b>idea</b>
+            <span className="tag">coordination layer</span>
+          </a>
           <div className="nav-links">
-            <a href="#como">Cómo funciona</a>
+            <a href="#problema">El problema</a>
             <a href="#pilares">Qué hace</a>
+            <a href="#como">Cómo funciona</a>
             <a href="#precio">Precio</a>
           </div>
-          <div className="nav-cta">
-            <a className="btn ghost sm" href={APP}>Entrar →</a>
+          <div className="nav-right">
+            <span className="nav-stat"><i />en producción</span>
+            <span className="nav-sep" />
+            <a className="btn ghost sm" href={APP}>
+              Entrar <span className="arr">→</span>
+            </a>
           </div>
         </div>
       </nav>
 
-      {/* HERO */}
+      {/* ── HERO ── */}
       <header className="hero" id="top">
         <div className="wrap">
           <motion.div
+            className="hero-copy"
             variants={stagger}
-            initial="hidden"
+            initial={heroInit}
             animate="show"
           >
             <motion.div variants={fadeUp}>
-              <span className="pill">
-                <span className="dot" /> En producción · probándose con devs reales
+              <span className="eyebrow">
+                <span className="live" /> En producción · probándose con equipos reales
               </span>
             </motion.div>
             <motion.h1 variants={fadeUp}>
               Tu equipo toca el código.{" "}
-              <span className="grad">El sistema se encarga de que nada se rompa.</span>
+              <span className="dim">El sistema se encarga de que nada se rompa.</span>
             </motion.h1>
             <motion.p className="sub" variants={fadeUp}>
-              Coordinación en tiempo real sobre Git para equipos de 2 a 50.
-              Presencia en vivo, ownership invisible y análisis de impacto
-              con resolución real — sin la ceremonia de branches, PRs y reviews.
+              Una capa de coordinación en tiempo real sobre Git, para equipos
+              de 2 a 50. Presencia, ownership e impacto resueltos antes de que
+              el cambio llegue a producción — sin la ceremonia de branches,
+              PRs y reviews.
             </motion.p>
             <motion.div className="cta" variants={fadeUp}>
-              <a className="btn primary" href={APP}>Probar ahora</a>
-              <a className="btn ghost" href="#como">Ver cómo funciona</a>
+              <a className="btn primary lg" href={APP}>
+                Probar laidea <span className="arr">→</span>
+              </a>
+              <a className="btn ghost lg" href="#como">Ver cómo funciona</a>
             </motion.div>
-            <motion.p className="hero-foot" variants={fadeUp}>
-              No reemplaza Git, GitHub ni tu IDE: es una capa encima.
-            </motion.p>
+            <motion.div className="signals" variants={fadeUp}>
+              <span className="sig">presencia · <b>por línea</b></span>
+              <span className="sig">ownership · <b>invisible</b></span>
+              <span className="sig">impacto · <b>resolución real</b></span>
+            </motion.div>
           </motion.div>
 
           <motion.div
-            variants={fadeUp}
-            initial="hidden"
-            animate="show"
-            transition={{ delay: 0.35 }}
+            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            <ProductPeek />
+            <Stage />
           </motion.div>
-
-          <div className="marquee" aria-hidden>
-            <ul>
-              {[...MARQUEE, ...MARQUEE].map((m, i) => (
-                <li key={i}>{m}</li>
-              ))}
-            </ul>
-          </div>
         </div>
       </header>
 
-      {/* TESIS */}
-      <section className="thesis">
+      {/* ── Tira técnica (estática, registro enterprise) ── */}
+      <div className="trust">
         <div className="wrap">
-          <Reveal><div className="eyebrow">La tesis</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">
-              Misma seguridad que tu flujo actual —branches, PRs, reviews—{" "}
-              <span className="grad">sin la ceremonia</span>. El sistema sabe
-              sin que nadie le pregunte.
-            </p>
+          <span className="ti"><b>Sobre Git</b> · <i>git clone</i> basta</span>
+          <span className="ti">Sin CRDT · se previene, no se fusiona</span>
+          <span className="ti">Python · TypeScript · Go · Rust</span>
+          <span className="ti">Presencia por línea, no por archivo</span>
+        </div>
+      </div>
+
+      {/* ── EL RIESGO INVISIBLE (problema) ── */}
+      <section id="problema">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head
+            k="El problema"
+            sub="Dos personas tocan archivos relacionados. Nadie lo ve. El conflicto y el cambio que rompe a un tercero aparecen al final, en el merge — cuando ya cuesta caro."
+          >
+            El riesgo no está en el código.{" "}
+            <span className="soft">Está en que nadie lo ve a tiempo.</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <div className="risk">
+              <div className="risk-col">
+                <div className="risk-h">Ahora · sin coordinación</div>
+                <div className="dev">
+                  <span className="av" style={{ background: "#46c08a" }}>T</span>
+                  <span className="nm">Vos · <em>roster.py</em></span>
+                </div>
+                <div className="dev">
+                  <span className="av" style={{ background: "#5fa8f5" }}>A</span>
+                  <span className="nm">Ana · <em>sync.py → usa claim()</em></span>
+                </div>
+              </div>
+              <div className="risk-mid">
+                <span className="file">claim()</span>
+                <span className="clash">colisión latente</span>
+              </div>
+              <div className="risk-col">
+                <div className="risk-h">Lo que Git ve</div>
+                <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>commit local… push… </span></div>
+                <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>rama… PR… review…</span></div>
+              </div>
+              <div className="risk-foot">
+                <span className="x">!</span>
+                <div>
+                  Git no previene colisiones: las <b>descubre en el merge</b>.
+                  Live Share no entiende tu código. Tu IDE no coordina al equipo.
+                </div>
+              </div>
+            </div>
           </Reveal>
         </div>
       </section>
 
-      {/* CÓMO FUNCIONA — 3 tiempos */}
-      <section id="como">
+      {/* ── LO DETECTA SOLO (pilares como módulos) ── */}
+      <section id="pilares">
+        <span className="sec-line" />
         <div className="wrap">
-          <Reveal><div className="eyebrow">Cómo funciona</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">Editás primero. Se negocia después. Se aplica al final.</p>
+          <Head
+            k="Qué hace, de verdad"
+            sub="Tres mecanismos reales, funcionando hoy. Ninguno es humo: corren en producción con devs reales."
+          >
+            laidea lo detecta solo,{" "}
+            <span className="soft">sin que nadie le pregunte.</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <div className="modules">
+              {/* Presencia */}
+              <div className="mod">
+                <div className="mod-h">
+                  <span className="d" style={{ background: "var(--acc)" }} /> Presencia
+                </div>
+                <div className="mod-screen">
+                  <div className="scr-pres">
+                    <div className="pl x a"><span className="n">12</span><span className="bar" /><span className="who">T</span></div>
+                    <div className="pl y b"><span className="n">15</span><span className="bar" /><span className="who">A</span></div>
+                    <div className="pl"><span className="n">16</span><span className="bar" style={{ background: "var(--bg-3)" }} /></div>
+                    <div className="pl y b"><span className="n">22</span><span className="bar" /><span className="who">A</span></div>
+                  </div>
+                </div>
+                <div className="mod-cap">
+                  <h3>Quién toca qué, en vivo</h3>
+                  <p>Presencia por línea. Nunca dos en la misma: se previene antes, no se resuelve después.</p>
+                </div>
+              </div>
+
+              {/* Ownership */}
+              <div className="mod">
+                <div className="mod-h">
+                  <span className="d" style={{ background: "var(--peer)" }} /> Ownership
+                </div>
+                <div className="mod-screen">
+                  <div className="scr-own">
+                    <div className="row"><span className="fl">roster.py</span><span className="ar">→</span><span className="tg me">vos</span></div>
+                    <div className="row"><span className="fl">sync.py</span><span className="ar">→</span><span className="tg pe">Ana</span></div>
+                    <div className="row"><span className="fl">impact.py</span><span className="ar">→</span><span className="tg fr">libre</span></div>
+                    <div className="row"><span className="fl">git.py</span><span className="ar">→</span><span className="tg pe">Kai</span></div>
+                  </div>
+                </div>
+                <div className="mod-cap">
+                  <h3>De quién es cada zona</h3>
+                  <p>El sistema lo sabe sin que nadie pida permiso. Hay dueño: tu cambio se propone, no se bloquea.</p>
+                </div>
+              </div>
+
+              {/* Impacto */}
+              <div className="mod">
+                <div className="mod-h">
+                  <span className="d" style={{ background: "var(--warn)" }} /> Impacto
+                </div>
+                <div className="mod-screen">
+                  <div className="scr-imp">
+                    <div className="sig">
+                      <code>claim(path)</code> <span className="chg">→ claim(path, user)</span>
+                    </div>
+                    <div className="u"><b>sync.py:142</b></div>
+                    <div className="u"><b>routes.py:88</b></div>
+                    <div className="u"><b>test_own.py:23</b></div>
+                    <div className="ok">avisado automáticamente</div>
+                  </div>
+                </div>
+                <div className="mod-cap">
+                  <h3>Qué se rompe si cambiás esto</h3>
+                  <p>Cambiás una firma y avisa, solo, a quién la usa de verdad. Resolución cruzada, sin falsos positivos.</p>
+                </div>
+              </div>
+            </div>
           </Reveal>
+        </div>
+      </section>
+
+      {/* ── COORDINA EN TIEMPO REAL (flujo) ── */}
+      <section>
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head
+            k="Coordinación en tiempo real"
+            sub="Lo que antes era rama → PR → review → merge, ahora es proponer → aprobar → aplicar. Mismo control, sin la ceremonia."
+          >
+            La negociación ocurre dentro del editor,{" "}
+            <span className="soft">no en una cola de PRs.</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <div className="flow">
+              {FLOW.map((f) => (
+                <div className="fn" key={f.n}>
+                  <div className="fn-n">{f.n}</div>
+                  <h3>{f.t}</h3>
+                  <p>{f.d}</p>
+                  <span className={"chip " + f.chip.cls}>{f.chip.txt}</span>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── MENOS CEREMONIA (3 tiempos) ── */}
+      <section id="como">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head
+            k="Cómo funciona"
+            sub="La tesis, en tres tiempos. Misma seguridad que tu flujo actual; el sistema sabe sin que nadie le pregunte."
+          >
+            Editás primero. Se negocia después.{" "}
+            <span className="soft">Se aplica al final.</span>
+          </Head>
           <motion.div
             className="steps"
             variants={stagger}
-            {...reveal}
+            initial={reduce ? "show" : "hidden"}
+            whileInView="show"
             viewport={{ once: true, amount: 0.2 }}
           >
             {PASOS.map((s) => (
@@ -273,72 +465,19 @@ export function App() {
         </div>
       </section>
 
-      {/* PILARES */}
-      <section id="pilares">
-        <div className="wrap">
-          <Reveal><div className="eyebrow">Qué hace, de verdad</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">
-              Cuatro cosas, bien hechas.{" "}
-              <span className="grad">Ninguna es humo.</span>
-            </p>
-          </Reveal>
-          <motion.div
-            className="cards"
-            variants={stagger}
-            {...reveal}
-            viewport={{ once: true, amount: 0.2 }}
-          >
-            {PILARES.map((p) => (
-              <motion.div
-                key={p.t}
-                className="glass"
-                variants={fadeUp}
-                whileHover={reduce ? undefined : { y: -6 }}
-                transition={{ type: "spring", stiffness: 240, damping: 20 }}
-              >
-                <div className="glow" />
-                <div className="ic">{p.ic}</div>
-                <h3>{p.t}</h3>
-                <p>{p.d}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-          <Reveal delay={0.12} className="langs">
-            <span>Análisis disponible para</span>
-            <b>Python</b><b>TypeScript / JS</b><b>Go</b><b>Rust</b>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* POR QUÉ ES DISTINTO */}
+      {/* ── LO QUE NO SOMOS ── */}
       <section>
+        <span className="sec-line" />
         <div className="wrap">
-          <Reveal><div className="eyebrow">Por qué es distinto</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">
-              Git no previene colisiones. Live Share no entiende tu código.
-              Tu IDE no coordina al equipo.{" "}
-              <span className="grad">laidea es las tres cosas, a la vez, sobre Git.</span>
-            </p>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* LO QUE NO SOMOS */}
-      <section>
-        <div className="wrap">
-          <Reveal><div className="eyebrow">Lo que NO somos</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">
-              Vendemos coordinación, no control.{" "}
-              <span className="grad">El dev nunca se siente vigilado.</span>
-            </p>
-          </Reveal>
+          <Head k="Lo que NO somos">
+            Vendemos coordinación,{" "}
+            <span className="soft">no control.</span>
+          </Head>
           <motion.div
             className="nots"
             variants={stagger}
-            {...reveal}
+            initial={reduce ? "show" : "hidden"}
+            whileInView="show"
             viewport={{ once: true, amount: 0.3 }}
           >
             {NOTS.map((n) => (
@@ -351,26 +490,29 @@ export function App() {
         </div>
       </section>
 
-      {/* PRICING */}
+      {/* ── PRICING ── */}
       <section id="precio">
+        <span className="sec-line" />
         <div className="wrap">
-          <Reveal><div className="eyebrow">Precio</div></Reveal>
-          <Reveal delay={0.08}>
-            <p className="big">Gratis de verdad para empezar. Pagás cuando escalás.</p>
-          </Reveal>
+          <Head
+            k="Precio"
+            sub="Gratis de verdad para empezar, sin asteriscos. Pagás cuando el equipo escala y necesita más profundidad."
+          >
+            Para equipos nuevos sin inercia,{" "}
+            <span className="soft">empezar no cuesta.</span>
+          </Head>
           <motion.div
             className="prices"
             variants={stagger}
-            {...reveal}
+            initial={reduce ? "show" : "hidden"}
+            whileInView="show"
             viewport={{ once: true, amount: 0.2 }}
           >
             <motion.div className="price" variants={fadeUp}>
               <div className="tier">Free · para siempre</div>
-              <h4>Para tu equipo chico</h4>
-              <p className="price-sub">Todo el core, sin asteriscos. Para equipos nuevos sin inercia.</p>
-              <ul>
-                {FREE.map((f) => <li key={f}>{f}</li>)}
-              </ul>
+              <h4>Tu equipo chico</h4>
+              <p className="price-sub">Todo el core de coordinación, sin recortes. Para equipos que empiezan.</p>
+              <ul>{FREE.map((f) => <li key={f}>{f}</li>)}</ul>
               <a className="btn ghost full" href={APP}>Empezar gratis</a>
             </motion.div>
             <motion.div className="price pro" variants={fadeUp}>
@@ -378,32 +520,26 @@ export function App() {
               <div className="tier">Premium · escala y profundidad</div>
               <h4>Cuando crecés</h4>
               <p className="price-sub">Más equipo, más repos, análisis más profundo y conocimiento distribuido.</p>
-              <ul>
-                {PRO.map((f) => <li key={f}>{f}</li>)}
-              </ul>
-              <a className="btn primary full" href={APP}>Entrar a laidea</a>
+              <ul>{PRO.map((f) => <li key={f}>{f}</li>)}</ul>
+              <a className="btn primary full" href={APP}>Entrar a laidea <span className="arr">→</span></a>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* CTA FINAL */}
+      {/* ── CTA FINAL ── */}
       <section className="final">
-        <div className="halo" aria-hidden />
+        <span className="sec-line" />
         <div className="wrap">
-          <Reveal>
-            <h2>
-              Misma vida, <span className="grad">menos dolor.</span>
-            </h2>
-          </Reveal>
-          <Reveal delay={0.08}>
+          <Reveal><h2>Misma vida, menos dolor.</h2></Reveal>
+          <Reveal delay={0.06}>
             <p className="final-sub">
               Editar primero. Negociar después. Aplicar al final.
               El sistema sabe sin que nadie le pregunte.
             </p>
           </Reveal>
-          <Reveal delay={0.16} className="final-cta">
-            <a className="btn primary lg" href={APP}>Entrar a laidea</a>
+          <Reveal delay={0.12} className="final-cta">
+            <a className="btn primary lg" href={APP}>Entrar a laidea <span className="arr">→</span></a>
             <a className="btn ghost lg" href="#como">Cómo funciona</a>
           </Reveal>
         </div>
@@ -417,6 +553,7 @@ export function App() {
           </div>
           <div className="foot-r">
             <a href={APP}>Entrar</a>
+            <a href="#pilares">Qué hace</a>
             <a href="#como">Cómo funciona</a>
             <a href="#precio">Precio</a>
           </div>

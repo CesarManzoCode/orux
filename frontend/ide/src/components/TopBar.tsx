@@ -1,3 +1,4 @@
+import { GitBranch, UserPlus } from "lucide-react";
 import { useStore } from "../useStore";
 import { salir, crearInvite } from "../store";
 
@@ -47,6 +48,7 @@ export function TopBar() {
   );
   const visibles = otros.slice(0, 4);
   const extra = otros.length - visibles.length;
+  const g = s.git;
   return (
     <header className="topbar isla">
       <div className="tb-grp">
@@ -83,6 +85,25 @@ export function TopBar() {
 
       <span className="spacer" />
 
+      {/* Estado del repo, agrupado: rama + cambios. Color = estado (rama
+          neutra; cambios en ámbar si los hay). Lectura de cabina. */}
+      {g && g.available && (
+        <>
+          <div className="tb-grp repo">
+            <span className="tb-rama" title="rama actual">
+              <GitBranch size={12} /> {g.branch || "—"}
+            </span>
+            <span
+              className={"tb-chg" + (g.changes === 0 ? " limpio" : "")}
+              title="cambios en el árbol de trabajo"
+            >
+              {g.changes === 0 ? "limpio" : g.changes + "Δ"}
+            </span>
+          </div>
+          <span className="tb-div" />
+        </>
+      )}
+
       <div className="tb-grp">
         {/* Sólo el admin del equipo invita; el código aparece inline para
             copiarlo y pasarlo (un solo uso). */}
@@ -92,7 +113,9 @@ export function TopBar() {
               invitar <code>{s.inviteCode}</code>
             </span>
           ) : (
-            <button className="invitar" onClick={crearInvite}>invitar</button>
+            <button className="invitar" onClick={crearInvite}>
+              <UserPlus size={12} /> invitar
+            </button>
           )
         )}
         <span className={clase}>{ETIQUETA[s.conn]}</span>

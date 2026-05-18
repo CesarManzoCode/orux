@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { useStore } from "../useStore";
-import { editar, guardar, presence } from "../store";
+import { editar, guardar, presence, setCaret } from "../store";
 import { resaltar } from "../lang";
 
 // Mismo mecanismo que el cliente vanilla, ahora en un componente: textarea
@@ -24,6 +24,7 @@ export function Editor() {
   const presRef = useRef<HTMLDivElement>(null);
   const activaRef = useRef<HTMLDivElement>(null);
   const presScrollRef = useRef<HTMLDivElement>(null);
+  const gutMarksRef = useRef<HTMLDivElement>(null);
   const selRef = useRef<{ s: number; e: number } | null>(null);
   const pendingSel = useRef<number | null>(null);
   // ¿El último cambio de `valor` lo originó ESTE cliente? Si sí, React ya
@@ -36,6 +37,17 @@ export function Editor() {
     const ta = taRef.current;
     if (!ta) return 1;
     return ta.value.slice(0, ta.selectionStart).split("\n").length;
+  }
+
+  // Línea/columna 1-based para la status bar y el inspector. NO viaja al
+  // server (la presencia ya manda la línea); setCaret no-opea si no
+  // cambió, así que no hay re-render extra al quedarse quieto el cursor.
+  function publicarCaret() {
+    const ta = taRef.current;
+    if (!ta) return;
+    const antes = ta.value.slice(0, ta.selectionStart);
+    const nl = antes.lastIndexOf("\n");
+    setCaret(antes.split("\n").length, ta.selectionStart - nl);
   }
 
   // Pinta resaltado + gutter + línea activa. Llamar tras cada cambio.
@@ -60,6 +72,8 @@ export function Editor() {
       gutRef.current.style.transform = `translateY(${-st}px)`;
     if (presScrollRef.current)
       presScrollRef.current.style.transform = `translateY(${-st}px)`;
+    if (gutMarksRef.current)
+      gutMarksRef.current.style.transform = `translateY(${-st}px)`;
     if (activaRef.current) {
       const ln = lineaActual();
       activaRef.current.style.top =
@@ -70,12 +84,24 @@ export function Editor() {
   // Marcas de presencia de los OTROS en este archivo (no yo).
   function pintarPresencia() {
     const cont = presScrollRef.current;
+    const gut = gutMarksRef.current;
+    if (gut) gut.innerHTML = "";
     if (!cont) return;
     cont.innerHTML = "";
     if (!path) return;
     for (const p of Object.values(s.peers)) {
       if (!s.yo || p.client_id === s.yo.client_id) continue;
       if (p.path !== path) continue;
+      // Marca en el gutter: un punto del color del peer a la altura EXACTA
+      // de su línea (misma aritmética sagrada PAD_TOP/LINE_H que la banda).
+      if (gut) {
+        const d = document.createElement("div");
+        d.className = "gmark";
+        d.style.top = PAD_TOP + (p.line - 1) * LINE_H + "px";
+        d.style.background = p.color;
+        d.title = p.name + " · línea " + p.line;
+        gut.appendChild(d);
+      }
       const m = document.createElement("div");
       m.className = "marca";
       m.style.top = PAD_TOP + (p.line - 1) * LINE_H + "px";
@@ -132,6 +158,7 @@ export function Editor() {
     fromLocal.current = true;
     editar(path, e.target.value);
     presence(path, e.target.value.slice(0, e.target.selectionStart).split("\n").length);
+    publicarCaret();
   }
 
   // Ergonomía mínima de editor (sin librerías): pares, Tab=4, Enter mantiene
@@ -182,6 +209,20 @@ export function Editor() {
     }
   }
 
+  // Overview lateral (mapa de señales tipo minimapa, sin render del
+  // código): ticks de presencia remota a su posición proporcional. Es
+  // declarativo y barato (acotado por #peers). Geometría aparte de la
+  // sagrada: posiciona por porcentaje, no toca el textarea.
+  const totalLineas = Math.max(1, valor.split("\n").length);
+  const overview = path
+    ? Object.values(s.peers)
+        .filter((p) => p.path === path && (!s.yo || p.client_id !== s.yo.client_id))
+        .map((p) => ({
+          id: p.client_id, color: p.color, name: p.name,
+          top: Math.min(99, ((p.line - 1) / totalLineas) * 100),
+        }))
+    : [];
+
   return (
     <div className={"editorwrap" + (path ? "" : " off")}>
       <div className="ed-active" ref={activaRef} style={{ display: path ? "block" : "none" }} />
@@ -197,11 +238,26 @@ export function Editor() {
         onChange={onChange}
         onKeyDown={onKeyDown}
         onScroll={sincronizarScroll}
-        onKeyUp={() => { guardarSel(); sincronizarScroll(); if (path) presence(path, lineaActual()); }}
-        onClick={() => { guardarSel(); sincronizarScroll(); if (path) presence(path, lineaActual()); }}
+        onKeyUp={() => { guardarSel(); sincronizarScroll(); publicarCaret(); if (path) presence(path, lineaActual()); }}
+        onClick={() => { guardarSel(); sincronizarScroll(); publicarCaret(); if (path) presence(path, lineaActual()); }}
         onSelect={guardarSel}
       />
-      <div className="ed-gutter"><div className="ed-gutter-scroll" ref={gutRef} /></div>
+      <div className="ed-gutter">
+        <div className="ed-gutter-scroll" ref={gutRef} />
+        <div className="ed-gutter-marks" ref={gutMarksRef} />
+      </div>
+      {path && overview.length > 0 && (
+        <div className="ed-overview" aria-hidden="true">
+          {overview.map((o) => (
+            <span
+              key={o.id}
+              className="ovmark"
+              style={{ top: o.top + "%", background: o.color }}
+              title={o.name}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

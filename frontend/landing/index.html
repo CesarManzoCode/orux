@@ -4,11 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>laidea — coordinación en tiempo real sobre Git</title>
+    <meta name="theme-color" content="#08090b" />
+    <title>laidea — capa de coordinación en tiempo real sobre Git</title>
     <meta
       name="description"
-      content="Misma seguridad que branches, PRs y reviews, sin la ceremonia. El sistema sabe sin que nadie le pregunte: presencia en vivo, ownership invisible y análisis de impacto con resolución real, todo sobre Git."
+      content="Una capa de coordinación en tiempo real sobre Git para equipos de ingeniería. Presencia por línea, ownership invisible y análisis de impacto con resolución real — la misma seguridad que branches, PRs y reviews, sin la ceremonia."
     />
+
+    <!--
+      Tipografía REAL. El sistema de diseño referencia "Inter" y
+      "JetBrains Mono" pero la landing corría con la fuente del sistema
+      (el IDE sí las cargaba; la landing no — la mejora de calidad
+      percibida más grande por línea tocada). Carga en runtime con
+      preconnect para no bloquear y display=swap; si la red falla, el
+      stack de sistema en los tokens toma el relevo sin romper nada.
+      Inter va como fuente VARIABLE con eje óptico (opsz) para que los
+      titulares respiren y el cuerpo quede nítido.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    />
+
+    <!-- Pinta el fondo profundo antes de que cargue el CSS: cero flash. -->
+    <style>
+      html, body { background: #08090b; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
