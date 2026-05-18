@@ -274,8 +274,16 @@ export function Editor() {
     }
     if (e.key === "Enter") {
       const ini = v.lastIndexOf("\n", a - 1) + 1;
-      const sangria = (v.slice(ini, a).match(/^[ \t]*/) || [""])[0];
-      aplicar(v.slice(0, a) + "\n" + sangria + v.slice(b), a + 1 + sangria.length);
+      const lineaHasta = v.slice(ini, a);
+      const sangria = (lineaHasta.match(/^[ \t]*/) || [""])[0];
+      // Si la línea ABRE bloque (`:` de Python, o `{`/`[`/`(`), Enter
+      // suma un nivel automático = el "tab automático" esperado.
+      const abre = /[:{[(]\s*$/.test(lineaHasta);
+      const extra = abre ? "    " : "";
+      aplicar(
+        v.slice(0, a) + "\n" + sangria + extra + v.slice(b),
+        a + 1 + sangria.length + extra.length,
+      );
       return;
     }
     if (PARES[e.key] && a === b) {
