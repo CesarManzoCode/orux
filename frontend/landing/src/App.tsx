@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 
-/* Landing de laidea — dirección de arte v3 "Infraestructura / Sala de
+/* Landing de Orux — dirección de arte v3 "Infraestructura / Sala de
    control". No es una landing SaaS: es la ficha de una capa de
    coordinación para equipos de ingeniería. Identidad ACERO (mate, sin
    gradiente de hue); el verde es estado "vivo", no marca. Composición
@@ -276,7 +276,7 @@ export function App() {
             </motion.p>
             <motion.div className="cta" variants={fadeUp}>
               <a className="btn primary lg" href={APP}>
-                Entrar a laidea <span className="arr">→</span>
+                Entrar a Orux <span className="arr">→</span>
               </a>
               <a className="btn ghost lg" href="#como">Ver cómo funciona</a>
             </motion.div>
@@ -362,7 +362,7 @@ export function App() {
             k="02 · Qué hace, de verdad"
             sub="Tres mecanismos reales, funcionando hoy. Ninguno es humo: corren en producción con devs reales."
           >
-            laidea lo detecta solo,{" "}
+            Orux lo detecta solo,{" "}
             <span className="soft">sin que nadie le pregunte.</span>
           </Head>
           <Reveal delay={0.12}>
@@ -545,7 +545,7 @@ export function App() {
               <h4>Cuando crecés</h4>
               <p className="price-sub">Más equipo, más repos, análisis más profundo y conocimiento distribuido.</p>
               <ul>{PRO.map((f) => <li key={f}>{f}</li>)}</ul>
-              <a className="btn primary full" href={APP}>Entrar a laidea <span className="arr">→</span></a>
+              <a className="btn primary full" href={APP}>Entrar a Orux <span className="arr">→</span></a>
             </motion.div>
           </motion.div>
         </div>
@@ -563,7 +563,7 @@ export function App() {
             </p>
           </Reveal>
           <Reveal delay={0.12} className="final-cta">
-            <a className="btn primary lg" href={APP}>Entrar a laidea <span className="arr">→</span></a>
+            <a className="btn primary lg" href={APP}>Entrar a Orux <span className="arr">→</span></a>
             <a className="btn ghost lg" href="#como">Cómo funciona</a>
           </Reveal>
         </div>

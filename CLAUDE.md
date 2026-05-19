@@ -1,6 +1,6 @@
 # Contexto del proyecto
 
-Este directorio contiene el proyecto **orux** (nombre temporal). El README.md tiene la visión completa. Léelo primero antes de hacer cualquier cosa.
+Este directorio contiene el proyecto **Orux** (nombre definitivo del producto; el paquete Python se sigue llamando `orux` en minúscula como identificador técnico). El README.md tiene la visión completa. Léelo primero antes de hacer cualquier cosa.
 
 ## Qué estamos construyendo
 
