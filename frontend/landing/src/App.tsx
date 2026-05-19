@@ -60,7 +60,7 @@ function Brand({ href = "#top", tag }: { href?: string; tag?: boolean }) {
   return (
     <a className="brand" href={href}>
       <span className="mk" aria-hidden />
-      la<b>idea</b>
+      <b>Orux</b>
       {tag && <span className="tag">coordination layer</span>}
     </a>
   );

@@ -47,7 +47,7 @@ export function Login() {
         <div className="lp-grid" aria-hidden />
         <div className="lp-inner">
           <div className="lp-marca">
-            la<b>idea</b><span>coordination layer</span>
+            <b>Orux</b><span>coordination layer</span>
           </div>
           <div className="lp-eyebrow">
             <i /> capa de coordinación · en producción
@@ -93,7 +93,7 @@ export function Login() {
       {/* DERECHA: la consola de acceso. */}
       <section className="landing-auth">
         <div className="login-card">
-          <div className="marca">la<b>idea</b></div>
+          <div className="marca"><b>Orux</b></div>
           <div className="cue"><span className="lk" /> sesión cifrada · cuenta cerrada</div>
           <p>Entrá con tu usuario o creá uno nuevo. Sin cuenta no se ve el workspace.</p>
 

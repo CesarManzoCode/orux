@@ -53,7 +53,7 @@ export function TopBar() {
     <header className="topbar isla">
       <div className="tb-grp">
         <div className="mark"><Logomark /></div>
-        <span className="brand">la<b>idea</b></span>
+        <span className="brand"><b>Orux</b></span>
         <span className="chev">›</span>
         {/* Capa 15: el breadcrumb muestra el EQUIPO actual (no el host). */}
         <span className="proy">{s.equipo ? s.equipo.nombre : s.proyecto}</span>

@@ -47,7 +47,7 @@ export function Lobby() {
         <div className="lp-grid" aria-hidden />
         <div className="lp-inner">
           <div className="lp-marca">
-            la<b>idea</b><span>coordination layer</span>
+            <b>Orux</b><span>coordination layer</span>
           </div>
           <div className="lp-eyebrow">
             <i className={"st-" + conn.cls} /> {conn.txt} · {yo?.name || "—"}
@@ -104,7 +104,7 @@ export function Lobby() {
       {/* DERECHA: la consola. Entrar a un equipo, crear, o unirme. */}
       <section className="landing-auth">
         <div className="login-card">
-          <div className="marca">la<b>idea</b></div>
+          <div className="marca"><b>Orux</b></div>
           <div className="cue"><span className="lk" /> cuenta cerrada · elegí tu equipo</div>
 
           <div className="h2" style={{ marginTop: "0.7rem" }}>
