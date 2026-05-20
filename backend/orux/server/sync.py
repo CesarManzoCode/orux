@@ -430,9 +430,16 @@ class SyncServer:
         (todos los tests previos siguen valiendo sin tocarse).
 
         "Sin clickear, lo hace solo" (README). Reglas: si el afectado no
-        tiene dueño no hay a quién avisar; si el dueño es el propio autor no
-        se le avisa (evita auto-ruido); si no parsea, `impacto` da {} y no
-        manda nada. Todo scopeado al workspace/ownership de ESTE equipo.
+        tiene dueño no hay a quién avisar; si no parsea, `impacto` da {} y
+        no manda nada. Todo scopeado al workspace/ownership de ESTE equipo.
+
+        Decisión del usuario: el aviso TAMBIÉN va al autor cuando el
+        afectado le pertenece. Misma tesis aplicada de forma simétrica —
+        si cambiar `Usuario` rompe `auth.py`, importa por igual sea quien
+        sea el dueño de `auth.py`. El archivo origen del cambio ya queda
+        fuera por `archivos_afectados` (filtra `o != path`), así que no
+        hay auto-eco del archivo recién editado: solo OTROS archivos
+        suyos donde el símbolo realmente se usa.
         """
         # Capa 16: el análisis corre casi por tecla y antes era SÍNCRONO en
         # el event loop — bloqueaba presencia/locks/broadcasts de TODO el
@@ -476,7 +483,10 @@ class SyncServer:
                 por_archivo.setdefault(af, []).append(simbolo)
         for af, simbolos in por_archivo.items():
             dueño = rt.ownership.owner(af)
-            if dueño is None or dueño == autor_id:
+            # El autor SÍ recibe aviso si el afectado le pertenece
+            # (decisión del usuario): saber qué de tu propio código usa
+            # lo que acabás de tocar es la misma tesis aplicada simétrica.
+            if dueño is None:
                 continue
             syms = sorted(simbolos)
             await self._enviar_a(
@@ -550,7 +560,9 @@ class SyncServer:
             if af in directos:
                 continue  # ya lo cubrió el directo (no duplicar/pisar)
             dueño = rt.ownership.owner(af)
-            if dueño is None or dueño == autor_id:
+            # Misma simetría que el directo: el autor también recibe la
+            # onda transitiva si el archivo aguas-abajo le pertenece.
+            if dueño is None:
                 continue
             # Solo la propagación REAL (interfaz contaminada). Terminal =
             # uso en cuerpo: no es la onda, es ruido (decisión del usuario).
@@ -623,7 +635,16 @@ class SyncServer:
             if propuesto == contenido:
                 continue  # el acceso no aparece textual acá: nada que hacer
             dueño = rt.ownership.owner(af)
-            etiqueta = f"{autor_nombre} · rename {ren.viejo}→{ren.nuevo}"
+            # Capa 26 (premium): el cambio lo construye el server (codemod
+            # `aplicar_rename`), no lo tipeó nadie en ese archivo. El dueño
+            # ve un autor explícito "OruxBot" para que la propuesta se lea
+            # como "el sistema te propone esto" — misma ventana aprobar/
+            # rechazar de capa 4, solo cambia quién aparece arriba. El
+            # contexto del rename va en el mismo string (lo que cambió a lo
+            # que pasa). `author_id` queda como el client_id real del que
+            # disparó el rename: si el dueño rechaza, el revert (capa 4) le
+            # llega a esa identidad y no a un id sintético sin conexión.
+            etiqueta = f"OruxBot · rename {ren.viejo}→{ren.nuevo}"
             if dueño is None or dueño == autor_id:
                 # Sin dueño o propio: se aplica directo (igual que un
                 # update de capa 4 sin dueño). El baseline avanza: el

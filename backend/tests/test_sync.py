@@ -1671,12 +1671,16 @@ async def test_capa26_premium_propaga_rename_como_propuesta(servidor) -> None:
         await u1.send(json.dumps({"type": "save", "path": "models.py"}))
 
         # Premium: a u2 (dueño de auth.py) le llega una PROPUESTA capa 4
-        # con el codemod ya aplicado y el contexto en el nombre del autor.
+        # con el codemod ya aplicado. El autor visible es "OruxBot" (el
+        # codemod lo construyó el server, no lo tipeó nadie en auth.py);
+        # el contexto del rename va en el mismo string para que el dueño
+        # vea de un vistazo qué cambió.
         msg = await recv_tipo(u2, "proposal", timeout=5)
         p = msg["proposal"]
         assert p["path"] == "auth.py"
         assert "x.name" in p["content"]
         assert "x.variable" not in p["content"]
+        assert "OruxBot" in p["author_name"]
         assert "rename variable→name" in p["author_name"]
 
 
