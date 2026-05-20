@@ -40,6 +40,21 @@ def test_estado_repo_vacio(tmp_path) -> None:
     assert e.commits == []
 
 
+def test_init_arranca_en_main(tmp_path) -> None:
+    """La rama por defecto al inicializar un workspace fresco es `main`.
+
+    `master` quedó como el default histórico de git: el usuario lo vio en
+    la UI y pidió que nadie use eso (decisión del usuario, 2026-05-19).
+    Sin esto, en hosts con `init.defaultBranch` no configurado el repo
+    arrancaba como `master`. Hacemos el `git init -b main` (con fallback
+    a `symbolic-ref HEAD refs/heads/main` para git viejo); este test fija
+    el contrato sin depender de la config global del host de tests.
+    """
+    e = GitRepo(tmp_path).estado()
+    assert e.disponible is True
+    assert e.rama == "main"
+
+
 def test_estado_cuenta_cambios_sin_commitear(tmp_path) -> None:
     r = GitRepo(tmp_path)
     r.asegurar()

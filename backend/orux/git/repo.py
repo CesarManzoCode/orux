@@ -166,12 +166,25 @@ class GitRepo:
         Crea el directorio si no existe y hace `git init` si todavía no es un
         repo. No configura identidad ni hace commits: no commiteamos desde
         aquí. No falla si git no está (el `_run` lo absorbe).
+
+        Rama inicial = **`main`** (decisión del usuario, 2026-05-19). Desde
+        git 2.28 `init -b main` es lo correcto; antes de eso (`-b` desconocido)
+        cae al fallback `git init` + `symbolic-ref HEAD refs/heads/main`, que
+        renombra la rama "no nacida" sin afectar nada más. Sin esto, en hosts
+        con `init.defaultBranch` antiguo (o sin él) el repo arranca como
+        `master` — la UI lo mostraba y el usuario lo vio.
         """
         if self._root is None:
             return
         self._root.mkdir(parents=True, exist_ok=True)
         if not (self._root / ".git").is_dir():
-            self._run("init", "-q")
+            rc, _ = self._run("init", "-q", "-b", "main")
+            if rc != 0:
+                # Git viejo: `-b` no existe. init plano + reapuntar HEAD a
+                # `main` (la rama es "no nacida": no hay commits, sólo se
+                # cambia el nombre).
+                self._run("init", "-q")
+                self._run("symbolic-ref", "HEAD", "refs/heads/main")
 
     def _git_cred(
         self,

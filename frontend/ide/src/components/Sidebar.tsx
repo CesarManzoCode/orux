@@ -119,9 +119,20 @@ function PanelGit() {
   );
 }
 
-export function Sidebar({ vista }: { vista: "archivos" | "git" }) {
+export function Sidebar({
+  vista,
+  width,
+}: {
+  vista: "archivos" | "git";
+  // Si el usuario redimensionó el panel, gana sobre los valores del CSS.
+  // Si no, undefined → manda la regla del CSS (incluyendo media queries).
+  width?: number;
+}) {
   return (
-    <aside className="sidebar isla">
+    <aside
+      className="sidebar isla"
+      style={width != null ? { width: width + "px" } : undefined}
+    >
       {vista === "archivos" ? <PanelArchivos /> : <PanelGit />}
     </aside>
   );

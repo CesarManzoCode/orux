@@ -6,13 +6,18 @@ import { autenticar } from "../store";
 // contrato que siempre (capa 7); el server decide, esto sólo recoge
 // usuario/contraseña.
 //
-// Dirección de arte v2 (login): deja de ser "una tarjeta flotando en
-// negro". Es un split coherente con la landing — IZQUIERDA el relato en
-// registro enterprise (kicker mono, titular sólido SIN gradiente, un
-// readout sobrio de coordinación en vivo); DERECHA una CONSOLA de
-// acceso: campos con label, cue de seguridad, botones precisos, estado
-// de carga real y error elegante. El motion vive sólo acá (el IDE es
-// quieto a propósito) y respeta prefers-reduced-motion (CSS global).
+// Dirección de arte v2 (login): split coherente con la landing —
+// IZQUIERDA el relato en registro enterprise (kicker mono, titular
+// sólido SIN gradiente, readout sobrio de coordinación en vivo);
+// DERECHA una CONSOLA de acceso: brand sólido arriba, campos con label,
+// cue de seguridad, botones precisos, estado de carga real y error
+// elegante. El motion vive sólo acá (el IDE es quieto a propósito) y
+// respeta prefers-reduced-motion (CSS global).
+//
+// 2026-05-19: la "Orux" del card se renombró .lc-brand (antes .marca,
+// que pisaba al .marca GLOBAL del editor: position:absolute → el brand
+// se salía de flujo y se encimaba con el cue de abajo). Mismo
+// contenido, clase scopeada al acceso. Nada más cambia del store.
 //
 // El store NO expone "in-flight": al éxito el componente se desmonta
 // (App: !authed → <Login/>); al fallo cambia loginError/conn. El estado
@@ -90,11 +95,14 @@ export function Login() {
         </div>
       </section>
 
-      {/* DERECHA: la consola de acceso. */}
+      {/* DERECHA: la consola de acceso. Brand sólido arriba (sin
+          pisarse con el cue, ver nota del componente). */}
       <section className="landing-auth">
         <div className="login-card">
-          <div className="marca"><b>Orux</b></div>
-          <div className="cue"><span className="lk" /> sesión cifrada · cuenta cerrada</div>
+          <div className="lc-head">
+            <div className="lc-brand"><b>Orux</b></div>
+            <div className="cue"><span className="lk" /> sesión cifrada · cuenta cerrada</div>
+          </div>
           <p>Entrá con tu usuario o creá uno nuevo. Sin cuenta no se ve el workspace.</p>
 
           <div className="fg">

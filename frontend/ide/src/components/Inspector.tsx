@@ -71,7 +71,14 @@ const ACT_IC: Record<ActItem["kind"], ReactNode> = {
   delete: <Trash2 size={12} />, workspace: <FolderSync size={12} />,
 };
 
-export function Inspector({ onClose }: { onClose: () => void }) {
+export function Inspector({
+  onClose,
+  width,
+}: {
+  onClose: () => void;
+  // Igual que Sidebar: si el usuario redimensionó, gana sobre el CSS.
+  width?: number;
+}) {
   const s = useStore();
   const path = s.currentPath;
   const c = path ? chipDe(path) : null;
@@ -93,7 +100,10 @@ export function Inspector({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <aside className="inspector isla">
+    <aside
+      className="inspector isla"
+      style={width != null ? { width: width + "px" } : undefined}
+    >
       <header className="in-head">
         <span className="in-eyebrow">inspector de coordinación</span>
         <button className="in-x" title="ocultar inspector" onClick={onClose}>

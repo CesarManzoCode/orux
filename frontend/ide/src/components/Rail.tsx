@@ -1,20 +1,17 @@
 import {
-  Files, GitBranch, Shield, PanelRight,
+  Files, GitBranch, Shield,
 } from "lucide-react";
 import { useStore } from "../useStore";
 
-// Capa 26 — Activity rail. Tres bloques con jerarquía real: navegación
-// PRIMARIA (explorador, control de versiones) arriba, ACCIONES de equipo
-// (admin) separadas por un hairline, y el toggle del inspector anclado
-// abajo (chrome de ventana, no navegación). Indicadores sutiles: un punto
-// cuando hay algo que mirar (cambios git, propuestas para vos) — la rail
-// avisa sin gritar.
+// Capa 26 — Activity rail. Dos bloques con jerarquía real: navegación
+// PRIMARIA (explorador, control de versiones) arriba y ACCIONES de equipo
+// (admin) separadas por un hairline. El toggle del inspector vive en el
+// TopBar (esquina superior derecha): pasaba desapercibido acá abajo, y
+// arriba es donde el ojo lo busca en cualquier IDE.
 export function Rail(props: {
   vista: "archivos" | "git";
   setVista: (v: "archivos" | "git") => void;
   abrirAdmin: () => void;
-  inspOpen: boolean;
-  toggleInsp: () => void;
 }) {
   const s = useStore();
   // Propuestas que esperan TU verde (sos dueño): la rail lo señala aunque
@@ -57,18 +54,6 @@ export function Rail(props: {
           </button>
         </div>
       )}
-
-      <span className="rail-fill" />
-
-      <div className="rail-grp">
-        <button
-          className={"rail-b" + (props.inspOpen ? " activo" : "")}
-          title={props.inspOpen ? "ocultar inspector" : "mostrar inspector"}
-          onClick={props.toggleInsp}
-        >
-          <PanelRight size={18} />
-        </button>
-      </div>
     </nav>
   );
 }

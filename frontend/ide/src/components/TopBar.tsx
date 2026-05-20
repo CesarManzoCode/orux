@@ -1,4 +1,4 @@
-import { GitBranch, UserPlus } from "lucide-react";
+import { GitBranch, UserPlus, PanelRight, PanelRightClose } from "lucide-react";
 import { useStore } from "../useStore";
 import { salir, crearInvite } from "../store";
 
@@ -37,7 +37,13 @@ function Logomark() {
 // vez de un río de elementos sueltos. Izquierda = identidad/contexto
 // (marca · equipo). Centro = presencia del equipo (el diferenciador,
 // first-class). Derecha = estado de sesión + acciones, de menor peso.
-export function TopBar() {
+export function TopBar({
+  inspOpen,
+  toggleInsp,
+}: {
+  inspOpen: boolean;
+  toggleInsp: () => void;
+}) {
   const s = useStore();
   const clase =
     s.conn === "conectado" ? "status ok"
@@ -131,6 +137,20 @@ export function TopBar() {
           </span>
         )}
         {s.authed && <button className="salir" onClick={salir}>salir</button>}
+      </div>
+
+      {/* Toggle del inspector — esquina superior derecha, donde el ojo lo
+          espera (chrome de ventana). El botón viejo en la rail inferior
+          pasaba desapercibido. */}
+      <span className="tb-div" />
+      <div className="tb-grp">
+        <button
+          className={"tb-insp" + (inspOpen ? " activo" : "")}
+          title={inspOpen ? "ocultar inspector" : "mostrar inspector"}
+          onClick={toggleInsp}
+        >
+          {inspOpen ? <PanelRightClose size={14} /> : <PanelRight size={14} />}
+        </button>
       </div>
     </header>
   );
