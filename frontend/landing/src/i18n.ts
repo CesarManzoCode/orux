@@ -16,6 +16,7 @@ export const T = {
     nav_problema: "Problema",
     nav_pilares: "Qué hace",
     nav_como: "Cómo funciona",
+    nav_seguridad: "Seguridad",
     nav_faq: "FAQ",
     nav_precio: "Precio",
     nav_produccion: "en producción",
@@ -24,11 +25,13 @@ export const T = {
 
     // Hero
     hero_eyebrow: "En producción · equipos reales coordinando en vivo",
+    hero_audience: "Para equipos de 2 a 50 devs · self-host con Docker · gratis hasta 5",
     hero_h1_1: "Quién toca qué. De quién es. Qué rompe.",
     hero_h1_2: "En tiempo real, sobre el Git que ya usás.",
-    hero_sub: "Orux es una capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto resueltos antes del merge — sin reemplazar GitHub, GitLab ni tu IDE.",
+    hero_sub: "Orux es la capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto resueltos antes del merge — sin reemplazar GitHub, GitLab ni tu IDE.",
     hero_cta_primary: "Crear tu workspace",
     hero_cta_secondary: "Cómo funciona",
+    hero_micro: "Sin trial · sin tarjeta · sin instalación · git clone sigue funcionando.",
     hero_sig1: "Presencia ·",
     hero_sig1_b: "te avisa antes de pisar a alguien",
     hero_sig2: "Ownership ·",
@@ -190,6 +193,61 @@ export const T = {
       },
     ],
 
+    // Audiencia (para quién es)
+    s_aud_k: "Para quién es",
+    s_aud_h_1: "Diseñado para tres situaciones",
+    s_aud_h_2: "donde la coordinación duele de verdad.",
+    s_aud_sub: "No es una herramienta universal. Funciona mejor cuando la coordinación es asíncrona, el código todavía cabe en una cabeza y todavía no es tarde para instaurar el flujo.",
+    aud: [
+      {
+        t: "Founder técnico · 2 a 5 devs",
+        d: "Estás escribiendo el código y armando el equipo a la vez. Cada bloqueo cuesta una tarde tuya. Orux te quita el coste de coordinar sin meter governance corporativo.",
+        b: ["Workspace en minutos, sin governance", "Gratis para siempre hasta 5 devs", "Self-host opcional si el cliente lo exige"],
+      },
+      {
+        t: "Open source que arranca",
+        d: "Contribuidores asíncronos, sin standups, sin Slack común. CODEOWNERS envejece mal y los conflictos los descubre el CI.",
+        b: ["Ownership vivo, no archivo desactualizado", "Self-host con Docker, repo Git real", "Visible para nuevos sin reunión de onboarding"],
+      },
+      {
+        t: "Equipo medio · 5 a 50 devs",
+        d: "El líder ya no recuerda quién toca qué. El conocimiento vive en su cabeza y se vuelve cuello de botella. Orux distribuye el impacto sin reuniones nuevas.",
+        b: ["Conocimiento distribuido por uso real", "Impacto entre repos en Premium", "Convive con tu GitHub/GitLab existente"],
+      },
+    ],
+
+    // Seguridad / privacidad
+    s_sec_k: "Seguridad y privacidad",
+    s_sec_h_1: "Tu código no se vuelve nuestro problema.",
+    s_sec_h_2: "Auditable, self-host y reversible.",
+    s_sec_sub: "Orux se monta encima de Git: si te vas mañana, el repositorio queda intacto. La capa de coordinación es propiedad tuya, no rehén.",
+    sec: [
+      {
+        t: "Self-host con Docker",
+        d: "Una imagen, un docker compose up. Tu código nunca sale de tu infraestructura. Mismo binario que la versión hospedada.",
+      },
+      {
+        t: "Token Git efímero, jamás guardado",
+        d: "Cuando hacés push, tu token pasa solo por el env del subprocess. Nunca en disco, ni en logs, ni en la URL, ni en .git/config. Salida scrubeada.",
+      },
+      {
+        t: "Capa sobre Git, no rehén",
+        d: "Cada workspace es un repo Git real. git clone basta. Si dejás Orux, te llevás el historial completo en un comando.",
+      },
+      {
+        t: "Sin telemetría del contenido",
+        d: "No leemos tu código para entrenar nada. El análisis de impacto corre local al server (tuyo si self-host). No hay LLM en el camino crítico.",
+      },
+      {
+        t: "Open core, auditable",
+        d: "El núcleo está en abierto. Podés leer cómo manejamos los tokens, el ownership y la propagación de cambios. Sin caja negra.",
+      },
+      {
+        t: "Reversible en un comando",
+        d: "Desinstalar Orux es git clone. No hay datos atrapados, no hay export raro, no hay vendor lock-in. Como debería ser una capa.",
+      },
+    ],
+
     // Pricing
     s06_k: "06 · Precio",
     s06_h_1: "Empezar es gratis.",
@@ -222,6 +280,11 @@ export const T = {
     final_sub: "Standups para saber qué tocaste. PRs para descubrir lo que rompiste. Reuniones para mover una firma. Hay un camino más corto — sin perder seguridad.",
     final_cta: "Crear tu workspace",
     final_ghost: "Cómo funciona",
+    final_micro: "Gratis hasta 5 devs · sin trial · sin tarjeta · te lleva 60 segundos.",
+
+    // Sticky mobile CTA
+    sticky_label: "Listo cuando quieras",
+    sticky_cta: "Crear workspace",
 
     // Footer
     foot_tagline: "Coordinación en tiempo real sobre Git · para equipos de 2 a 50",
@@ -241,6 +304,7 @@ export const T = {
     nav_problema: "Problem",
     nav_pilares: "What it does",
     nav_como: "How it works",
+    nav_seguridad: "Security",
     nav_faq: "FAQ",
     nav_precio: "Pricing",
     nav_produccion: "in production",
@@ -249,11 +313,13 @@ export const T = {
 
     // Hero
     hero_eyebrow: "In production · real teams coordinating live",
+    hero_audience: "For teams of 2 to 50 devs · self-host with Docker · free up to 5",
     hero_h1_1: "Who touches what. Who owns it. What breaks.",
     hero_h1_2: "In real time, on the Git you already use.",
-    hero_sub: "Orux is a real-time coordination layer on top of Git for teams of 2 to 50 devs. Per-line presence, live ownership and impact analysis resolved before the merge — without replacing GitHub, GitLab or your IDE.",
+    hero_sub: "Orux is the real-time coordination layer on top of Git for teams of 2 to 50 devs. Per-line presence, live ownership and impact analysis resolved before the merge — without replacing GitHub, GitLab or your IDE.",
     hero_cta_primary: "Create your workspace",
     hero_cta_secondary: "How it works",
+    hero_micro: "No trial · no card · no install · git clone still works.",
     hero_sig1: "Presence ·",
     hero_sig1_b: "warns you before stepping on someone",
     hero_sig2: "Ownership ·",
@@ -415,6 +481,61 @@ export const T = {
       },
     ],
 
+    // Audience
+    s_aud_k: "Who it's for",
+    s_aud_h_1: "Built for three situations",
+    s_aud_h_2: "where coordination really hurts.",
+    s_aud_sub: "Not a universal tool. It works best when coordination is async, the code still fits in one head and it's not too late to set the flow.",
+    aud: [
+      {
+        t: "Technical founder · 2 to 5 devs",
+        d: "You're writing the code and building the team at the same time. Every block costs you an afternoon. Orux removes coordination cost without adding corporate governance.",
+        b: ["Workspace in minutes, no governance", "Free forever up to 5 devs", "Optional self-host if the client requires it"],
+      },
+      {
+        t: "Open source starting out",
+        d: "Async contributors, no standups, no shared Slack. CODEOWNERS ages badly and CI is where you find conflicts.",
+        b: ["Live ownership, not a stale file", "Self-host with Docker, real Git repo", "Visible to newcomers without onboarding meetings"],
+      },
+      {
+        t: "Mid-sized team · 5 to 50 devs",
+        d: "The lead no longer remembers who touches what. Knowledge lives in their head and becomes a bottleneck. Orux distributes impact without new meetings.",
+        b: ["Knowledge distributed by real usage", "Cross-repo impact in Premium", "Lives alongside your GitHub/GitLab"],
+      },
+    ],
+
+    // Security / privacy
+    s_sec_k: "Security & privacy",
+    s_sec_h_1: "Your code doesn't become our problem.",
+    s_sec_h_2: "Auditable, self-host and reversible.",
+    s_sec_sub: "Orux mounts on top of Git: if you leave tomorrow, the repo is intact. The coordination layer is yours, not held hostage.",
+    sec: [
+      {
+        t: "Self-host with Docker",
+        d: "One image, one docker compose up. Your code never leaves your infrastructure. Same binary as the hosted version.",
+      },
+      {
+        t: "Ephemeral Git token, never stored",
+        d: "On push, your token flows only through subprocess env. Never on disk, never in logs, never in URLs, never in .git/config. Output scrubbed.",
+      },
+      {
+        t: "Layer over Git, not hostage",
+        d: "Each workspace is a real Git repo. git clone is enough. If you drop Orux, you take the full history with one command.",
+      },
+      {
+        t: "No content telemetry",
+        d: "We don't read your code to train anything. Impact analysis runs local to the server (yours if self-host). No LLM in the critical path.",
+      },
+      {
+        t: "Open core, auditable",
+        d: "The core is open. You can read how we handle tokens, ownership and change propagation. No black box.",
+      },
+      {
+        t: "Reversible in one command",
+        d: "Uninstalling Orux is git clone. No trapped data, no weird export, no vendor lock-in. As a layer should be.",
+      },
+    ],
+
     // Pricing
     s06_k: "06 · Pricing",
     s06_h_1: "Starting is free.",
@@ -447,6 +568,11 @@ export const T = {
     final_sub: "Standups to know what you touched. PRs to discover what you broke. Meetings to move a signature. There's a shorter path — without losing safety.",
     final_cta: "Create your workspace",
     final_ghost: "How it works",
+    final_micro: "Free up to 5 devs · no trial · no card · 60 seconds to start.",
+
+    // Sticky mobile CTA
+    sticky_label: "Ready when you are",
+    sticky_cta: "Create workspace",
 
     // Footer
     foot_tagline: "Real-time coordination on top of Git · for teams of 2 to 50",

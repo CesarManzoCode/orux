@@ -114,6 +114,40 @@ function Pillar({
   );
 }
 
+/* Tarjeta de audiencia (para quién es) */
+function AudienceCard({
+  idx, t, d, b,
+}: { idx: string; t: string; d: string; b: readonly string[] }) {
+  return (
+    <div className="aud-card">
+      <div className="aud-h">
+        <span className="aud-ix">{idx}</span>
+      </div>
+      <h3>{t}</h3>
+      <p>{d}</p>
+      <ul>{b.map((it) => <li key={it}>{it}</li>)}</ul>
+    </div>
+  );
+}
+
+/* Tarjeta de seguridad */
+function SecCard({ t, d }: { t: string; d: string }) {
+  return (
+    <div className="sec-card">
+      <div className="sec-shield" aria-hidden>
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 1.5 L13.5 3.5 V8.2 C13.5 11.5 11 13.5 8 14.5 C5 13.5 2.5 11.5 2.5 8.2 V3.5 Z"
+            stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M5.5 8.2 L7.2 9.9 L10.5 6.6" stroke="currentColor" strokeWidth="1.2"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <h3>{t}</h3>
+      <p>{d}</p>
+    </div>
+  );
+}
+
 /* FAQ accordion */
 type FaqItem = { q: string; a: string };
 function Faq({ items }: { items: readonly FaqItem[] }) {
@@ -271,6 +305,7 @@ export function App() {
             <a href="#problema">{t.nav_problema}</a>
             <a href="#pilares">{t.nav_pilares}</a>
             <a href="#como">{t.nav_como}</a>
+            <a href="#seguridad">{t.nav_seguridad}</a>
             <a href="#faq">{t.nav_faq}</a>
             <a href="#precio">{t.nav_precio}</a>
           </div>
@@ -301,12 +336,17 @@ export function App() {
               <span className="dim">{t.hero_h1_2}</span>
             </motion.h1>
             <motion.p className="sub" variants={fadeUp}>{t.hero_sub}</motion.p>
+            <motion.div className="hero-aud" variants={fadeUp}>
+              <span className="hero-aud-dot" aria-hidden />
+              {t.hero_audience}
+            </motion.div>
             <motion.div className="cta" variants={fadeUp}>
               <a className="btn primary lg" href={APP}>
                 {t.hero_cta_primary} <span className="arr">→</span>
               </a>
               <a className="btn ghost lg" href="#como">{t.hero_cta_secondary}</a>
             </motion.div>
+            <motion.p className="hero-micro" variants={fadeUp}>{t.hero_micro}</motion.p>
             <motion.div className="signals" variants={fadeUp}>
               <span className="sig">{t.hero_sig1} <b>{t.hero_sig1_b}</b></span>
               <span className="sig">{t.hero_sig2} <b>{t.hero_sig2_b}</b></span>
@@ -423,6 +463,24 @@ export function App() {
         </div>
       </section>
 
+      {/* ── PARA QUIÉN ES ── */}
+      <section id="audiencia">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head k={t.s_aud_k} sub={t.s_aud_sub}>
+            {t.s_aud_h_1}{" "}
+            <span className="soft">{t.s_aud_h_2}</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <div className="audience">
+              {t.aud.map((p, i) => (
+                <AudienceCard key={p.t} idx={"0" + (i + 1)} t={p.t} d={p.d} b={p.b} />
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ── FLUJO · cómo funciona en vivo (absorbe los 'pasos') ── */}
       <section id="como">
         <span className="sec-line" />
@@ -481,6 +539,24 @@ export function App() {
         </div>
       </section>
 
+      {/* ── SEGURIDAD Y PRIVACIDAD ── */}
+      <section id="seguridad">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head k={t.s_sec_k} sub={t.s_sec_sub}>
+            {t.s_sec_h_1}{" "}
+            <span className="soft">{t.s_sec_h_2}</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <div className="security">
+              {t.sec.map((s) => (
+                <SecCard key={s.t} t={s.t} d={s.d} />
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ── PRICING ── */}
       <section id="precio">
         <span className="sec-line" />
@@ -521,8 +597,22 @@ export function App() {
             <a className="btn primary lg" href={APP}>{t.final_cta} <span className="arr">→</span></a>
             <a className="btn ghost lg" href="#como">{t.final_ghost}</a>
           </Reveal>
+          <Reveal delay={0.18}>
+            <p className="final-micro">{t.final_micro}</p>
+          </Reveal>
         </div>
       </section>
+
+      {/* ── Sticky CTA móvil (solo aparece tras hacer scroll) ── */}
+      <div className={"sticky-cta" + (scrolled ? " visible" : "")} aria-hidden={!scrolled}>
+        <div className="sticky-l">
+          <span className="sticky-dot" />
+          <span>{t.sticky_label}</span>
+        </div>
+        <a className="btn primary sm" href={APP} tabIndex={scrolled ? 0 : -1}>
+          {t.sticky_cta} <span className="arr">→</span>
+        </a>
+      </div>
 
       <footer>
         <div className="wrap">
