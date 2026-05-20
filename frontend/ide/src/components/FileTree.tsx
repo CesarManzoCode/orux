@@ -7,19 +7,16 @@ import {
   type Peer,
 } from "../store";
 import { arbol, chipDe, inicial, type Nodo } from "../lang";
+import { useI18n } from "../i18n";
 
 function Chip({ path }: { path: string }) {
   const c = chipDe(path);
   return <span className={"chip" + (c.cls ? " " + c.cls : "")}>{c.txt}</span>;
 }
 
-// Capa 26 — Project tree de IDE de verdad: cada fila lleva, además del
-// archivo, las SEÑALES de coordinación (la firma del producto). Reusa los
-// selectores derivados del store para que árbol e inspector cuenten la
-// misma verdad. Las carpetas hacen "rollup": si algo vive adentro
-// (presencia/riesgo), la carpeta lo delata aunque esté colapsada.
 export function FileTree() {
   const s = useStore();
+  const { t } = useI18n();
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
   const paths = Object.keys(s.files);
 
@@ -27,10 +24,8 @@ export function FileTree() {
     return (
       <div className="empty">
         <div className="empty-ic"><FolderOpen size={20} /></div>
-        <div className="empty-tit">Workspace vacío</div>
-        <div className="empty-sub">
-          Todavía no hay archivos. Creá el primero con “nuevo archivo”.
-        </div>
+        <div className="empty-tit">{t.sb_empty_title}</div>
+        <div className="empty-sub">{t.sb_empty_sub}</div>
       </div>
     );
   }
@@ -41,8 +36,6 @@ export function FileTree() {
     setAbiertas(n);
   };
 
-  // Presencia de otros por archivo (sin mí) y riesgo, precalculados una
-  // vez por render — el rollup de carpetas los consulta por prefijo.
   const yoId = s.yo?.client_id;
   const presPorPath: Record<string, Peer[]> = {};
   for (const p of Object.values(s.peers)) {
@@ -67,8 +60,12 @@ export function FileTree() {
           <span className="twist">{cerrada ? "▸" : "▾"}</span>
           <span className="name">{nombre}</span>
           <span className="sig">
-            {hayRiesgoBajo(rd) && <span className="sig-risk s-media" title="impacto adentro" />}
-            {hayPresenciaBajo(rd) && <span className="sig-live" title="alguien editando adentro" />}
+            {hayRiesgoBajo(rd) && (
+              <span className="sig-risk s-media" title={t.ft_impact_inside} />
+            )}
+            {hayPresenciaBajo(rd) && (
+              <span className="sig-live" title={t.ft_presence_inside} />
+            )}
           </span>
         </li>
       );
@@ -89,19 +86,19 @@ export function FileTree() {
           <Chip path={f.path} />
           <span className="name">{f.nombre}</span>
           <span className="sig">
-            {sinMarcar && <span className="sig-dirty" title="cambios sin marcar" />}
+            {sinMarcar && <span className="sig-dirty" title={t.ft_dirty} />}
             {props > 0 && (
-              <span className="sig-prop" title={props + " propuesta(s) pendiente(s)"}>
+              <span className="sig-prop" title={t.ft_proposals(props)}>
                 {props}
               </span>
             )}
             {riesgo && (
-              <span className={"sig-risk s-" + riesgo} title={"impacto · " + riesgo} />
+              <span className={"sig-risk s-" + riesgo} title={t.ft_impact(riesgo)} />
             )}
             {due && (
               <span
                 className={"sig-own" + (esMio ? " mio" : "")}
-                title={esMio ? "tuyo" : "tiene dueño"}
+                title={esMio ? t.ft_mine : t.ft_owned}
               >
                 <KeyRound size={10} />
               </span>
@@ -109,15 +106,15 @@ export function FileTree() {
             {aqui.map((p) => (
               <span key={p.client_id} className="badge"
                     style={{ background: p.color }}
-                    title={p.name + " · línea " + p.line}>
+                    title={p.name + " · " + t.ins_line + " " + p.line}>
                 {inicial(p.name)}
               </span>
             ))}
           </span>
-          <button className="delx" title={"eliminar " + f.path}
+          <button className="delx" title={t.ft_delete_title(f.path)}
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm("¿Eliminar " + f.path + "? No se puede deshacer.")) borrar(f.path);
+              if (confirm(t.ft_delete_confirm(f.path))) borrar(f.path);
             }}>✕</button>
         </li>
       );

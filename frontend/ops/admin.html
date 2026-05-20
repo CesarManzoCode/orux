@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" id="html-root">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -582,9 +582,25 @@ table#teams td {
 @media (max-width: 600px) {
   .panel-header { flex-direction: column; align-items: flex-start; gap: 12px; }
   table#teams th:nth-child(2),
-  table#teams td:nth-child(2) { display: none; } /* ocultar columna ID en móvil */
+  table#teams td:nth-child(2) { display: none; }
   .gate-header, .gate-body { padding-left: 20px; padding-right: 20px; }
 }
+
+/* ─── SELECTOR DE IDIOMA ─────────────────────────────────────────────────── */
+.lang-pill {
+  display: inline-flex; align-items: center; gap: 1px;
+  background: var(--bg-panel); border: 1px solid var(--border-sub);
+  border-radius: 100px; padding: 2px 4px;
+}
+.lang-pill button {
+  font: 700 10px/1 ui-monospace, monospace; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-muted);
+  padding: 3px 6px; border-radius: 100px; cursor: pointer;
+  background: transparent; transition: background var(--t), color var(--t);
+  font-family: inherit;
+}
+.lang-pill button:hover { color: var(--text-lo); }
+.lang-pill button.lp-active { background: var(--accent-weak); color: var(--accent-a); }
 </style>
 </head>
 <body>
@@ -599,28 +615,34 @@ table#teams td {
         <div class="gate-logo-mark">L</div>
         <div class="gate-logo-text">
           <strong>Orux</strong>
-          <span>Consola de operador</span>
+          <span id="t-console"></span>
         </div>
       </div>
-      <h2>Acceso restringido</h2>
-      <p>Entrá con tu cuenta de operador (el mismo usuario y contraseña con
-         los que iniciás sesión). La sesión vive solo en esta pestaña.</p>
+      <h2 id="t-restricted"></h2>
+      <p id="t-gate-desc"></p>
     </div>
     <div class="gate-body">
       <div class="field">
-        <label for="usr">Usuario</label>
-        <input id="usr" type="text" placeholder="tu usuario"
+        <label for="usr" id="t-user-label"></label>
+        <input id="usr" type="text"
                autocomplete="username" spellcheck="false"
                onkeydown="if(event.key==='Enter')entrar()">
       </div>
       <div class="field">
-        <label for="pwd">Contraseña</label>
-        <input id="pwd" type="password" placeholder="tu contraseña"
+        <label for="pwd" id="t-pass-label"></label>
+        <input id="pwd" type="password"
                autocomplete="current-password"
                onkeydown="if(event.key==='Enter')entrar()">
       </div>
-      <button class="btn btn-primary" onclick="entrar()">Entrar</button>
+      <button class="btn btn-primary" onclick="entrar()" id="t-enter-btn"></button>
       <div id="gmsg" class="msg"></div>
+      <!-- selector de idioma dentro del gate -->
+      <div style="margin-top:14px">
+        <span class="lang-pill">
+          <button id="ll-es" onclick="cambiarLang('es')">ES</button>
+          <button id="ll-en" onclick="cambiarLang('en')">EN</button>
+        </span>
+      </div>
     </div>
   </div>
 </div>
@@ -630,40 +652,41 @@ table#teams td {
 ─────────────────────────────────────────────────────────────────────────── -->
 <div id="panel" style="display:none">
 
-  <!-- Header de marca -->
   <div class="panel-header">
     <div class="panel-brand">
       <div class="panel-logo-mark">L</div>
       <div class="panel-brand-text">
         <strong>Orux</strong>
-        <span>Consola de operador</span>
+        <span id="t-console2"></span>
       </div>
     </div>
     <div class="panel-actions">
-      <span class="session-badge">sesión activa (solo esta pestaña)</span>
-      <button class="btn btn-secondary" onclick="cargar()">↺ Recargar</button>
-      <button class="btn btn-secondary" onclick="salir()">Salir</button>
+      <span class="session-badge" id="t-session-badge"></span>
+      <span class="lang-pill" style="margin-right:4px">
+        <button id="pl-es" onclick="cambiarLang('es')">ES</button>
+        <button id="pl-en" onclick="cambiarLang('en')">EN</button>
+      </span>
+      <button class="btn btn-secondary" onclick="cargar()" id="t-reload-btn"></button>
+      <button class="btn btn-secondary" onclick="salir()" id="t-logout-btn"></button>
     </div>
   </div>
 
-  <!-- Mensaje de feedback global -->
   <div class="msg" id="msg"></div>
 
-  <!-- Sección: Equipos -->
   <div class="section">
     <div class="section-header">
-      <span class="section-title">Equipos</span>
+      <span class="section-title" id="t-teams-title"></span>
       <span class="section-count" id="teams-count"></span>
     </div>
     <div class="table-wrap">
       <table id="teams">
         <thead>
           <tr>
-            <th>Nombre</th>
+            <th id="t-th-name"></th>
             <th>ID</th>
-            <th>Plan</th>
-            <th>Miembros</th>
-            <th class="col-action">Acción</th>
+            <th id="t-th-plan"></th>
+            <th id="t-th-members"></th>
+            <th class="col-action" id="t-th-action"></th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -671,10 +694,9 @@ table#teams td {
     </div>
   </div>
 
-  <!-- Sección: Usuarios -->
   <div class="section">
     <div class="section-header">
-      <span class="section-title">Usuarios registrados</span>
+      <span class="section-title" id="t-users-title"></span>
       <span class="section-count" id="users-count"></span>
     </div>
     <div class="users-wrap">
@@ -690,6 +712,112 @@ table#teams td {
      sessionStorage("orux_op"), endpoints /teams /users /teams/:id/plan.
 ─────────────────────────────────────────────────────────────────────────── -->
 <script>
+/* ── i18n ─────────────────────────────────────────────────────────────── */
+const LANG_KEY = "orux_lang";
+const I18N = {
+  es: {
+    console: "Consola de operador",
+    restricted: "Acceso restringido",
+    gate_desc: "Ingresa con tu cuenta de operador (el mismo usuario y contraseña con los que inicias sesión). La sesión vive solo en esta pestaña.",
+    user_label: "Usuario",
+    user_placeholder: "tu usuario",
+    pass_label: "Contraseña",
+    pass_placeholder: "tu contraseña",
+    enter_btn: "Entrar",
+    session_badge: "sesión activa (solo esta pestaña)",
+    reload: "↺ Recargar",
+    logout: "Salir",
+    teams_title: "Equipos",
+    users_title: "Usuarios registrados",
+    th_name: "Nombre",
+    th_plan: "Plan",
+    th_members: "Miembros",
+    th_action: "Acción",
+    no_teams: "No hay equipos registrados aún.",
+    no_users: "No hay usuarios registrados.",
+    teams_count: (n) => n + " equipos",
+    users_count: (n) => n + " usuarios",
+    plan_changed: (id, plan) => "equipo " + id + " → " + plan,
+    err_unauth: "no autorizado: ",
+    err_generic: "error: ",
+    err_load: "error al cargar datos: ",
+  },
+  en: {
+    console: "Operator console",
+    restricted: "Restricted access",
+    gate_desc: "Sign in with your operator account (same username and password you use to log in). The session lives only in this tab.",
+    user_label: "Username",
+    user_placeholder: "your username",
+    pass_label: "Password",
+    pass_placeholder: "your password",
+    enter_btn: "Sign in",
+    session_badge: "active session (this tab only)",
+    reload: "↺ Reload",
+    logout: "Sign out",
+    teams_title: "Teams",
+    users_title: "Registered users",
+    th_name: "Name",
+    th_plan: "Plan",
+    th_members: "Members",
+    th_action: "Action",
+    no_teams: "No teams registered yet.",
+    no_users: "No registered users.",
+    teams_count: (n) => n + " teams",
+    users_count: (n) => n + " users",
+    plan_changed: (id, plan) => "team " + id + " → " + plan,
+    err_unauth: "unauthorized: ",
+    err_generic: "error: ",
+    err_load: "error loading data: ",
+  },
+};
+
+let _lang = (localStorage.getItem(LANG_KEY)) || "es";
+if (_lang !== "es" && _lang !== "en") _lang = "es";
+let tx = I18N[_lang];
+
+function _$(id) { return document.getElementById(id); }
+function _txt(id, txt) { const el = _$(id); if (el) el.textContent = txt; }
+function _ph(id, ph) { const el = _$(id); if (el) el.placeholder = ph; }
+
+function aplicarLang() {
+  tx = I18N[_lang];
+  document.documentElement.lang = _lang;
+  _txt("t-console", tx.console);
+  _txt("t-console2", tx.console);
+  _txt("t-restricted", tx.restricted);
+  _txt("t-gate-desc", tx.gate_desc);
+  _txt("t-user-label", tx.user_label);
+  _ph("usr", tx.user_placeholder);
+  _txt("t-pass-label", tx.pass_label);
+  _ph("pwd", tx.pass_placeholder);
+  _txt("t-enter-btn", tx.enter_btn);
+  _txt("t-session-badge", tx.session_badge);
+  _txt("t-reload-btn", tx.reload);
+  _txt("t-logout-btn", tx.logout);
+  _txt("t-teams-title", tx.teams_title);
+  _txt("t-users-title", tx.users_title);
+  _txt("t-th-name", tx.th_name);
+  _txt("t-th-plan", tx.th_plan);
+  _txt("t-th-members", tx.th_members);
+  _txt("t-th-action", tx.th_action);
+  // Resaltar botón activo en ambas pills
+  ["ll-es","pl-es"].forEach(id => {
+    const el = _$(id); if (el) el.classList.toggle("lp-active", _lang === "es");
+  });
+  ["ll-en","pl-en"].forEach(id => {
+    const el = _$(id); if (el) el.classList.toggle("lp-active", _lang === "en");
+  });
+}
+
+function cambiarLang(l) {
+  _lang = l;
+  localStorage.setItem(LANG_KEY, l);
+  aplicarLang();
+  // Re-renderizar si el panel está visible (para actualizar los textos dinámicos)
+  if (_$("panel").style.display !== "none") cargar();
+}
+
+/* ── API ──────────────────────────────────────────────────────────────── */
 const API = "/api/v1";
 function tok() { return sessionStorage.getItem("orux_op") || ""; }
 function H() { return { "Authorization": "Bearer " + tok() }; }
@@ -704,19 +832,15 @@ async function api(path, opts) {
 }
 
 function _abrirPanel() {
-  document.getElementById("gate").style.display = "none";
-  document.getElementById("panel").style.display = "";
+  _$("gate").style.display = "none";
+  _$("panel").style.display = "";
   cargar();
 }
 
-// Login por CUENTA: usuario+contraseña -> el server valida (PBKDF2) y que
-// seas el operador, y devuelve un token de SESIÓN firmado. Solo ese token
-// (no un secreto) se guarda en sessionStorage; de ahí en más todo va con
-// Bearer, igual que antes (api()/setPlan/cargar intactos).
 async function entrar() {
-  const username = document.getElementById("usr").value.trim();
-  const password = document.getElementById("pwd").value;
-  const gm = document.getElementById("gmsg");
+  const username = _$("usr").value.trim();
+  const password = _$("pwd").value;
+  const gm = _$("gmsg");
   try {
     const r = await fetch(API + "/login", {
       method: "POST",
@@ -724,33 +848,28 @@ async function entrar() {
       body: JSON.stringify({ username, password }),
     });
     if (!r.ok) {
-      throw new Error((await r.json().catch(() => ({}))).error
-                       || ("HTTP " + r.status));
+      throw new Error((await r.json().catch(() => ({}))).error || ("HTTP " + r.status));
     }
     const { token } = await r.json();
     sessionStorage.setItem("orux_op", token);
-    document.getElementById("pwd").value = "";   // no dejar la pass en el DOM
+    _$("pwd").value = "";
     _abrirPanel();
   } catch (e) {
     gm.className = "msg err";
-    gm.textContent = "no autorizado: " + e.message;
+    gm.textContent = tx.err_unauth + e.message;
   }
 }
 
-// Cerrar sesión: borra el token de sesión y vuelve al login. Antes no
-// existía -> el token quedaba en sessionStorage hasta cerrar la pestaña.
 function salir() {
   sessionStorage.removeItem("orux_op");
-  document.getElementById("panel").style.display = "none";
-  document.getElementById("msg").textContent = "";
-  document.getElementById("gmsg").textContent = "";
-  const pwd = document.getElementById("pwd");
+  _$("panel").style.display = "none";
+  _$("msg").textContent = "";
+  _$("gmsg").textContent = "";
+  const pwd = _$("pwd");
   if (pwd) pwd.value = "";
-  document.getElementById("gate").style.display = "";
+  _$("gate").style.display = "";
 }
 
-// Auto-login al recargar la pestaña: si hay token de sesión, se valida
-// contra /teams; si caducó/lo rotaron, se descarta y se muestra el login.
 async function _reanudar() {
   try {
     await api("/teams");
@@ -760,10 +879,10 @@ async function _reanudar() {
   }
 }
 
-function flash(t, ok) {
-  const m = document.getElementById("msg");
+function flash(msg, ok) {
+  const m = _$("msg");
   m.className = "msg " + (ok ? "ok" : "err");
-  m.textContent = t;
+  m.textContent = msg;
 }
 
 async function setPlan(id, plan) {
@@ -772,65 +891,55 @@ async function setPlan(id, plan) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan }),
     });
-    flash("equipo " + id + " → " + plan, true);
+    flash(tx.plan_changed(id, plan), true);
     cargar();
-  } catch (e) { flash("error: " + e.message, false); }
+  } catch (e) { flash(tx.err_generic + e.message, false); }
 }
 
 async function cargar() {
   try {
     const teams = await api("/teams");
 
-    /* ── Renderizar tabla de equipos ── */
     const tb = document.querySelector("#teams tbody");
     tb.innerHTML = "";
 
-    const countEl = document.getElementById("teams-count");
-    if (countEl) countEl.textContent = teams.length + " equipos";
+    const countEl = _$("teams-count");
+    if (countEl) countEl.textContent = tx.teams_count(teams.length);
 
     if (teams.length === 0) {
-      /* Empty state: no hay equipos todavía */
       const tr = document.createElement("tr");
       tr.innerHTML = `<td colspan="5">
         <div class="empty-state">
           <div class="empty-icon">◎</div>
-          <p>No hay equipos registrados aún.</p>
+          <p>${tx.no_teams}</p>
         </div>
       </td>`;
       tb.appendChild(tr);
     } else {
-      for (const t of teams) {
-        const otro = t.plan === "premium" ? "free" : "premium";
-        const esPremium = t.plan === "premium";
-
+      for (const team of teams) {
+        const otro = team.plan === "premium" ? "free" : "premium";
+        const esPremium = team.plan === "premium";
         const tr = document.createElement("tr");
 
-        /* Nombre */
         const tdNombre = document.createElement("td");
-        tdNombre.innerHTML = `<span class="team-name">${t.nombre}</span>`;
+        tdNombre.innerHTML = `<span class="team-name">${team.nombre}</span>`;
 
-        /* ID en mono */
         const tdId = document.createElement("td");
-        tdId.innerHTML = `<span class="team-id">${t.id}</span>`;
+        tdId.innerHTML = `<span class="team-id">${team.id}</span>`;
 
-        /* Badge de plan */
         const tdPlan = document.createElement("td");
         tdPlan.innerHTML = esPremium
           ? `<span class="badge badge-premium">Premium</span>`
           : `<span class="badge badge-free">Free</span>`;
 
-        /* Miembros */
         const tdMiembros = document.createElement("td");
-        tdMiembros.innerHTML = `<span class="members-count">${t.miembros}</span>`;
+        tdMiembros.innerHTML = `<span class="members-count">${team.miembros}</span>`;
 
-        /* Botón de acción — mantiene setPlan(t.id, otro) intacto */
         const tdAccion = document.createElement("td");
         const b = document.createElement("button");
-        b.className = esPremium
-          ? "btn-plan btn-plan-downgrade"
-          : "btn-plan";
+        b.className = esPremium ? "btn-plan btn-plan-downgrade" : "btn-plan";
         b.textContent = esPremium ? "→ Free" : "→ Premium";
-        b.onclick = () => setPlan(t.id, otro);
+        b.onclick = () => setPlan(team.id, otro);
         tdAccion.appendChild(b);
 
         tr.appendChild(tdNombre);
@@ -842,28 +951,26 @@ async function cargar() {
       }
     }
 
-    /* ── Renderizar usuarios como chips ── */
     const us = await api("/users");
 
-    const usersCountEl = document.getElementById("users-count");
-    if (usersCountEl) usersCountEl.textContent = us.length + " usuarios";
+    const usersCountEl = _$("users-count");
+    if (usersCountEl) usersCountEl.textContent = tx.users_count(us.length);
 
-    const usersDiv = document.getElementById("users");
+    const usersDiv = _$("users");
     if (us.length === 0) {
       usersDiv.innerHTML = `<div class="empty-state" style="padding:24px 0">
-        <p>No hay usuarios registrados.</p>
+        <p>${tx.no_users}</p>
       </div>`;
     } else {
-      const chips = us.map(u =>
-        `<span class="user-chip">${u}</span>`
-      ).join("");
+      const chips = us.map(u => `<span class="user-chip">${u}</span>`).join("");
       usersDiv.innerHTML = `<div class="users-chips">${chips}</div>`;
     }
 
-  } catch (e) { flash("error al cargar datos: " + e.message, false); }
+  } catch (e) { flash(tx.err_load + e.message, false); }
 }
 
-/* Auto-login si hay token de sesión guardado (recarga de pestaña) */
+/* Inicialización: aplicar idioma y auto-login */
+aplicarLang();
 if (tok()) _reanudar();
 </script>
 </body>

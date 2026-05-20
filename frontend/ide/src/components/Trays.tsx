@@ -1,40 +1,34 @@
 import { useStore } from "../useStore";
 import { resolver, seleccionar, descartarImpacto, nombreDe } from "../store";
 import { diffLineas } from "../lang";
+import { useI18n } from "../i18n";
 
-// Bandeja del dueño: propuestas que esperan su verde/rojo. Diff por líneas.
 function Propuestas() {
   const s = useStore();
-  // Sólo las de archivos que YO poseo (el server ya las dirige al dueño,
-  // esto es defensa: si solté ownership dejan de mostrarse).
+  const { t } = useI18n();
   const mias = Object.values(s.proposals).filter(
     (p) => s.yo && s.owners[p.path] === s.yo.client_id
   );
   if (mias.length === 0) return null;
   return (
     <div className="tray">
-      <h3>propuestas para vos <span className="cuenta">{mias.length}</span></h3>
+      <h3>{t.tr_proposals} <span className="cuenta">{mias.length}</span></h3>
       {mias.map((p) => {
         const filas = diffLineas(s.files[p.path] ?? "", p.content);
         return (
           <div className="prop" key={p.id}>
             <div className="cab">
               <span className="quien">
-                <b>{p.author_name}</b> propone cambios a <b>{p.path}</b>
+                <b>{p.author_name}</b> {t.tr_proposes} <b>{p.path}</b>
               </span>
               <span className="acc">
-                <button className="ok" onClick={() => resolver(p.id, true)}>aprobar</button>
-                <button className="no" onClick={() => resolver(p.id, false)}>rechazar</button>
+                <button className="ok" onClick={() => resolver(p.id, true)}>{t.tr_approve}</button>
+                <button className="no" onClick={() => resolver(p.id, false)}>{t.tr_reject}</button>
               </span>
             </div>
-            {/* El signo +/− lo dibuja el CSS en un canal propio (como
-                GitHub/Linear), no se mete en el texto: el código del diff
-                queda limpio y seleccionable sin el prefijo. Un espacio en
-                las líneas vacías para que conserven su alto de fila
-                (white-space: pre-wrap no lo colapsa). */}
             <div className="diff">
               {filas.map((f, i) => (
-                <div key={i} className={f.t}>{f.x || " "}</div>
+                <div key={i} className={f.t}>{f.x || " "}</div>
               ))}
             </div>
           </div>
@@ -44,15 +38,13 @@ function Propuestas() {
   );
 }
 
-// Avisos de impacto: "cambiaron algo que tu archivo usa" + POR QUÉ (lo que
-// lo volvió aviso real y no adorno).
 const _RANK: Record<string, number> = { alta: 3, media: 2, baja: 1 };
 const _sev = (m: { severidades?: string[] }, i: number) =>
   (m.severidades && m.severidades[i]) || "media";
 
 function Impactos() {
   const s = useStore();
-  // Capa 24d: alta primero — el dueño triagea lo que rompe seguro antes.
+  const { t } = useI18n();
   const lista = Object.entries(s.impacts).sort(([, a], [, b]) => {
     const mx = (m: typeof a) =>
       Math.max(0, ...m.symbols.map((_, i) => _RANK[_sev(m, i)] || 2));
@@ -61,30 +53,27 @@ function Impactos() {
   if (lista.length === 0) return null;
   return (
     <div className="tray imp">
-      <h3>impacto en tus archivos <span className="cuenta">{lista.length}</span></h3>
+      <h3>{t.tr_impact} <span className="cuenta">{lista.length}</span></h3>
       {lista.map(([clave, m]) => (
         <div className="imp-row" key={clave}>
           <div className="izq">
             <span>
-              <b>{m.author_name}</b> cambió{" "}
+              <b>{m.author_name}</b> {t.tr_changed}{" "}
               {m.symbols.map((x, i) => (
                 <span key={i}><code>{x}</code>{i < m.symbols.length - 1 ? ", " : ""}</span>
               ))}{" "}
-              en <b>{m.source_path}</b> — afecta tu <b>{m.affected_path}</b>
+              {t.tr_in} <b>{m.source_path}</b> {t.tr_affects} <b>{m.affected_path}</b>
             </span>
             {m.symbols.map((_, i) =>
               m.motivos[i] ? (
                 <div className="por" key={i}>
                   <span className={"sev sev-" + _sev(m, i)}>
-                    {_sev(m, i)}
+                    {t.tr_sev[_sev(m, i)] ?? _sev(m, i)}
                   </span>
                   <span className="motivo">{m.motivos[i]}</span>
                 </div>
               ) : null
             )}
-            {/* Capa 24: la cadena del impacto transitivo (premium). Hace
-                visible el PORQUÉ de la onda: de dónde salió y por dónde
-                llegó hasta tu archivo. Vacío en free = no se muestra. */}
             {m.cadena && m.cadena.length > 1 && (
               <div className="cadena">
                 {m.cadena.map((h, i) => (
@@ -97,10 +86,12 @@ function Impactos() {
             )}
           </div>
           <div className="acc">
-            <button onClick={() => { if (m.affected_path in s.files) seleccionar(m.affected_path); }}>
-              ver {m.affected_path}
+            <button onClick={() => {
+              if (m.affected_path in s.files) seleccionar(m.affected_path);
+            }}>
+              {t.tr_view(m.affected_path)}
             </button>
-            <button onClick={() => descartarImpacto(clave)}>visto</button>
+            <button onClick={() => descartarImpacto(clave)}>{t.tr_dismiss}</button>
           </div>
         </div>
       ))}

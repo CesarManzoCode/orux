@@ -3,13 +3,11 @@ import { useStore } from "../useStore";
 import {
   reclamar, nombreDe, impactosQueAfectan, severidadMax, presentesEn,
 } from "../store";
+import { useI18n } from "../i18n";
 
-// Capa 26 — Barra de coordinación del archivo abierto. La cara visible de
-// la tesis: presencia acá · dueño · riesgo, en una tira densa de
-// instrumento (no un renglón suelto). Tocás algo ajeno → se negocia, y la
-// barra lo dice antes de que escribas.
 export function ContextBar() {
   const s = useStore();
+  const { t } = useI18n();
   const path = s.currentPath;
   if (!path) return <div className="ctxbar vacia" />;
 
@@ -17,35 +15,25 @@ export function ContextBar() {
   const due = s.owners[path];
   const esMio = s.yo && due === s.yo.client_id;
   const riesgo = severidadMax(impactosQueAfectan(path));
-  // Modo de edición REAL (derivado, no inventado): si el archivo es tuyo o
-  // no tiene dueño, escribís directo; si es de otro, lo que tipees se le
-  // propone. Es el titular de la barra — lo que el dev necesita saber
-  // ANTES de tocar una tecla.
   const proponiendo = !!due && !esMio;
 
   return (
     <div className="ctxbar">
       <span
         className={"ctx-mode " + (proponiendo ? "prop" : "live")}
-        title={
-          proponiendo
-            ? "tus cambios se proponen al dueño; no se aplican hasta que apruebe"
-            : "editás directo: tus cambios se aplican en vivo"
-        }
+        title={proponiendo ? t.ctx_prop_title : t.ctx_live_title}
       >
         {proponiendo ? <GitPullRequest size={12} /> : <Pencil size={12} />}
         {proponiendo ? (
-          <>modo propuesta <i className="ctx-arrow">→</i> {nombreDe(due!)}</>
+          <>{t.ctx_mode_prop} <i className="ctx-arrow">→</i> {nombreDe(due!)}</>
         ) : (
-          <>edición directa</>
+          <>{t.ctx_mode_live}</>
         )}
       </span>
 
-      {/* La tesis, visible (no escondida en un tooltip): por qué tocar
-          algo ajeno no rompe nada. Sólo cuando aplica. */}
       {proponiendo && (
         <span className="ctx-nota">
-          no se aplica hasta que <b>{nombreDe(due!)}</b> lo apruebe
+          {t.ctx_prop_note(nombreDe(due!))}
         </span>
       )}
 
@@ -54,7 +42,7 @@ export function ContextBar() {
       <span className="ctx-seg">
         <Radio size={12} className="ctx-i" />
         {aqui.length === 0 ? (
-          <span className="ctx-mut">solo vos acá</span>
+          <span className="ctx-mut">{t.ctx_alone}</span>
         ) : (
           <span className="aqui">
             {aqui.map((p) => (
@@ -66,9 +54,6 @@ export function ContextBar() {
         )}
       </span>
 
-      {/* Ownership: sólo cuando aporta algo el chip de modo no dijo ya.
-          Si es de otro, el chip de modo "modo propuesta → X" ya lo cubre
-          (no se duplica). Acá vive la ACCIÓN (reclamar) y el sello "tuyo". */}
       {(!due || esMio) && (
         <>
           <span className="ctx-div" />
@@ -76,10 +61,10 @@ export function ContextBar() {
             <KeyRound size={12} className="ctx-i" />
             {!due ? (
               <button className="reclamar" onClick={() => reclamar(path)}>
-                reclamar este archivo
+                {t.ctx_reclaim}
               </button>
             ) : (
-              <span className="otag tuyo">tuyo · lo editás directo</span>
+              <span className="otag tuyo">{t.ctx_mine}</span>
             )}
           </span>
         </>
@@ -90,7 +75,7 @@ export function ContextBar() {
           <span className="ctx-div" />
           <span className="ctx-seg">
             <Waypoints size={12} className="ctx-i" />
-            <span className={"otag r-" + riesgo}>impacto · {riesgo}</span>
+            <span className={"otag r-" + riesgo}>{t.ctx_impact(riesgo)}</span>
           </span>
         </>
       )}

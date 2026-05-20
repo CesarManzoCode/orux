@@ -1,21 +1,15 @@
-import {
-  Files, GitBranch, Shield,
-} from "lucide-react";
+import { Files, GitBranch, Shield } from "lucide-react";
 import { useStore } from "../useStore";
+import { useI18n } from "../i18n";
 
-// Capa 26 — Activity rail. Dos bloques con jerarquía real: navegación
-// PRIMARIA (explorador, control de versiones) arriba y ACCIONES de equipo
-// (admin) separadas por un hairline. El toggle del inspector vive en el
-// TopBar (esquina superior derecha): pasaba desapercibido acá abajo, y
-// arriba es donde el ojo lo busca en cualquier IDE.
 export function Rail(props: {
   vista: "archivos" | "git";
   setVista: (v: "archivos" | "git") => void;
   abrirAdmin: () => void;
 }) {
   const s = useStore();
-  // Propuestas que esperan TU verde (sos dueño): la rail lo señala aunque
-  // estés en otra vista.
+  const { t } = useI18n();
+
   const propsParaMi = Object.values(s.proposals).filter(
     (p) => s.yo && s.owners[p.path] === s.yo.client_id,
   ).length;
@@ -26,7 +20,7 @@ export function Rail(props: {
       <div className="rail-grp">
         <button
           className={"rail-b" + (props.vista === "archivos" ? " activo" : "")}
-          title="explorador de archivos"
+          title={t.rail_files_title}
           onClick={() => props.setVista("archivos")}
         >
           <Files size={18} />
@@ -34,7 +28,7 @@ export function Rail(props: {
         </button>
         <button
           className={"rail-b" + (props.vista === "git" ? " activo" : "")}
-          title="control de versiones"
+          title={t.rail_git_title}
           onClick={() => props.setVista("git")}
         >
           <GitBranch size={18} />
@@ -47,7 +41,7 @@ export function Rail(props: {
           <span className="rail-sep" />
           <button
             className="rail-b"
-            title="administración · ownership"
+            title={t.rail_admin_title}
             onClick={props.abrirAdmin}
           >
             <Shield size={18} />

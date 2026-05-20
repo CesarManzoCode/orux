@@ -5,18 +5,19 @@ import {
 } from "lucide-react";
 import { useStore } from "../useStore";
 import { nuevoArchivo, commitear, gitRefresh, clonar, pushear } from "../store";
+import { useI18n } from "../i18n";
 import { FileTree } from "./FileTree";
 
 function PanelArchivos() {
+  const { t } = useI18n();
   return (
     <>
-      {/* Encabezado de sección con conteo: estructura legible sin gritar. */}
-      <div className="h2">explorador</div>
+      <div className="h2">{t.sb_explorer}</div>
       <button className="btn-nuevo" onClick={() => {
-        const n = prompt("nombre del archivo (ej: src/main.py)");
+        const n = prompt(t.sb_new_file_prompt);
         if (n && n.trim()) nuevoArchivo(n.trim());
       }}>
-        <FilePlus2 size={15} /> nuevo archivo
+        <FilePlus2 size={15} /> {t.sb_new_file}
       </button>
       <FileTree />
     </>
@@ -25,58 +26,59 @@ function PanelArchivos() {
 
 function PanelGit() {
   const s = useStore();
+  const { t } = useI18n();
   const g = s.git;
   const [msg, setMsg] = useState("");
-  // Credenciales EFÍMERAS: el token vive sólo en este estado y se limpia
-  // tras la acción; url/usuario quedan en memoria de sesión para no
-  // retipear. NADA va a localStorage (igual que el cliente vanilla).
   const [url, setUrl] = useState("");
   const [user, setUser] = useState("");
   const [tok, setTok] = useState("");
-  const [rama, setRama] = useState("");  // capa 21b: destino del push
+  const [rama, setRama] = useState("");
 
   return (
     <div className="gitp">
       <div className="cab">
-        <span>control de versiones</span>
-        <button onClick={gitRefresh} title="releer estado de git">
-          <RefreshCw size={11} style={{ verticalAlign: "-1px" }} /> actualizar
+        <span>{t.sg_title}</span>
+        <button onClick={gitRefresh} title={t.sg_refresh_title}>
+          <RefreshCw size={11} style={{ verticalAlign: "-1px" }} /> {t.sg_refresh}
         </button>
       </div>
       {!g || !g.available ? (
-        // Estado vacío con voz: no es un error, es contexto.
         <div className="empty compacto">
           <div className="empty-ic"><GitBranch size={20} /></div>
-          <div className="empty-tit">Sin git</div>
-          <div className="empty-sub">
-            Este workspace no es un repositorio git, o git no está disponible.
-          </div>
+          <div className="empty-tit">{t.sg_no_git_title}</div>
+          <div className="empty-sub">{t.sg_no_git_sub}</div>
         </div>
       ) : (
         <>
           <div className="estado">
-            <span className="rama"><GitBranch size={12} style={{ verticalAlign: "-2px" }} /> <b>{g.branch}</b></span>
+            <span className="rama">
+              <GitBranch size={12} style={{ verticalAlign: "-2px" }} /> <b>{g.branch}</b>
+            </span>
             <span className={"cambios" + (g.changes === 0 ? " limpio" : "")}>
-              {g.changes === 0 ? "limpio"
-                : g.changes + (g.changes === 1 ? " cambio" : " cambios")}
+              {g.changes === 0
+                ? t.sg_clean
+                : g.changes + " " + (g.changes === 1 ? t.sg_change : t.sg_changes)}
             </span>
           </div>
           {g.commits.length > 0 && (
             <ol>{g.commits.map((c, i) => <li key={i} title={c}>{c}</li>)}</ol>
           )}
           <div className="commitbox">
-            <input placeholder="mensaje de commit…" value={msg}
+            <input
+              placeholder={t.sg_commit_placeholder}
+              value={msg}
               onChange={(e) => setMsg(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && msg.trim()) { commitear(msg.trim()); setMsg(""); } }} />
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && msg.trim()) { commitear(msg.trim()); setMsg(""); }
+              }}
+            />
             <button onClick={() => { if (msg.trim()) { commitear(msg.trim()); setMsg(""); } }}>
-              <GitCommitHorizontal size={13} style={{ verticalAlign: "-2px" }} /> commit
+              <GitCommitHorizontal size={13} style={{ verticalAlign: "-2px" }} /> {t.sg_commit_btn}
             </button>
           </div>
           {s.gitResult && (
             <div className={"res " + (s.gitResult.ok ? "ok" : "bad")}>
               {s.gitResult.detail}
-              {/* Capa 21: orux pusheó la rama del equipo; el PR lo
-                  abre el humano en GitHub (integración, no reemplazo). */}
               {s.gitResult.pr_url && (
                 <a
                   className="prlink"
@@ -84,32 +86,32 @@ function PanelGit() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  abrir PR en GitHub <ExternalLink size={11} />
+                  {t.sg_pr_link} <ExternalLink size={11} />
                 </a>
               )}
             </div>
           )}
           <div className="remoto">
-            <div className="remtit">remoto</div>
-            <input placeholder="URL del repo (https://…)" value={url} onChange={(e) => setUrl(e.target.value)} />
-            <input placeholder="usuario" value={user} onChange={(e) => setUser(e.target.value)} />
-            <input type="password" placeholder="token (no se guarda)" value={tok} onChange={(e) => setTok(e.target.value)} />
-            {/* Capa 21b: destino del push. Vacío = rama del equipo (seguro,
-                abre PR). "main"/otra = push directo sin forzar. */}
+            <div className="remtit">{t.sg_remote_label}</div>
+            <input placeholder={t.sg_url_placeholder} value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input placeholder={t.sg_user_placeholder} value={user} onChange={(e) => setUser(e.target.value)} />
+            <input type="password" placeholder={t.sg_token_placeholder} value={tok} onChange={(e) => setTok(e.target.value)} />
             <input
-              placeholder="rama destino (vacío = rama del equipo + PR)"
+              placeholder={t.sg_branch_placeholder}
               value={rama}
               onChange={(e) => setRama(e.target.value)}
             />
             <div className="remacc">
               <button className="no" onClick={() => {
                 if (!url.trim()) return;
-                if (!confirm("Clonar REEMPLAZA todo el workspace actual por ese repo. Lo no pusheado se pierde. ¿Seguro?")) return;
+                if (!confirm(t.sg_clone_confirm)) return;
                 clonar(url.trim(), user.trim(), tok);
                 setTok("");
-              }}><DownloadCloud size={12} style={{ verticalAlign: "-2px" }} /> clonar</button>
+              }}>
+                <DownloadCloud size={12} style={{ verticalAlign: "-2px" }} /> {t.sg_clone_btn}
+              </button>
               <button onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}>
-                <UploadCloud size={12} style={{ verticalAlign: "-2px" }} /> push
+                <UploadCloud size={12} style={{ verticalAlign: "-2px" }} /> {t.sg_push_btn}
               </button>
             </div>
           </div>
@@ -124,8 +126,6 @@ export function Sidebar({
   width,
 }: {
   vista: "archivos" | "git";
-  // Si el usuario redimensionó el panel, gana sobre los valores del CSS.
-  // Si no, undefined → manda la regla del CSS (incluyendo media queries).
   width?: number;
 }) {
   return (

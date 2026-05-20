@@ -11,23 +11,16 @@ import {
   type ActItem, type Impact,
 } from "../store";
 import { chipDe } from "../lang";
+import { useI18n } from "../i18n";
 
-// Capa 26 — Inspector contextual. La tesis hecha UI: no es un editor con
-// un panel de cards, es un puesto de coordinación. Todo lo que muestra
-// responde a "¿quién toca esto / quién manda / qué se rompe / qué se
-// propone / qué pasó?" sobre el ARCHIVO ABIERTO y el equipo. Cero datos
-// inventados: si no hay señal, lo dice; nunca finge "riesgo: bajo".
-
-function hace(ts: number): string {
+function hace(ts: number, ahora: string): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (s < 5) return "ahora";
+  if (s < 5) return ahora;
   if (s < 60) return s + "s";
   if (s < 3600) return Math.floor(s / 60) + "m";
   return Math.floor(s / 3600) + "h";
 }
 
-// Encabezado de sección del inspector: micro-mayúsculas + contador.
-// Mismo patrón en todas las secciones = lectura de instrumento.
 function Sec(props: {
   ic: ReactNode; tit: string; n?: number; tono?: string;
   children: ReactNode;
@@ -44,17 +37,14 @@ function Sec(props: {
   );
 }
 
-const RIESGO: Record<string, string> = {
-  alta: "riesgo alto", media: "riesgo medio", baja: "riesgo bajo",
-};
-
 function ImpactoMini({ im }: { im: Impact }) {
+  const { t } = useI18n();
   const sev = severidadMax([im]) || "media";
   return (
     <div className="inimp">
-      <span className={"insev s-" + sev}>{sev}</span>
+      <span className={"insev s-" + sev}>{t.tr_sev[sev] ?? sev}</span>
       <span className="inimp-tx">
-        <b>{im.author_name}</b> cambió{" "}
+        <b>{im.author_name}</b> {t.ins_changed}{" "}
         {im.symbols.map((x, i) => (
           <code key={i}>{x}{i < im.symbols.length - 1 ? " " : ""}</code>
         ))}{" "}
@@ -76,14 +66,13 @@ export function Inspector({
   width,
 }: {
   onClose: () => void;
-  // Igual que Sidebar: si el usuario redimensionó, gana sobre el CSS.
   width?: number;
 }) {
   const s = useStore();
+  const { t } = useI18n();
   const path = s.currentPath;
   const c = path ? chipDe(path) : null;
 
-  // Señales del archivo abierto (selectores derivados del store).
   const aqui = path ? presentesEn(path) : [];
   const due = path ? s.owners[path] : undefined;
   const esMio = !!(s.yo && due === s.yo.client_id);
@@ -105,8 +94,8 @@ export function Inspector({
       style={width != null ? { width: width + "px" } : undefined}
     >
       <header className="in-head">
-        <span className="in-eyebrow">inspector de coordinación</span>
-        <button className="in-x" title="ocultar inspector" onClick={onClose}>
+        <span className="in-eyebrow">{t.ins_title}</span>
+        <button className="in-x" title={t.ins_hide} onClick={onClose}>
           <PanelRightClose size={15} />
         </button>
       </header>
@@ -117,103 +106,95 @@ export function Inspector({
           <span className="in-file-n" title={path}>
             {path.split("/").pop()}
           </span>
-          {s.dirty[path] && <span className="in-flag warn">sin marcar</span>}
+          {s.dirty[path] && <span className="in-flag warn">{t.ins_unmarked}</span>}
           {riesgo && (
-            <span className={"in-flag r-" + riesgo}>{RIESGO[riesgo]}</span>
+            <span className={"in-flag r-" + riesgo}>{t.ins_risk[riesgo]}</span>
           )}
         </div>
       ) : (
-        <div className="in-file off">ningún archivo abierto</div>
+        <div className="in-file off">{t.ins_no_file}</div>
       )}
 
       <div className="in-scroll">
-        <Sec ic={<Radio size={13} />} tit="presencia viva" n={aqui.length}>
+        <Sec ic={<Radio size={13} />} tit={t.ins_presence_title} n={aqui.length}>
           {aqui.length === 0 ? (
-            <p className="in-empty">
-              Nadie más en este archivo. {otrosEquipo.length} en el equipo.
-            </p>
+            <p className="in-empty">{t.ins_nobody(otrosEquipo.length)}</p>
           ) : (
             aqui.map((p) => (
               <div className="inrow" key={p.client_id}>
                 <span className="inav" style={{ background: p.color }} />
                 <span className="inrow-n">{p.name}</span>
-                <span className="inrow-m">línea {p.line}</span>
+                <span className="inrow-m">{t.ins_line} {p.line}</span>
               </div>
             ))
           )}
         </Sec>
 
-        <Sec ic={<KeyRound size={13} />} tit="ownership">
+        <Sec ic={<KeyRound size={13} />} tit={t.ins_ownership_title}>
           {!path ? (
             <p className="in-empty">—</p>
           ) : !due ? (
             <div className="inrow">
-              <span className="in-flag faint">sin dueño</span>
+              <span className="in-flag faint">{t.ins_no_owner}</span>
               <button className="in-act" onClick={() => reclamar(path)}>
-                reclamar
+                {t.ins_claim}
               </button>
             </div>
           ) : esMio ? (
             <div className="inrow">
-              <span className="in-flag ok">tuyo</span>
-              <span className="inrow-m">lo editás directo</span>
+              <span className="in-flag ok">{t.ins_mine}</span>
+              <span className="inrow-m">{t.ins_mine_sub}</span>
             </div>
           ) : (
             <div className="inrow col">
-              <span className="in-flag warn">de {nombreDe(due)}</span>
-              <span className="inrow-m">
-                lo que escribas se le propone — no se aplica hasta que apruebe
-              </span>
+              <span className="in-flag warn">{t.ins_of(nombreDe(due))}</span>
+              <span className="inrow-m">{t.ins_others_sub}</span>
             </div>
           )}
         </Sec>
 
         <Sec
-          ic={<Waypoints size={13} />} tit="impacto"
+          ic={<Waypoints size={13} />} tit={t.ins_impact_title}
           n={impLo.length} tono={riesgo === "alta" ? "alarma" : undefined}
         >
           {impLo.length === 0 && impDesde.length === 0 ? (
-            <p className="in-empty">Sin impacto detectado sobre este archivo.</p>
+            <p className="in-empty">{t.ins_no_impact}</p>
           ) : (
             <>
               {impLo.map((im, i) => <ImpactoMini im={im} key={"l" + i} />)}
               {impDesde.length > 0 && (
-                <p className="in-note">
-                  Tus cambios acá afectan a <b>{impDesde.length}</b>{" "}
-                  archivo(s) aguas abajo.
-                </p>
+                <p className="in-note">{t.ins_downstream(impDesde.length)}</p>
               )}
             </>
           )}
         </Sec>
 
         <Sec
-          ic={<GitPullRequest size={13} />} tit="cambios propuestos"
+          ic={<GitPullRequest size={13} />} tit={t.ins_proposals_title}
           n={props.length}
         >
           {props.length === 0 ? (
             <p className="in-empty">
-              Nada propuesto sobre este archivo.
-              {propsMios.length > 0 &&
-                ` ${propsMios.length} esperan tu revisión en otros.`}
+              {t.ins_no_proposals}
+              {propsMios.length > 0 && t.ins_waiting_others(propsMios.length)}
             </p>
           ) : (
             props.map((p) => (
               <div className="inrow col" key={p.id}>
                 <span className="inrow-n">
-                  <b>{p.author_name}</b> propone cambios
+                  <b>{p.author_name}</b> {t.ins_proposes}
                 </span>
                 <span className="inrow-m">
-                  {esMio ? "esperando tu aprobación" : "en revisión"}
+                  {esMio ? t.ins_waiting : t.ins_in_review}
                 </span>
               </div>
             ))
           )}
         </Sec>
 
-        <Sec ic={<Activity size={13} />} tit="actividad" n={s.actividad.length}>
+        <Sec ic={<Activity size={13} />} tit={t.ins_activity_title} n={s.actividad.length}>
           {s.actividad.length === 0 ? (
-            <p className="in-empty">Sin actividad de coordinación todavía.</p>
+            <p className="in-empty">{t.ins_no_activity}</p>
           ) : (
             <ul className="infeed">
               {s.actividad.slice(0, 40).map((a) => (
@@ -230,7 +211,7 @@ export function Inspector({
                     {a.actor && <b>{a.actor}</b>} {a.text}
                     {a.path && <span className="inpath"> {a.path}</span>}
                   </span>
-                  <span className="infeed-t">{hace(a.ts)}</span>
+                  <span className="infeed-t">{hace(a.ts, t.ins_now)}</span>
                 </li>
               ))}
             </ul>
@@ -240,7 +221,7 @@ export function Inspector({
         {impLo.length > 0 && (
           <div className="in-foot">
             <AlertTriangle size={12} />
-            {impLo.length} aviso(s) de impacto activos sobre este archivo
+            {t.ins_impact_count(impLo.length)}
           </div>
         )}
       </div>

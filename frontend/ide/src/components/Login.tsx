@@ -1,30 +1,11 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../useStore";
 import { autenticar } from "../store";
+import { useI18n, LangToggle } from "../i18n";
 
-// La app está CERRADA: sin autenticarse no se ve el workspace. Mismo
-// contrato que siempre (capa 7); el server decide, esto sólo recoge
-// usuario/contraseña.
-//
-// Dirección de arte v2 (login): split coherente con la landing —
-// IZQUIERDA el relato en registro enterprise (kicker mono, titular
-// sólido SIN gradiente, readout sobrio de coordinación en vivo);
-// DERECHA una CONSOLA de acceso: brand sólido arriba, campos con label,
-// cue de seguridad, botones precisos, estado de carga real y error
-// elegante. El motion vive sólo acá (el IDE es quieto a propósito) y
-// respeta prefers-reduced-motion (CSS global).
-//
-// 2026-05-19: la "Orux" del card se renombró .lc-brand (antes .marca,
-// que pisaba al .marca GLOBAL del editor: position:absolute → el brand
-// se salía de flujo y se encimaba con el cue de abajo). Mismo
-// contenido, clase scopeada al acceso. Nada más cambia del store.
-//
-// El store NO expone "in-flight": al éxito el componente se desmonta
-// (App: !authed → <Login/>); al fallo cambia loginError/conn. El estado
-// `busy` se resetea ante esos cambios + un timeout de seguridad. No se
-// toca el protocolo ni el store.
 export function Login() {
   const s = useStore();
+  const { t } = useI18n();
   const [u, setU] = useState("");
   const [p, setP] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,8 +13,8 @@ export function Login() {
   useEffect(() => { setBusy(false); }, [s.loginError, s.conn]);
   useEffect(() => {
     if (!busy) return;
-    const t = setTimeout(() => setBusy(false), 7000);
-    return () => clearTimeout(t);
+    const id = setTimeout(() => setBusy(false), 7000);
+    return () => clearTimeout(id);
   }, [busy]);
 
   const offline = s.conn === "desconectado" || s.conn === "error";
@@ -47,77 +28,74 @@ export function Login() {
 
   return (
     <div className="landing">
-      {/* IZQUIERDA: el relato. Registro enterprise, no aurora. */}
       <section className="landing-pitch">
         <div className="lp-grid" aria-hidden />
         <div className="lp-inner">
           <div className="lp-marca">
-            <b>Orux</b><span>coordination layer</span>
+            <b>Orux</b><span>{t.login_eyebrow.split("·")[0].trim()}</span>
           </div>
           <div className="lp-eyebrow">
-            <i /> capa de coordinación · en producción
+            <i /> {t.login_eyebrow}
           </div>
           <h1 className="lp-tag">
-            Tu equipo toca el código.{" "}
-            <span className="soft">El sistema coordina el riesgo.</span>
+            {t.login_pitch_title1}{" "}
+            <span className="soft">{t.login_pitch_title2}</span>
           </h1>
-          <p className="lp-tesis">
-            Misma seguridad que branches, PRs y reviews — sin la
-            ceremonia. El sistema sabe sin que nadie le pregunte.
-          </p>
+          <p className="lp-tesis">{t.login_pitch_desc}</p>
 
           <ul className="lp-points">
-            <li><b>Presencia por línea.</b> Ves quién toca qué, en vivo.</li>
-            <li><b>Impacto con resolución real.</b> Avisa qué se rompe antes de que se rompa.</li>
-            <li><b>Sobre Git.</b> No lo reemplaza — <code>git clone</code> basta.</li>
+            <li><b>{t.login_li1_b}</b>{t.login_li1}</li>
+            <li><b>{t.login_li2_b}</b>{t.login_li2}</li>
+            <li>
+              <b>{t.login_li3_b}</b>{t.login_li3}
+              <code>git clone</code>{t.login_li3_post}
+            </li>
           </ul>
 
-          {/* Readout de coordinación en vivo — sobrio, no decorativo:
-              dice "esto es multiplayer real", sin parpadear. */}
           <div className="lp-feed" aria-hidden>
-            <div className="lf-h"><span className="lf-live" /> coordinación en vivo</div>
+            <div className="lf-h"><span className="lf-live" /> {t.login_feed_header}</div>
             <div className="lf-row">
               <span className="who" style={{ background: "#6ea8e6" }}>A</span>
-              Ana → roster.py <em className="ok">propuesta aprobada</em>
+              Ana → roster.py <em className="ok">{t.login_feed_approved}</em>
             </div>
             <div className="lf-row">
               <span className="who" style={{ background: "#d6a341" }}>K</span>
-              Kai → sync.py <em className="wt">impacto: 4 usos · avisado</em>
+              Kai → sync.py <em className="wt">{t.login_feed_impact}</em>
             </div>
           </div>
 
-          {/* Tira de sistema: datos, no adjetivos. */}
           <div className="lp-sys" aria-hidden>
-            <span>sobre <b>Git</b></span>
-            <span>presencia <b>por línea</b></span>
-            <span>se <b>previene</b>, no se fusiona</span>
+            <span>{t.login_sys_git_pre} <b>Git</b></span>
+            <span>{t.login_sys_pres_pre} <b>{t.login_sys_pres_val}</b></span>
+            <span>{t.login_sys_prev_pre} <b>{t.login_sys_prev_val}</b>{t.login_sys_prev_post}</span>
           </div>
         </div>
       </section>
 
-      {/* DERECHA: la consola de acceso. Brand sólido arriba (sin
-          pisarse con el cue, ver nota del componente). */}
       <section className="landing-auth">
         <div className="login-card">
           <div className="lc-head">
             <div className="lc-brand"><b>Orux</b></div>
-            <div className="cue"><span className="lk" /> sesión cifrada · cuenta cerrada</div>
+            <div className="cue"><span className="lk" /> {t.login_session_cue}</div>
           </div>
-          <p>Entrá con tu usuario o creá uno nuevo. Sin cuenta no se ve el workspace.</p>
+          <p>{t.login_desc}</p>
 
           <div className="fg">
-            <label htmlFor="lg-u">Usuario</label>
+            <label htmlFor="lg-u">{t.login_user_label}</label>
             <input
-              id="lg-u" placeholder="tu usuario" autoComplete="username" autoFocus
+              id="lg-u" placeholder={t.login_user_placeholder}
+              autoComplete="username" autoFocus
               value={u} disabled={busy}
               onChange={(e) => setU(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
             />
           </div>
           <div className="fg">
-            <label htmlFor="lg-p">Contraseña</label>
+            <label htmlFor="lg-p">{t.login_pass_label}</label>
             <input
-              id="lg-p" type="password" placeholder="••••••••" autoComplete="current-password"
+              id="lg-p" type="password"
+              placeholder={t.login_pass_placeholder}
+              autoComplete="current-password"
               value={p} disabled={busy}
               onChange={(e) => setP(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
@@ -129,28 +107,33 @@ export function Login() {
               className="primario" disabled={busy || vacio}
               onClick={() => enviar("login")}
             >
-              {busy ? <><span className="spin" aria-hidden />Verificando…</> : "Entrar"}
+              {busy
+                ? <><span className="spin" aria-hidden />{t.login_verifying}</>
+                : t.login_enter}
             </button>
             <button
               className="secundario" disabled={busy || vacio}
               onClick={() => enviar("register")}
             >
-              Crear cuenta
+              {t.login_register}
             </button>
           </div>
 
           <div className="err" role="alert">
-            {s.loginError || (offline ? "Sin conexión con el servidor — reintentá." : "")}
+            {s.loginError || (offline ? t.login_offline : "")}
           </div>
           <div className="cardfoot">
-            Tu sesión viaja cifrada. El workspace es un repo Git real —
-            <code>git clone</code> basta.
+            {t.login_foot.split("git clone")[0]}
+            <code>git clone</code>
+            {t.login_foot.split("git clone")[1]}
           </div>
           <div className="seclist" aria-hidden>
-            <span>sesión HMAC</span>
-            <span>cuenta cerrada</span>
-            <span>sin telemetría</span>
+            <span>{t.login_sec1}</span>
+            <span>{t.login_sec2}</span>
+            <span>{t.login_sec3}</span>
           </div>
+
+          <LangToggle className="login-lang" />
         </div>
       </section>
     </div>

@@ -1,23 +1,24 @@
 import { useStore } from "../useStore";
 import { chipDe } from "../lang";
+import { useI18n } from "../i18n";
 
-const CONN = {
-  conectando: "conectando…", conectado: "en línea",
-  desconectado: "sin conexión", error: "error",
-} as const;
-
-// Capa 26 — Status bar de instrumento: dos alas con segmentos separados
-// por hairlines. Izquierda = repo/sync (estado del mundo). Derecha =
-// archivo/posición/identidad (dónde estás). Sólo lee estado que ya
-// existe + el caret local. Densa, tabular, sin gritar.
 export function StatusBar() {
   const s = useStore();
+  const { t } = useI18n();
   const g = s.git;
   const enLinea = Object.keys(s.peers).length + (s.yo ? 1 : 0);
   const propsParaMi = Object.values(s.proposals).filter(
     (p) => s.yo && s.owners[p.path] === s.yo.client_id,
   ).length;
   const lang = s.currentPath ? chipDe(s.currentPath).nom : "—";
+
+  const CONN: Record<string, string> = {
+    conectando: t.stb_connecting,
+    conectado: t.stb_online,
+    desconectado: t.stb_offline,
+    error: t.stb_error,
+  };
+
   const connClase =
     s.conn === "conectado" ? "ok" : s.conn === "conectando" ? "" : "bad";
 
@@ -25,27 +26,27 @@ export function StatusBar() {
     <footer className="statusbar isla">
       <span className={"sb conn " + connClase}>
         <span className="sb-led" />
-        {CONN[s.conn]}
+        {CONN[s.conn] ?? CONN.conectando}
       </span>
       <span className="sb-div" />
       <span className="sb">
-        ⎇ <b>{g && g.available ? (g.branch || "—") : "sin git"}</b>
+        ⎇ <b>{g && g.available ? (g.branch || "—") : t.stb_no_git}</b>
       </span>
       {g && g.available && (
         <>
           <span className="sb-div" />
           <span className={"sb" + (g.changes ? " acc-warn" : "")}>
             {g.changes === 0
-              ? "limpio"
-              : g.changes + (g.changes === 1 ? " cambio" : " cambios")}
+              ? t.stb_clean
+              : g.changes + " " + (g.changes === 1 ? t.stb_change : t.stb_changes)}
           </span>
         </>
       )}
       {propsParaMi > 0 && (
         <>
           <span className="sb-div" />
-          <span className="sb acc-info" title="propuestas que esperan tu revisión">
-            {propsParaMi} para revisar
+          <span className="sb acc-info" title={t.stb_to_review_title}>
+            {propsParaMi} {t.stb_to_review}
           </span>
         </>
       )}
@@ -53,7 +54,7 @@ export function StatusBar() {
       <span className="spacer" />
 
       <span className="sb">
-        <span className="sb-live" /> {enLinea} en línea
+        <span className="sb-live" /> {enLinea} {t.stb_online_label}
       </span>
       <span className="sb-div" />
       <span className="sb">{lang}</span>
@@ -64,7 +65,7 @@ export function StatusBar() {
             Ln {s.caret.line}, Col {s.caret.col}
           </span>
           <span className="sb-div" />
-          <span className="sb">4 esp · UTF-8</span>
+          <span className="sb">{t.stb_spaces}</span>
         </>
       )}
       <span className="sb-div" />

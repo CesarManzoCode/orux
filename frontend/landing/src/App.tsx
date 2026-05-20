@@ -1,17 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { T, cargaLang, guardaLang, type Lang, type Traducciones } from "./i18n";
 
-/* Landing de Orux — dirección de arte v3 "Infraestructura / Sala de
-   control". No es una landing SaaS: es la ficha de una capa de
-   coordinación para equipos de ingeniería. Identidad ACERO (mate, sin
-   gradiente de hue); el verde es estado "vivo", no marca. Composición
-   asimétrica, escena de producto cinematográfica, copy honesto: producto
-   real en producción, sin humo de "IA". Continuidad visual con el IDE. */
+const APP = "/app";
 
-const APP = "/app"; // el IDE vive acá (capa 23b) — estos enlaces deben seguir
-
-/* --- Motion: revelados mínimos y precisos. Se neutralizan vía
-   prefers-reduced-motion (Framer + el bloque CSS). --- */
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
@@ -22,29 +14,17 @@ const stagger: Variants = {
 };
 
 function Reveal({
-  children,
-  delay = 0,
-  className,
-}: {
-  children: ReactNode;
-  delay?: number;
-  className?: string;
-}) {
+  children, delay = 0, className,
+}: { children: ReactNode; delay?: number; className?: string }) {
   return (
-    <motion.div
-      className={className}
-      variants={fadeUp}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.4 }}
-      transition={{ delay }}
-    >
+    <motion.div className={className} variants={fadeUp}
+      initial="hidden" whileInView="show"
+      viewport={{ once: true, amount: 0.4 }} transition={{ delay }}>
       {children}
     </motion.div>
   );
 }
 
-/* Cabecera de sección reutilizable: kicker mono + lead sólido. */
 function Head({ k, children, sub }: { k: string; children: ReactNode; sub?: ReactNode }) {
   return (
     <>
@@ -55,7 +35,6 @@ function Head({ k, children, sub }: { k: string; children: ReactNode; sub?: Reac
   );
 }
 
-/* Marca con logomark de acero (rombo = nodo de coordinación). */
 function Brand({ href = "#top", tag }: { href?: string; tag?: boolean }) {
   return (
     <a className="brand" href={href}>
@@ -66,79 +45,17 @@ function Brand({ href = "#top", tag }: { href?: string; tag?: boolean }) {
   );
 }
 
-/* Los 3 tiempos del producto — el corazón de la tesis. */
-const PASOS = [
-  {
-    n: "01",
-    t: "Editás primero",
-    d: "Abrís el archivo y escribís. Sin pedir permiso, sin esperar una rama. La presencia en vivo te muestra dónde está cada quien antes de pisarse.",
-  },
-  {
-    n: "02",
-    t: "Se negocia después",
-    d: "Si tocás zona con dueño, tu cambio viaja como propuesta. El dueño la aprueba con un clic. El impacto avisa, solo, a quién depende de eso.",
-  },
-  {
-    n: "03",
-    t: "Se aplica al final",
-    d: "Aprobado, se integra para todos en el acto. Commit y push siguen siendo Git de verdad: git clone basta para tener el proyecto completo.",
-  },
-];
+/* Selector de idioma para la landing */
+function LangPill({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  return (
+    <span className="lnd-lang">
+      <button className={lang === "es" ? "ll-active" : ""} onClick={() => setLang("es")}>ES</button>
+      <button className={lang === "en" ? "ll-active" : ""} onClick={() => setLang("en")}>EN</button>
+    </span>
+  );
+}
 
-const FLOW = [
-  {
-    n: "01 · PROPONE",
-    t: "El cambio viaja como propuesta",
-    d: "Tocás una zona con dueño y seguís editando. Tu cambio no se descarta ni te frena: queda en cola, atado al archivo y a vos.",
-    chip: { txt: "diff listo · sin rama", cls: "" },
-  },
-  {
-    n: "02 · RESUELVE",
-    t: "El dueño decide con un clic",
-    d: "Le llega la propuesta con el impacto ya calculado. Aprueba o pide ajuste. Sin reunión, sin PR, sin esperar al líder.",
-    chip: { txt: "pendiente · 1 clic", cls: "wt" },
-  },
-  {
-    n: "03 · APLICA",
-    t: "Se integra para todo el equipo",
-    d: "Aprobado, el cambio aparece en el editor de todos al instante y queda como commit Git real. Nadie quedó desincronizado.",
-    chip: { txt: "aplicado · en Git", cls: "go" },
-  },
-];
-
-const NOTS = [
-  "No es governance corporativo, permisos ni vigilancia.",
-  "No reemplaza Git, GitHub ni tu IDE: es una capa encima.",
-  "No te bloquea antes de intentar — editar primero, siempre.",
-  "No es un chatbot pegado a un editor.",
-];
-
-const FREE = [
-  "Hasta 5 devs por equipo",
-  "Coordinación completa: presencia, ownership, tentativo, Git",
-  "Análisis de impacto con resolución real",
-  "Un workspace por equipo · 2 lenguajes",
-];
-const PRO = [
-  "Equipos grandes, multi-proyecto y organización",
-  "Impacto transitivo y entre repos",
-  "Conocimiento distribuido: el líder deja de ser cuello de botella",
-  "Todos los lenguajes, análisis siempre tibio, integraciones",
-];
-
-/* Tira de métricas del sistema — registro enterprise, sustituye al
-   slogan: datos, no adjetivos. */
-const TRUST = [
-  { k: "Modelo", v: <>Sobre <b>Git</b> · <i>git clone</i> basta</> },
-  { k: "Conflictos", v: <>Se <b>previene</b>, no se fusiona · sin CRDT</> },
-  { k: "Granularidad", v: <>Presencia <b>por línea</b>, no por archivo</> },
-  { k: "Estado", v: <><i>en producción</i> · equipos reales</> },
-];
-
-/* Escena del producto del hero: evoca el IDE real (rail con ownership,
-   editor con presencia, status bar) + tarjetas flotantes de impacto y
-   propuesta. aria-hidden — vende continuidad y "sistema en marcha". */
-function Stage() {
+function Stage({ t }: { t: Traducciones }) {
   return (
     <div className="stage" aria-hidden>
       <div className="stage-back2" />
@@ -153,13 +70,13 @@ function Stage() {
               <i className="face" style={{ background: "#6ea8e6" }}>A</i>
               <i className="face" style={{ background: "#d6a341" }}>K</i>
             </span>
-            <span>4 en vivo</span>
+            <span>{t.stage_live}</span>
           </span>
         </div>
         <div className="ide-body">
           <aside className="ide-rail">
             <div className="rail-h">core /</div>
-            <span className="f on"><span className="dirn">›</span> roster.py <em className="own me">vos</em></span>
+            <span className="f on"><span className="dirn">›</span> roster.py <em className="own me">{t.stage_mine}</em></span>
             <span className="f"><span className="dirn">›</span> sync.py <em className="own peer">Ana</em></span>
             <span className="f"><span className="dirn">›</span> impact.py</span>
             <span className="f"><span className="dirn">›</span> git.py</span>
@@ -168,7 +85,7 @@ function Stage() {
           </aside>
           <div className="ide-code">
             <div className="ln"><span className="n">11</span><code><span className="kw">def</span> <span className="fn">claim</span>(path, user):</code></div>
-            <div className="ln me"><span className="n">12</span><code>    owners[path] = user  <span className="cm"># vos</span></code></div>
+            <div className="ln me"><span className="n">12</span><code>    owners[path] = user  <span className="cm"># {t.stage_mine}</span></code></div>
             <div className="ln"><span className="n">13</span><code>    <span className="kw">return</span> Ownership(path)</code></div>
             <div className="ln"><span className="n">14</span><code></code></div>
             <div className="ln peer"><span className="n">15</span><code><span className="kw">def</span> <span className="fn">presence</span>(line):</code><span className="cursor">Ana</span></div>
@@ -179,34 +96,33 @@ function Stage() {
         <div className="ide-status">
           <span className="s acc"><span className="dotg" /> main</span>
           <span className="s">↑2 ↓0</span>
-          <span className="s">4 en vivo</span>
-          <span className="s acc">sin colisiones</span>
+          <span className="s">{t.stage_live}</span>
+          <span className="s acc">{t.stage_clean}</span>
           <span className="s push">Python · UTF-8</span>
         </div>
       </div>
 
       <div className="float card-impact">
-        <div className="ft"><span className="ic">▲</span> Análisis de impacto</div>
+        <div className="ft"><span className="ic">▲</span> {t.stage_impact_title}</div>
         <div className="body">
-          Cambiar <code>claim()</code> afecta <b>4 usos reales</b> — resolución
-          cruzada, no coincidencia de texto.
+          {t.stage_impact_body1} <code>claim()</code> {t.stage_impact_body2} <b>4 {t.stage_impact_body3.split("—")[0].trim()}</b> — {t.stage_impact_body3.split("—")[1]?.trim()}
         </div>
         <div className="uses">
           <span>server/sync.py:142</span>
           <span>api/routes.py:88</span>
           <span>tests/test_own.py:23</span>
         </div>
-        <div className="auto">Se avisó solo a quien depende de esto</div>
+        <div className="auto">{t.stage_impact_auto}</div>
       </div>
 
       <div className="float card-prop">
-        <div className="ft"><span className="ic">◇</span> Propuesta de Ana</div>
-        <div className="meta">sync.py · <b>+12 −3</b> · impacto calculado</div>
+        <div className="ft"><span className="ic">◇</span> {t.stage_prop_title}</div>
+        <div className="meta">{t.stage_prop_meta} <b>+12 −3</b> · impacto calculado</div>
         <div className="acts">
-          <span className="ap">Aprobar</span>
-          <span className="vw">Ver diff</span>
+          <span className="ap">{t.stage_prop_approve}</span>
+          <span className="vw">{t.stage_prop_view}</span>
         </div>
-        <div className="pend">pendiente · un clic la integra</div>
+        <div className="pend">{t.stage_prop_pend}</div>
       </div>
     </div>
   );
@@ -215,6 +131,10 @@ function Stage() {
 export function App() {
   const reduce = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
+  const [lang, setLangState] = useState<Lang>(cargaLang);
+  const t = T[lang];
+
+  const setLang = (l: Lang) => { guardaLang(l); setLangState(l); };
 
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 16);
@@ -235,16 +155,18 @@ export function App() {
         <div className="wrap">
           <Brand tag />
           <div className="nav-links">
-            <a href="#problema">El problema</a>
-            <a href="#pilares">Qué hace</a>
-            <a href="#como">Cómo funciona</a>
-            <a href="#precio">Precio</a>
+            <a href="#problema">{t.nav_problema}</a>
+            <a href="#pilares">{t.nav_pilares}</a>
+            <a href="#como">{t.nav_como}</a>
+            <a href="#precio">{t.nav_precio}</a>
           </div>
           <div className="nav-right">
-            <span className="nav-stat"><i />en producción</span>
+            <span className="nav-stat"><i />{t.nav_produccion}</span>
+            <span className="nav-sep" />
+            <LangPill lang={lang} setLang={setLang} />
             <span className="nav-sep" />
             <a className="btn ghost sm" href={APP}>
-              Entrar <span className="arr">→</span>
+              {t.nav_entrar} <span className="arr">{t.nav_arr}</span>
             </a>
           </div>
         </div>
@@ -253,37 +175,28 @@ export function App() {
       {/* ── HERO ── */}
       <header className="hero" id="top">
         <div className="wrap">
-          <motion.div
-            className="hero-copy"
-            variants={stagger}
-            initial={heroInit}
-            animate="show"
-          >
+          <motion.div className="hero-copy" variants={stagger}
+            initial={heroInit} animate="show">
             <motion.div variants={fadeUp}>
               <span className="eyebrow">
-                <span className="live" /> En producción · equipos reales coordinando
+                <span className="live" /> {t.hero_eyebrow}
               </span>
             </motion.div>
             <motion.h1 variants={fadeUp}>
-              Tu equipo toca el código.{" "}
-              <span className="dim">El sistema coordina el riesgo.</span>
+              {t.hero_h1_1}{" "}
+              <span className="dim">{t.hero_h1_2}</span>
             </motion.h1>
-            <motion.p className="sub" variants={fadeUp}>
-              Una capa de coordinación en tiempo real sobre Git, para equipos
-              de 2 a 50. Ownership, presencia e impacto resueltos antes de que
-              el cambio llegue a producción — sin la ceremonia de branches,
-              PRs y reviews.
-            </motion.p>
+            <motion.p className="sub" variants={fadeUp}>{t.hero_sub}</motion.p>
             <motion.div className="cta" variants={fadeUp}>
               <a className="btn primary lg" href={APP}>
-                Entrar a Orux <span className="arr">→</span>
+                {t.hero_cta_primary} <span className="arr">→</span>
               </a>
-              <a className="btn ghost lg" href="#como">Ver cómo funciona</a>
+              <a className="btn ghost lg" href="#como">{t.hero_cta_secondary}</a>
             </motion.div>
             <motion.div className="signals" variants={fadeUp}>
-              <span className="sig">presencia · <b>por línea</b></span>
-              <span className="sig">ownership · <b>invisible</b></span>
-              <span className="sig">impacto · <b>resolución real</b></span>
+              <span className="sig">{t.hero_sig1} <b>{t.hero_sig1_b}</b></span>
+              <span className="sig">{t.hero_sig2} <b>{t.hero_sig2_b}</b></span>
+              <span className="sig">{t.hero_sig3} <b>{t.hero_sig3_b}</b></span>
             </motion.div>
           </motion.div>
 
@@ -292,41 +205,42 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.85, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Stage />
+            <Stage t={t} />
           </motion.div>
         </div>
       </header>
 
-      {/* ── Tira de métricas del sistema (estática, registro enterprise) ── */}
+      {/* ── Trust strip ── */}
       <div className="trust">
         <div className="wrap">
-          {TRUST.map((t) => (
-            <div className="ti" key={t.k}>
-              <span className="tk">{t.k}</span>
-              <span className="tv">{t.v}</span>
+          {t.trust.map((item) => (
+            <div className="ti" key={item.k}>
+              <span className="tk">{item.k}</span>
+              <span className="tv">
+                {item.v_pre && <>{item.v_pre} </>}
+                <b>{item.v_b}</b>
+                {item.v_post}
+              </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── EL RIESGO INVISIBLE (problema) ── */}
+      {/* ── PROBLEMA ── */}
       <section id="problema">
         <span className="sec-line" />
         <div className="wrap">
-          <Head
-            k="01 · El problema"
-            sub="Dos personas tocan archivos relacionados. Nadie lo ve. El conflicto y el cambio que rompe a un tercero aparecen al final, en el merge — cuando ya cuesta caro."
-          >
-            El riesgo no está en el código.{" "}
-            <span className="soft">Está en que nadie lo ve a tiempo.</span>
+          <Head k={t.s01_k} sub={t.s01_sub}>
+            {t.s01_h_1}{" "}
+            <span className="soft">{t.s01_h_2}</span>
           </Head>
           <Reveal delay={0.12}>
             <div className="risk">
               <div className="risk-col">
-                <div className="risk-h">Ahora · sin coordinación</div>
+                <div className="risk-h">{t.risk_now}</div>
                 <div className="dev">
                   <span className="av" style={{ background: "#43b98a" }}>T</span>
-                  <span className="nm">Vos · <em>roster.py</em></span>
+                  <span className="nm">{t.risk_you} <em>roster.py</em></span>
                 </div>
                 <div className="dev">
                   <span className="av" style={{ background: "#6ea8e6" }}>A</span>
@@ -335,18 +249,17 @@ export function App() {
               </div>
               <div className="risk-mid">
                 <span className="file">claim()</span>
-                <span className="clash">colisión latente</span>
+                <span className="clash">{t.risk_collision}</span>
               </div>
               <div className="risk-col">
-                <div className="risk-h">Lo que Git ve</div>
+                <div className="risk-h">{t.risk_git}</div>
                 <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>commit local… push… </span></div>
                 <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>rama… PR… review…</span></div>
               </div>
               <div className="risk-foot">
                 <span className="x">!</span>
                 <div>
-                  Git no previene colisiones: las <b>descubre en el merge</b>.
-                  Live Share no entiende tu código. Tu IDE no coordina al equipo.
+                  {t.risk_foot} <b>{t.risk_foot_b}</b>{t.risk_foot2}
                 </div>
               </div>
             </div>
@@ -354,23 +267,19 @@ export function App() {
         </div>
       </section>
 
-      {/* ── LO DETECTA SOLO (pilares como módulos) ── */}
+      {/* ── PILARES ── */}
       <section id="pilares">
         <span className="sec-line" />
         <div className="wrap">
-          <Head
-            k="02 · Qué hace, de verdad"
-            sub="Tres mecanismos reales, funcionando hoy. Ninguno es humo: corren en producción con devs reales."
-          >
-            Orux lo detecta solo,{" "}
-            <span className="soft">sin que nadie le pregunte.</span>
+          <Head k={t.s02_k} sub={t.s02_sub}>
+            {t.s02_h_1}{" "}
+            <span className="soft">{t.s02_h_2}</span>
           </Head>
           <Reveal delay={0.12}>
             <div className="modules">
-              {/* Presencia */}
               <div className="mod">
                 <div className="mod-h">
-                  <span className="d" style={{ background: "var(--live)" }} /> Presencia
+                  <span className="d" style={{ background: "var(--live)" }} /> {t.mod1_title}
                   <span className="ix">01 / 03</span>
                 </div>
                 <div className="mod-screen">
@@ -382,35 +291,33 @@ export function App() {
                   </div>
                 </div>
                 <div className="mod-cap">
-                  <h3>Quién toca qué, en vivo</h3>
-                  <p>Presencia por línea. Nunca dos en la misma: se previene antes, no se resuelve después.</p>
+                  <h3>{t.mod1_h3}</h3>
+                  <p>{t.mod1_p}</p>
                 </div>
               </div>
 
-              {/* Ownership */}
               <div className="mod">
                 <div className="mod-h">
-                  <span className="d" style={{ background: "var(--peer)" }} /> Ownership
+                  <span className="d" style={{ background: "var(--peer)" }} /> {t.mod2_title}
                   <span className="ix">02 / 03</span>
                 </div>
                 <div className="mod-screen">
                   <div className="scr-own">
-                    <div className="row"><span className="fl">roster.py</span><span className="ar">→</span><span className="tg me">vos</span></div>
+                    <div className="row"><span className="fl">roster.py</span><span className="ar">→</span><span className="tg me">{t.mod_own_me}</span></div>
                     <div className="row"><span className="fl">sync.py</span><span className="ar">→</span><span className="tg pe">Ana</span></div>
-                    <div className="row"><span className="fl">impact.py</span><span className="ar">→</span><span className="tg fr">libre</span></div>
+                    <div className="row"><span className="fl">impact.py</span><span className="ar">→</span><span className="tg fr">{t.mod_own_free}</span></div>
                     <div className="row"><span className="fl">git.py</span><span className="ar">→</span><span className="tg pe">Kai</span></div>
                   </div>
                 </div>
                 <div className="mod-cap">
-                  <h3>De quién es cada zona</h3>
-                  <p>El sistema lo sabe sin que nadie pida permiso. Hay dueño: tu cambio se propone, no se bloquea.</p>
+                  <h3>{t.mod2_h3}</h3>
+                  <p>{t.mod2_p}</p>
                 </div>
               </div>
 
-              {/* Impacto */}
               <div className="mod">
                 <div className="mod-h">
-                  <span className="d" style={{ background: "var(--risk)" }} /> Impacto
+                  <span className="d" style={{ background: "var(--risk)" }} /> {t.mod3_title}
                   <span className="ix">03 / 03</span>
                 </div>
                 <div className="mod-screen">
@@ -421,12 +328,12 @@ export function App() {
                     <div className="u"><b>sync.py:142</b></div>
                     <div className="u"><b>routes.py:88</b></div>
                     <div className="u"><b>test_own.py:23</b></div>
-                    <div className="ok">avisado automáticamente</div>
+                    <div className="ok">{t.mod_impact_ok}</div>
                   </div>
                 </div>
                 <div className="mod-cap">
-                  <h3>Qué se rompe si cambiás esto</h3>
-                  <p>Cambiás una firma y avisa, solo, a quién la usa de verdad. Resolución cruzada, sin falsos positivos.</p>
+                  <h3>{t.mod3_h3}</h3>
+                  <p>{t.mod3_p}</p>
                 </div>
               </div>
             </div>
@@ -434,20 +341,17 @@ export function App() {
         </div>
       </section>
 
-      {/* ── COORDINA EN TIEMPO REAL (flujo) ── */}
+      {/* ── FLUJO ── */}
       <section>
         <span className="sec-line" />
         <div className="wrap">
-          <Head
-            k="03 · Coordinación en tiempo real"
-            sub="Lo que antes era rama → PR → review → merge, ahora es proponer → aprobar → aplicar. Mismo control, sin la ceremonia."
-          >
-            La negociación ocurre dentro del editor,{" "}
-            <span className="soft">no en una cola de PRs.</span>
+          <Head k={t.s03_k} sub={t.s03_sub}>
+            {t.s03_h_1}{" "}
+            <span className="soft">{t.s03_h_2}</span>
           </Head>
           <Reveal delay={0.12}>
             <div className="flow">
-              {FLOW.map((f) => (
+              {t.flow.map((f) => (
                 <div className="fn" key={f.n}>
                   <div className="fn-n">{f.n}</div>
                   <h3>{f.t}</h3>
@@ -460,25 +364,18 @@ export function App() {
         </div>
       </section>
 
-      {/* ── MENOS CEREMONIA (3 tiempos) ── */}
+      {/* ── PASOS ── */}
       <section id="como">
         <span className="sec-line" />
         <div className="wrap">
-          <Head
-            k="04 · Cómo funciona"
-            sub="La tesis, en tres tiempos. Misma seguridad que tu flujo actual; el sistema sabe sin que nadie le pregunte."
-          >
-            Editás primero. Se negocia después.{" "}
-            <span className="soft">Se aplica al final.</span>
+          <Head k={t.s04_k} sub={t.s04_sub}>
+            {t.s04_h_1}{" "}
+            <span className="soft">{t.s04_h_2}</span>
           </Head>
-          <motion.div
-            className="steps"
-            variants={stagger}
+          <motion.div className="steps" variants={stagger}
             initial={reduce ? "show" : "hidden"}
-            whileInView="show"
-            viewport={{ once: true, amount: 0.2 }}
-          >
-            {PASOS.map((s) => (
+            whileInView="show" viewport={{ once: true, amount: 0.2 }}>
+            {t.pasos.map((s) => (
               <motion.div key={s.n} className="step" variants={fadeUp}>
                 <div className="step-n">{s.n}</div>
                 <h3>{s.t}</h3>
@@ -489,22 +386,18 @@ export function App() {
         </div>
       </section>
 
-      {/* ── LO QUE NO SOMOS ── */}
+      {/* ── NO SOMOS ── */}
       <section>
         <span className="sec-line" />
         <div className="wrap">
-          <Head k="05 · Lo que NO somos">
-            Vendemos coordinación,{" "}
-            <span className="soft">no control.</span>
+          <Head k={t.s05_k}>
+            {t.s05_h_1}{" "}
+            <span className="soft">{t.s05_h_2}</span>
           </Head>
-          <motion.div
-            className="nots"
-            variants={stagger}
+          <motion.div className="nots" variants={stagger}
             initial={reduce ? "show" : "hidden"}
-            whileInView="show"
-            viewport={{ once: true, amount: 0.3 }}
-          >
-            {NOTS.map((n) => (
+            whileInView="show" viewport={{ once: true, amount: 0.3 }}>
+            {t.nots.map((n) => (
               <motion.div className="not" key={n} variants={fadeUp}>
                 <span>✕</span>
                 <div>{n}</div>
@@ -518,53 +411,41 @@ export function App() {
       <section id="precio">
         <span className="sec-line" />
         <div className="wrap">
-          <Head
-            k="06 · Precio"
-            sub="Gratis de verdad para empezar, sin asteriscos. Pagás cuando el equipo escala y necesita más profundidad."
-          >
-            Para equipos nuevos sin inercia,{" "}
-            <span className="soft">empezar no cuesta.</span>
+          <Head k={t.s06_k} sub={t.s06_sub}>
+            {t.s06_h_1}{" "}
+            <span className="soft">{t.s06_h_2}</span>
           </Head>
-          <motion.div
-            className="prices"
-            variants={stagger}
+          <motion.div className="prices" variants={stagger}
             initial={reduce ? "show" : "hidden"}
-            whileInView="show"
-            viewport={{ once: true, amount: 0.2 }}
-          >
+            whileInView="show" viewport={{ once: true, amount: 0.2 }}>
             <motion.div className="price" variants={fadeUp}>
-              <div className="tier">Free · para siempre</div>
-              <h4>Tu equipo chico</h4>
-              <p className="price-sub">Todo el core de coordinación, sin recortes. Para equipos que empiezan.</p>
-              <ul>{FREE.map((f) => <li key={f}>{f}</li>)}</ul>
-              <a className="btn ghost full" href={APP}>Empezar gratis</a>
+              <div className="tier">{t.free_tier}</div>
+              <h4>{t.free_h4}</h4>
+              <p className="price-sub">{t.free_sub}</p>
+              <ul>{t.free.map((f) => <li key={f}>{f}</li>)}</ul>
+              <a className="btn ghost full" href={APP}>{t.free_cta}</a>
             </motion.div>
             <motion.div className="price pro" variants={fadeUp}>
-              <span className="badge">Recomendado al crecer</span>
-              <div className="tier">Premium · escala y profundidad</div>
-              <h4>Cuando crecés</h4>
-              <p className="price-sub">Más equipo, más repos, análisis más profundo y conocimiento distribuido.</p>
-              <ul>{PRO.map((f) => <li key={f}>{f}</li>)}</ul>
-              <a className="btn primary full" href={APP}>Entrar a Orux <span className="arr">→</span></a>
+              <span className="badge">{t.pro_badge}</span>
+              <div className="tier">{t.pro_tier}</div>
+              <h4>{t.pro_h4}</h4>
+              <p className="price-sub">{t.pro_sub}</p>
+              <ul>{t.pro.map((f) => <li key={f}>{f}</li>)}</ul>
+              <a className="btn primary full" href={APP}>{t.pro_cta} <span className="arr">→</span></a>
             </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* ── CTA FINAL ── */}
+      {/* ── FINAL CTA ── */}
       <section className="final">
         <span className="sec-line" />
         <div className="wrap">
-          <Reveal><h2>Misma vida, menos dolor.</h2></Reveal>
-          <Reveal delay={0.06}>
-            <p className="final-sub">
-              Editar primero. Negociar después. Aplicar al final.
-              El sistema sabe sin que nadie le pregunte.
-            </p>
-          </Reveal>
+          <Reveal><h2>{t.final_h2}</h2></Reveal>
+          <Reveal delay={0.06}><p className="final-sub">{t.final_sub}</p></Reveal>
           <Reveal delay={0.12} className="final-cta">
-            <a className="btn primary lg" href={APP}>Entrar a Orux <span className="arr">→</span></a>
-            <a className="btn ghost lg" href="#como">Cómo funciona</a>
+            <a className="btn primary lg" href={APP}>{t.final_cta} <span className="arr">→</span></a>
+            <a className="btn ghost lg" href="#como">{t.final_ghost}</a>
           </Reveal>
         </div>
       </section>
@@ -573,13 +454,13 @@ export function App() {
         <div className="wrap">
           <div className="foot-l">
             <Brand />
-            <p>multiplayer semantic coding · misma vida, menos dolor</p>
+            <p>{t.foot_tagline}</p>
           </div>
           <div className="foot-r">
-            <a href={APP}>Entrar</a>
-            <a href="#pilares">Qué hace</a>
-            <a href="#como">Cómo funciona</a>
-            <a href="#precio">Precio</a>
+            <a href={APP}>{t.foot_enter}</a>
+            <a href="#pilares">{t.foot_what}</a>
+            <a href="#como">{t.foot_how}</a>
+            <a href="#precio">{t.foot_price}</a>
           </div>
         </div>
       </footer>

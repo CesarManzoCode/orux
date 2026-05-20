@@ -3,26 +3,23 @@ import { Shield, X } from "lucide-react";
 import { useStore } from "../useStore";
 import { adminAsignarVarios, nombreDe } from "../store";
 import { arbol, archivosDe, chipDe, type Nodo } from "../lang";
+import { useI18n } from "../i18n";
 
-// Capa 13 — reparto MASIVO de ownership, en su propio modal. La primera
-// queja real: de a uno en 100 archivos es inusable. Acá: árbol con
-// checkboxes, carpetas con tri-estado (seleccionan todos sus archivos),
-// un dueño elegido UNA vez, "asignar a N". Un solo mensaje bulk. Carpeta =
-// sus archivos (el ownership sigue por archivo; por prefijo está diferido).
 export function AdminModal({ onClose }: { onClose: () => void }) {
   const s = useStore();
+  const { t } = useI18n();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [user, setUser] = useState("");
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set());
   const paths = Object.keys(s.files);
   const raiz = useMemo(() => arbol(paths), [paths.join("\0")]);
 
-  // Esc cierra; limpiar selección de paths que ya no existen.
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
+
   useEffect(() => {
     setSel((prev) => {
       const n = new Set([...prev].filter((p) => p in s.files));
@@ -48,7 +45,7 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
   function aplicar(username: string) {
     if (sel.size === 0) return;
     adminAsignarVarios([...sel], username);
-    setSel(new Set()); // el server difunde el ownership nuevo
+    setSel(new Set());
   }
 
   const filas: JSX.Element[] = [];
@@ -66,7 +63,11 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
             checked={archivos.length > 0 && dentro === archivos.length}
             onChange={(e) => toggleDir(archivos, e.target.checked)} />
           <span className="amtw" style={{ cursor: "pointer" }}
-            onClick={() => setColapsadas((c) => { const n = new Set(c); n.has(rd) ? n.delete(rd) : n.add(rd); return n; })}>
+            onClick={() => setColapsadas((c) => {
+              const n = new Set(c);
+              n.has(rd) ? n.delete(rd) : n.add(rd);
+              return n;
+            })}>
             {cerrada ? "▸" : "▾"}
           </span>
           <span className="amname">{nombre}/</span>
@@ -96,39 +97,41 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
     <div className="ammodal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="amcard">
         <div className="amhead">
-          <span className="amtit"><Shield size={15} /> administración · ownership</span>
-          <button className="amx" title="cerrar" onClick={onClose}><X size={15} /></button>
+          <span className="amtit"><Shield size={15} /> {t.am_title}</span>
+          <button className="amx" title={t.am_close} onClick={onClose}><X size={15} /></button>
         </div>
         <div className="ambar">
           <label className="amsel">
-            dueño:
+            {t.am_owner_label}
             <select value={user} onChange={(e) => setUser(e.target.value)}>
-              <option value="">— elegí un usuario —</option>
+              <option value="">{t.am_owner_empty}</option>
               {s.usuarios.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </label>
-          <span className="amcount">{n + (n === 1 ? " seleccionado" : " seleccionados")}</span>
+          <span className="amcount">
+            {n + " " + (n === 1 ? t.am_selected_one : t.am_selected_many)}
+          </span>
           <span className="spacer" />
-          <button onClick={() => setSel(new Set(paths))}>todo</button>
-          <button onClick={() => setSel(new Set())}>nada</button>
+          <button onClick={() => setSel(new Set(paths))}>{t.am_all}</button>
+          <button onClick={() => setSel(new Set())}>{t.am_none}</button>
           <button className="amgo" disabled={n === 0 || !user} onClick={() => aplicar(user)}>
-            asignar a {n}
+            {t.am_assign(n)}
           </button>
           <button className="amno" disabled={n === 0} onClick={() => aplicar("")}>
-            quitar dueño a {n}
+            {t.am_remove(n)}
           </button>
         </div>
         <div className="amtree">
           {paths.length === 0
-            ? <div className="amvacio">no hay archivos en el workspace.</div>
+            ? <div className="amvacio">{t.am_no_files}</div>
             : filas}
         </div>
         <div className="amfoot">
           {n === 0
-            ? "seleccioná archivos o carpetas; elegí un dueño; aplicá al lote."
+            ? t.am_hint_empty
             : user
-              ? `“asignar” pondrá a «${user}» como dueño de ${n} archivo(s). “quitar” los deja sin dueño.`
-              : `${n} archivo(s) seleccionados — elegí un usuario, o usá “quitar dueño”.`}
+              ? t.am_hint_assign(user, n)
+              : t.am_hint_nouser(n)}
         </div>
       </div>
     </div>

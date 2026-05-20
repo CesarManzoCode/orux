@@ -2113,3 +2113,24 @@ button:active { transform: translateY(1px); }
 @media (max-width: 920px) {
   .layout > .inspector { display: none; }
 }
+
+/* ── Selector de idioma (LangToggle) ── */
+.lang-toggle {
+  display: inline-flex; align-items: center;
+  gap: 1px; background: var(--surface-2);
+  border: 1px solid var(--border-soft); border-radius: var(--r-pill);
+  padding: 1px 3px;
+}
+.lang-toggle button {
+  font: 700 9px/1 var(--font-mono); text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+  padding: 2px 5px; border-radius: var(--r-pill);
+  cursor: pointer; transition: background var(--tr), color var(--tr);
+  background: transparent;
+}
+.lang-toggle button:hover { color: var(--text); }
+.lang-toggle button.lt-active {
+  background: var(--accent-weak); color: var(--accent);
+}
+/* Variante dentro del login card (margen extra) */
+.login-lang { margin-top: 0.8rem; align-self: flex-start; }
