@@ -11,6 +11,12 @@ export interface Peer {
 export interface Proposal {
   id: string; path: string; author_id: string;
   author_name: string; content: string;
+  // Capa 29 (UX): momento en que el cliente recibió la propuesta. NO viene
+  // del server (el protocolo no lo incluye); se setea al recibir el mensaje
+  // para que el inspector pueda mostrar "hace Xm" sin mentir — representa
+  // "cuando me llegó", no "cuando se creó en el server". Si la misma
+  // propuesta se re-envía, conservamos el seen_at del primer arribo.
+  seen_at?: number;
 }
 export interface Impact {
   source_path: string; author_name: string;
@@ -357,11 +363,21 @@ function onMessage(raw: string) {
       set({ owners: { ...ahora }, ...(drafted ? { drafts } : {}) });
       break;
     }
-    case "proposal":
+    case "proposal": {
       act("propuesta", m.proposal.author_name,
         "propuso cambios", m.proposal.path);
-      set({ proposals: { ...state.proposals, [m.proposal.id]: m.proposal } });
+      // Conservar seen_at si la propuesta ya existía (re-broadcast): el "hace
+      // X" no debe rebotar a "recién" cuando el server reenvía el mismo id.
+      const prev = state.proposals[m.proposal.id];
+      const seen_at = prev?.seen_at ?? Date.now();
+      set({
+        proposals: {
+          ...state.proposals,
+          [m.proposal.id]: { ...m.proposal, seen_at },
+        },
+      });
       break;
+    }
     case "impact": {
       const key = m.source_path + "::" + m.affected_path;
       act("impacto", m.author_name,

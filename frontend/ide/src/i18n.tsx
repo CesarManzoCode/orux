@@ -351,6 +351,67 @@ export const T = {
     ins_hide: "ocultar inspector",
     ins_now: "ahora",
 
+    // Inspector v2 — hero, atención, propuestas elevadas (capa 29 UX)
+    ins_hero_eyebrow: "estado del archivo",
+    ins_hero_mode_live: "edición en vivo",
+    ins_hero_mode_propose: "modo propuesta",
+    ins_hero_mode_free: "edición libre",
+    ins_hero_mode_live_desc: "lo que escribes se aplica al instante",
+    ins_hero_mode_propose_desc: (name: string) =>
+      "lo que escribes queda local — Ctrl+S lo envía a " + name,
+    ins_hero_mode_free_desc: "este archivo no tiene dueño · reclámalo para editar en vivo sin proponer",
+    ins_hero_solo: "estás solo aquí",
+    ins_hero_team: (n: number) => n === 1 ? "1 más en este archivo" : `${n} más en este archivo`,
+    ins_hero_owner_mine: "tuyo",
+    ins_hero_owner_other: (name: string) => "de " + name,
+    ins_hero_owner_none: "sin dueño",
+    ins_attn_title: "qué requiere tu atención",
+    ins_attn_calm_title: "todo en orden",
+    ins_attn_calm_sub: "ningún cambio sobre este archivo necesita acción ahora.",
+    ins_attn_props_for_me: (n: number) =>
+      n === 1 ? "1 propuesta espera tu revisión" : `${n} propuestas esperan tu revisión`,
+    ins_attn_props_for_me_sub: "abajo, en cambios propuestos. Aprueba o rechaza.",
+    ins_attn_draft_ready: "tienes un borrador local sin enviar",
+    ins_attn_draft_ready_sub: "Ctrl+S lo envía como propuesta al dueño.",
+    ins_attn_unmarked_owner: "cambios sin marcar — pulsa Ctrl+S",
+    ins_attn_unmarked_owner_sub: "el análisis de impacto se ejecuta al marcar el punto coherente.",
+    ins_attn_unmarked_other: "Ctrl+S envía tu propuesta al dueño",
+    ins_attn_unmarked_other_sub: "lo que escribiste sigue local hasta marcarlo.",
+    ins_attn_impact_high: "impacto de alto riesgo detectado",
+    ins_attn_impact_high_sub: "un cambio reciente toca cómo se usa este archivo aguas arriba.",
+    ins_attn_no_owner: "este archivo no tiene dueño",
+    ins_attn_no_owner_sub: "reclámalo si vas a tocarlo — quedará a tu nombre para los demás.",
+    ins_attn_other_present: (names: string) => `están aquí contigo: ${names}`,
+    ins_attn_other_present_sub: "verás su cursor en vivo. Tu edición no los desplaza.",
+
+    // Presencia viva
+    ins_presence_live_dot: "en vivo",
+    ins_presence_solo_title: "tú eres el único aquí",
+    ins_presence_solo_team: (n: number) =>
+      n === 0 ? "nadie más en el equipo está conectado." :
+      n === 1 ? "1 persona más conectada, en otro archivo." :
+      `${n} personas conectadas, en otros archivos.`,
+
+    // Propuestas elevadas
+    ins_prop_seen_now: "recién",
+    ins_prop_seen: (ago: string) => "hace " + ago,
+    ins_prop_stats_added: (n: number) => `+${n}`,
+    ins_prop_stats_removed: (n: number) => `−${n}`,
+    ins_prop_no_change: "sin cambios efectivos",
+    ins_prop_lines: (n: number) => n === 1 ? "1 línea" : `${n} líneas`,
+    ins_prop_open: "abrir archivo",
+
+    // Editor — pill de co-edición en vivo
+    ed_team_alone: "tú solo en este archivo",
+    ed_team_count: (n: number) => n === 1 ? "1 en vivo aquí" : `${n} en vivo aquí`,
+    ed_team_tooltip: "personas editando este archivo ahora",
+
+    // TopBar avatar contexto
+    tb_peer_in_file: (file: string) => "en " + file,
+    tb_peer_in_no_file: "sin archivo abierto",
+    tb_peer_line: (n: number) => "línea " + n,
+    tb_peer_same_file: "aquí, contigo",
+
     // Trays
     tr_proposals: "propuestas para ti",
     tr_proposes: "propone cambios a",
@@ -746,6 +807,67 @@ export const T = {
     ins_impact_count: (n: number) => `${n} active impact notice(s) on this file`,
     ins_hide: "hide inspector",
     ins_now: "now",
+
+    // Inspector v2 — hero, attention, elevated proposals
+    ins_hero_eyebrow: "file state",
+    ins_hero_mode_live: "live editing",
+    ins_hero_mode_propose: "proposal mode",
+    ins_hero_mode_free: "free editing",
+    ins_hero_mode_live_desc: "what you type applies instantly",
+    ins_hero_mode_propose_desc: (name: string) =>
+      "what you type stays local — Ctrl+S sends it to " + name,
+    ins_hero_mode_free_desc: "this file has no owner · claim it to edit live without proposing",
+    ins_hero_solo: "you're alone here",
+    ins_hero_team: (n: number) => n === 1 ? "1 more in this file" : `${n} more in this file`,
+    ins_hero_owner_mine: "yours",
+    ins_hero_owner_other: (name: string) => name + "'s",
+    ins_hero_owner_none: "no owner",
+    ins_attn_title: "what needs your attention",
+    ins_attn_calm_title: "all clear",
+    ins_attn_calm_sub: "no change on this file needs action right now.",
+    ins_attn_props_for_me: (n: number) =>
+      n === 1 ? "1 proposal awaits your review" : `${n} proposals await your review`,
+    ins_attn_props_for_me_sub: "below, in proposed changes. Approve or reject.",
+    ins_attn_draft_ready: "you have an unsent local draft",
+    ins_attn_draft_ready_sub: "Ctrl+S sends it as a proposal to the owner.",
+    ins_attn_unmarked_owner: "unmarked changes — press Ctrl+S",
+    ins_attn_unmarked_owner_sub: "impact analysis runs when you mark the coherent point.",
+    ins_attn_unmarked_other: "Ctrl+S sends your proposal to the owner",
+    ins_attn_unmarked_other_sub: "what you wrote stays local until you mark it.",
+    ins_attn_impact_high: "high risk impact detected",
+    ins_attn_impact_high_sub: "a recent change touches how this file is used upstream.",
+    ins_attn_no_owner: "this file has no owner",
+    ins_attn_no_owner_sub: "claim it if you're going to touch it — it'll show as yours to others.",
+    ins_attn_other_present: (names: string) => `here with you: ${names}`,
+    ins_attn_other_present_sub: "you'll see their cursor live. Your edits don't push them aside.",
+
+    // Live presence
+    ins_presence_live_dot: "live",
+    ins_presence_solo_title: "you're the only one here",
+    ins_presence_solo_team: (n: number) =>
+      n === 0 ? "no one else in the team is connected." :
+      n === 1 ? "1 more person connected, in another file." :
+      `${n} more people connected, in other files.`,
+
+    // Elevated proposals
+    ins_prop_seen_now: "just now",
+    ins_prop_seen: (ago: string) => ago + " ago",
+    ins_prop_stats_added: (n: number) => `+${n}`,
+    ins_prop_stats_removed: (n: number) => `−${n}`,
+    ins_prop_no_change: "no effective changes",
+    ins_prop_lines: (n: number) => n === 1 ? "1 line" : `${n} lines`,
+    ins_prop_open: "open file",
+
+    // Editor — live co-editing pill
+    ed_team_alone: "you alone in this file",
+    ed_team_count: (n: number) => n === 1 ? "1 live here" : `${n} live here`,
+    ed_team_tooltip: "people editing this file right now",
+
+    // TopBar avatar context
+    tb_peer_in_file: (file: string) => "in " + file,
+    tb_peer_in_no_file: "no file open",
+    tb_peer_line: (n: number) => "line " + n,
+    tb_peer_same_file: "here, with you",
 
     // Trays
     tr_proposals: "proposals for you",

@@ -1,18 +1,23 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useMemo, type ReactNode } from "react";
 import {
   Radio, KeyRound, Waypoints, GitPullRequest, Activity,
   LogIn, LogOut, GitBranch, Trash2, FolderSync, AlertTriangle,
-  PanelRightClose, ChevronDown, Send, Undo2,
+  PanelRightClose, ChevronDown, Send, Undo2, ShieldCheck, Sparkles,
+  Bell, Hand,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   reclamar, seleccionar, resolver, nombreDe, guardar, descartarDraft,
   impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
-  type ActItem, type Impact,
+  type ActItem, type Impact, type Proposal,
 } from "../store";
-import { chipDe, diffLineas } from "../lang";
+import { chipDe, diffLineas, inicial } from "../lang";
 import { useI18n } from "../i18n";
 
+// ── Helpers de tiempo: la presencia se siente VIVA si "hace cuánto" se
+// lee de un vistazo. "ahora" para <5s; segundos, minutos, horas en
+// adelante. Mismo modelo que usaba el feed antes — extraído para reuso
+// (hero + propuestas).
 function hace(ts: number, ahora: string): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (s < 5) return ahora;
@@ -95,6 +100,118 @@ const ACT_IC: Record<ActItem["kind"], ReactNode> = {
   delete: <Trash2 size={12} />, workspace: <FolderSync size={12} />,
 };
 
+// ── PropCard: la propuesta ELEVADA. Antes era una fila plana con un diff
+// pequeño. Ahora trae: autor con su color (mismo idioma que avatares de
+// TopBar/FileTree), "hace X", stats +adds/−dels (calculados de
+// diffLineas) y aprobar/rechazar grandes. El diff sigue debajo, pero
+// ahora se LEE en contexto. La decisión es del dueño — la UI debe
+// inspirar confianza para apretar el botón.
+function PropCard({
+  p, mio, files, peerColor,
+}: {
+  p: Proposal; mio: boolean; files: Record<string, string>;
+  peerColor: string | null;
+}) {
+  const { t } = useI18n();
+  const filas = useMemo(
+    () => diffLineas(files[p.path] ?? "", p.content),
+    [files, p.content, p.path],
+  );
+  // Stats sobrios: contamos add/del; el reviewer ve el "tamaño" del cambio
+  // sin tener que escanear el diff entero.
+  const adds = filas.filter((f) => f.t === "add").length;
+  const dels = filas.filter((f) => f.t === "del").length;
+  // Tiempo: "hace X" — el seen_at se setea al recibir (honest, no inventado).
+  const ts = p.seen_at;
+  const ahora = ts == null ? t.ins_prop_seen_now : hace(ts, t.ins_prop_seen_now);
+  const tiempo = ts == null || ahora === t.ins_prop_seen_now
+    ? t.ins_prop_seen_now : t.ins_prop_seen(ahora);
+
+  // Botones de acción: SOLO si esta propuesta es para mí (soy dueño).
+  // Si la propuse yo, sólo mostramos estado "en revisión" (lo decide el otro).
+  return (
+    <article className="inprop">
+      <header className="inprop-h">
+        <span
+          className="inprop-av"
+          style={{ background: peerColor || "var(--muted)" }}
+          title={p.author_name}
+          aria-hidden
+        >
+          {inicial(p.author_name)}
+        </span>
+        <span className="inprop-meta">
+          <span className="inprop-who">
+            <b>{p.author_name}</b> {t.ins_proposes}
+          </span>
+          <span className="inprop-sub">
+            <span className="inprop-ago" title={ts ? new Date(ts).toLocaleString() : ""}>
+              {tiempo}
+            </span>
+            <span className="inprop-dot">·</span>
+            {adds === 0 && dels === 0 ? (
+              <span className="inprop-nochg">{t.ins_prop_no_change}</span>
+            ) : (
+              <span className="inprop-stats">
+                <span className="ip-add">{t.ins_prop_stats_added(adds)}</span>
+                <span className="ip-del">{t.ins_prop_stats_removed(dels)}</span>
+              </span>
+            )}
+          </span>
+        </span>
+        {mio && (
+          <span className="inprop-a">
+            <button
+              className="ok"
+              onClick={() => resolver(p.id, true)}
+              aria-label={t.tr_approve}
+              title={t.tr_approve}
+            >
+              {t.tr_approve}
+            </button>
+            <button
+              className="no"
+              onClick={() => resolver(p.id, false)}
+              aria-label={t.tr_reject}
+              title={t.tr_reject}
+            >
+              {t.tr_reject}
+            </button>
+          </span>
+        )}
+        {!mio && <span className="inprop-status">{t.ins_in_review}</span>}
+      </header>
+      {(adds > 0 || dels > 0) && (
+        <div className="diff">
+          {filas.map((f, i) => (
+            <div key={i} className={f.t}>{f.x || " "}</div>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+// Item de atención: una "tarjeta-callout" con icono, título y subtítulo.
+// La regla es: SI hay algo aquí, el usuario sabe qué hacer. Si no hay
+// nada, mostramos "todo en orden" — esto reduce la ansiedad ("¿se me
+// pasó algo?"). El tono dirige el ojo: alta = rojo, media = ámbar,
+// info = azul, calma = verde.
+function AtnItem(props: {
+  tono: "alta" | "media" | "info" | "calma";
+  ic: ReactNode; tit: string; sub: string;
+}) {
+  return (
+    <div className={"in-atn-item t-" + props.tono}>
+      <span className="in-atn-ic">{props.ic}</span>
+      <span className="in-atn-tx">
+        <span className="in-atn-tit">{props.tit}</span>
+        <span className="in-atn-sub">{props.sub}</span>
+      </span>
+    </div>
+  );
+}
+
 export function Inspector({
   onClose,
   width,
@@ -123,6 +240,14 @@ export function Inspector({
   // 3s sin respuesta (paranoia).
   const [claimingPath, setClaimingPath] = useState<string | null>(null);
 
+  // Capa 29 UX: tick interno que refresca los "hace X" cada 15s. Sin esto
+  // las propuestas se quedan congeladas en "recién" durante toda la sesión.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((x) => x + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
+
   const aqui = path ? presentesEn(path) : [];
   const due = path ? s.owners[path] : undefined;
   const esMio = !!(s.yo && due === s.yo.client_id);
@@ -133,17 +258,14 @@ export function Inspector({
   const impDesde = path
     ? Object.values(s.impacts).filter((i) => i.source_path === path) : [];
   // Capa 28: propuestas DEL archivo abierto. Las que están dirigidas a mí
-  // (porque soy dueño) traen diff + aprobar/rechazar acá mismo; antes
-  // vivían en una bandeja arriba del editor que invadía. Las que YO
-  // propuse y están abiertas (otro me revisa) se muestran como estado.
+  // (porque soy dueño) traen diff + aprobar/rechazar acá mismo.
   const props = path ? propuestasDe(path) : [];
-  const propsParaMi = props.filter((p) => esMio);
+  const propsParaMi = props.filter(() => esMio);
   const riesgo = severidadMax(impLo);
   const otrosEquipo = Object.values(s.peers).filter(
     (p) => !s.yo || p.client_id !== s.yo.client_id,
   );
   // Todas las propuestas a la espera de mi review (de cualquier archivo)
-  // — nota global en el header de la sección, no diff.
   const propsMios = Object.values(s.proposals).filter(
     (p) => s.yo && s.owners[p.path] === s.yo.client_id,
   );
@@ -151,11 +273,21 @@ export function Inspector({
   // MI review. Si no hay nada para mí en este archivo, cae al total de
   // propuestas del archivo (incluye las mías en revisión).
   const nProps = propsParaMi.length || props.length;
+  // Total global de borradores (todos los archivos donde tengo cambios locales
+  // sin enviar). El callout usa singular/plural según el contexto del archivo
+  // actual, pero esto da el peso del "mismo problema" global.
+  const totalDrafts = Object.keys(s.drafts).length;
+  // Color por peer (para el avatar de la propuesta — el autor se ve con su
+  // identidad visual, no como texto plano).
+  const colorPorAutor = (autor: string): string | null => {
+    const peer = Object.values(s.peers).find((p) => p.client_id === autor);
+    if (peer) return peer.color;
+    if (s.yo && s.yo.client_id === autor) return s.yo.color;
+    return null;
+  };
 
   // Si el ownership real ya muestra que el path es mío, salimos del estado
-  // "reclamando" (era una bandera optimista; el server confirmó). En
-  // useEffect para que React no emita el warning de "setState durante
-  // render" — el guard de igualdad evita re-disparar al infinito.
+  // "reclamando" (era una bandera optimista; el server confirmó).
   useEffect(() => {
     if (claimingPath && claimingPath === path && esMio) {
       setClaimingPath(null);
@@ -166,9 +298,6 @@ export function Inspector({
     if (!path) return;
     setClaimingPath(path);
     reclamar(path);
-    // Watchdog: si el server no responde en 3s, soltamos el estado
-    // "reclamando" para que el botón vuelva. No reintenta solo (eso es
-    // decisión del usuario).
     setTimeout(() => {
       setClaimingPath((p) => (p === path ? null : p));
     }, 3000);
@@ -176,7 +305,7 @@ export function Inspector({
 
   function enviarPropuesta() {
     if (!path) return;
-    guardar(path);  // capa 28: si soy no-dueño, manda el draft como propuesta
+    guardar(path);
   }
 
   function descartar() {
@@ -184,6 +313,95 @@ export function Inspector({
     if (!confirm(t.ins_discard_confirm)) return;
     descartarDraft(path);
   }
+
+  // ── HERO: la fila superior del inspector. Antes era "chip + nombre + flags";
+  // ahora es un bloque diseñado: chip + nombre, una línea de estado que dice
+  // EN PROSA qué es el archivo ahora mismo (modo de edición + dueño), un
+  // subtítulo con la consecuencia (qué pasa al escribir), y a la derecha la
+  // pulsación de "vivo" si hay peers. Es lo primero que el ojo lee — debe
+  // contestar "¿qué soy aquí?" en 1 segundo.
+  const modoLabel = !path
+    ? "" // hero vacío
+    : esMio
+      ? t.ins_hero_mode_live
+      : esDeOtro
+        ? t.ins_hero_mode_propose
+        : t.ins_hero_mode_free;
+  const modoCls = !path ? "" : esMio ? "live" : esDeOtro ? "prop" : "free";
+  const modoDesc = !path
+    ? ""
+    : esMio
+      ? t.ins_hero_mode_live_desc
+      : esDeOtro
+        ? t.ins_hero_mode_propose_desc(nombreDe(due!))
+        : t.ins_hero_mode_free_desc;
+
+  // ── ATENCIÓN: lista priorizada de avisos accionables. La regla es
+  // "qué deberías hacer ahora", no "qué información hay". Ordenamos por
+  // urgencia: propuestas para mí > borrador mío > impacto alto > sin
+  // marcar > sin dueño > otros presentes (info, no acción). Si la lista
+  // queda vacía, mostramos "todo en orden" — no un vacío inquietante.
+  type Atn = {
+    tono: "alta" | "media" | "info" | "calma";
+    ic: ReactNode; tit: string; sub: string;
+  };
+  const atenciones: Atn[] = useMemo(() => {
+    if (!path) return [];
+    const out: Atn[] = [];
+    if (propsParaMi.length > 0) {
+      out.push({
+        tono: "alta",
+        ic: <GitPullRequest size={14} />,
+        tit: t.ins_attn_props_for_me(propsParaMi.length),
+        sub: t.ins_attn_props_for_me_sub,
+      });
+    }
+    if (tieneDraft) {
+      out.push({
+        tono: "media",
+        ic: <Send size={14} />,
+        tit: t.ins_attn_draft_ready,
+        sub: t.ins_attn_draft_ready_sub,
+      });
+    }
+    if (riesgo === "alta") {
+      out.push({
+        tono: "alta",
+        ic: <AlertTriangle size={14} />,
+        tit: t.ins_attn_impact_high,
+        sub: t.ins_attn_impact_high_sub,
+      });
+    }
+    if (sinMarcarLocal && !tieneDraft) {
+      out.push({
+        tono: "info",
+        ic: <Bell size={14} />,
+        tit: esDeOtro ? t.ins_attn_unmarked_other : t.ins_attn_unmarked_owner,
+        sub: esDeOtro ? t.ins_attn_unmarked_other_sub : t.ins_attn_unmarked_owner_sub,
+      });
+    }
+    if (!due && !sinMarcarLocal) {
+      out.push({
+        tono: "info",
+        ic: <Hand size={14} />,
+        tit: t.ins_attn_no_owner,
+        sub: t.ins_attn_no_owner_sub,
+      });
+    }
+    if (out.length === 0 && aqui.length > 0) {
+      // Información: estás acompañado. Es bueno saberlo, pero no es alarma.
+      const nombres = aqui.slice(0, 2).map((p) => p.name).join(", ")
+        + (aqui.length > 2 ? "…" : "");
+      out.push({
+        tono: "info",
+        ic: <Radio size={14} />,
+        tit: t.ins_attn_other_present(nombres),
+        sub: t.ins_attn_other_present_sub,
+      });
+    }
+    return out;
+  }, [path, propsParaMi.length, tieneDraft, riesgo, sinMarcarLocal, esDeOtro,
+      due, aqui, t]);
 
   return (
     <aside
@@ -202,33 +420,109 @@ export function Inspector({
         </button>
       </header>
 
+      {/* HERO: estado del archivo. Si no hay path abierto, mostramos un
+          empty-state honesto que dice qué hace el panel. */}
       {path ? (
-        <div className="in-file">
-          <span className={"chip" + (c!.cls ? " " + c!.cls : "")}>{c!.txt}</span>
-          <span className="in-file-n" title={path}>
-            {path.split("/").pop()}
-          </span>
-          {sinMarcarLocal && (
-            <span
-              className="in-flag warn"
-              // Tooltip distinto según el rol: ser honesto sobre QUÉ hará
-              // Ctrl+S (capa 28).
-              title={esDeOtro
-                ? t.ins_unmarked_title_other
-                : t.ins_unmarked_title_owner}
-            >
-              {t.ins_unmarked}
+        <section className="in-hero">
+          <div className="in-hero-top">
+            <span className={"chip" + (c!.cls ? " " + c!.cls : "")}>{c!.txt}</span>
+            <span className="in-hero-name" title={path}>
+              {path.split("/").pop()}
             </span>
-          )}
-          {riesgo && (
-            <span className={"in-flag r-" + riesgo}>{t.ins_risk[riesgo]}</span>
-          )}
-        </div>
+            {/* badge "vivo": pulsa SI hay peers en el archivo. Es el latido
+                del producto — sin gente, no late. */}
+            {aqui.length > 0 ? (
+              <span className="in-hero-live" title={t.ed_team_tooltip}>
+                <span className="in-hero-live-dot" />
+                {t.ed_team_count(aqui.length)}
+              </span>
+            ) : (
+              <span className="in-hero-live solo">{t.ed_team_alone}</span>
+            )}
+          </div>
+          <div className="in-hero-row">
+            <span className={"in-mode m-" + modoCls}>{modoLabel}</span>
+            <span className="in-hero-sep">·</span>
+            <span className="in-hero-owner">
+              {esMio
+                ? t.ins_hero_owner_mine
+                : esDeOtro
+                  ? t.ins_hero_owner_other(nombreDe(due!))
+                  : t.ins_hero_owner_none}
+            </span>
+            {riesgo && (
+              <span className={"in-hero-risk r-" + riesgo}>
+                <AlertTriangle size={11} />
+                {t.ins_risk[riesgo]}
+              </span>
+            )}
+            {tieneDraft && (
+              <span className="in-hero-tag warn-soft" title={t.ins_unmarked_title_other}>
+                {t.ins_draft_marker}
+              </span>
+            )}
+            {sinMarcarLocal && !tieneDraft && (
+              <span
+                className="in-hero-tag faint"
+                title={esDeOtro
+                  ? t.ins_unmarked_title_other
+                  : t.ins_unmarked_title_owner}
+              >
+                {t.ins_unmarked}
+              </span>
+            )}
+          </div>
+          <p className="in-hero-desc">{modoDesc}</p>
+        </section>
       ) : (
-        <div className="in-file off">
-          <span>{t.ins_no_file}</span>
-          <span className="in-file-sub">{t.ins_no_file_sub}</span>
-        </div>
+        <section className="in-hero in-hero-empty">
+          <div className="in-hero-empty-ic">
+            <Sparkles size={20} />
+          </div>
+          <div className="in-hero-empty-tit">{t.ins_no_file}</div>
+          <p className="in-hero-empty-sub">{t.ins_no_file_sub}</p>
+        </section>
+      )}
+
+      {/* ATENCIÓN: callout priorizado de qué hacer ahora. Si no hay nada,
+          mostramos "todo en orden" — evita la sensación de "se me pasó algo".
+          NO se muestra si no hay archivo (no hay nada que ordenar). */}
+      {path && (
+        <section className="in-atn">
+          <h3 className="in-atn-h">
+            {atenciones.length === 0 || atenciones[0].tono === "calma"
+              ? (
+                <>
+                  <ShieldCheck size={11} />
+                  {t.ins_attn_calm_title}
+                </>
+              )
+              : (
+                <>
+                  <Bell size={11} />
+                  {t.ins_attn_title}
+                </>
+              )}
+          </h3>
+          {atenciones.length === 0 ? (
+            <AtnItem
+              tono="calma"
+              ic={<ShieldCheck size={14} />}
+              tit={t.ins_attn_calm_title}
+              sub={t.ins_attn_calm_sub}
+            />
+          ) : (
+            atenciones.map((a, i) => (
+              <AtnItem
+                key={i}
+                tono={a.tono}
+                ic={a.ic}
+                tit={a.tit}
+                sub={a.sub}
+              />
+            ))
+          )}
+        </section>
       )}
 
       <div className="in-scroll">
@@ -238,17 +532,30 @@ export function Inspector({
         >
           {aqui.length === 0 ? (
             <>
-              <p className="in-empty">{t.ins_nobody(otrosEquipo.length)}</p>
+              <p className="in-empty">{t.ins_presence_solo_title}</p>
+              <p className="in-explain">
+                {t.ins_presence_solo_team(otrosEquipo.length)}
+              </p>
               <p className="in-explain">{t.ins_presence_explain}</p>
             </>
           ) : (
-            aqui.map((p) => (
-              <div className="inrow" key={p.client_id}>
-                <span className="inav" style={{ background: p.color }} />
-                <span className="inrow-n">{p.name}</span>
-                <span className="inrow-m">{t.ins_line} {p.line}</span>
-              </div>
-            ))
+            <>
+              {aqui.map((p) => (
+                <div className="inrow live" key={p.client_id}>
+                  <span className="inav-wrap">
+                    <span className="inav-pulse" style={{ background: p.color }} />
+                    <span className="inav" style={{ background: p.color }}>
+                      {inicial(p.name)}
+                    </span>
+                  </span>
+                  <span className="inrow-n">{p.name}</span>
+                  <span className="inrow-pill" title={t.ins_presence_live_dot}>
+                    {t.ins_line} {p.line}
+                  </span>
+                </div>
+              ))}
+              <p className="in-explain">{t.ins_presence_explain}</p>
+            </>
           )}
         </Sec>
 
@@ -263,29 +570,31 @@ export function Inspector({
               <div className="inrow">
                 <span className="in-flag faint">{t.ins_no_owner}</span>
                 <button
-                  className="in-act"
+                  className="in-act primario"
                   onClick={reclamarConFeedback}
                   disabled={claimingPath === path}
                   aria-busy={claimingPath === path}
                 >
+                  <Hand size={11} />
                   {claimingPath === path ? t.ins_claim_busy : t.ins_claim}
                 </button>
               </div>
               <p className="in-explain">{t.ins_no_owner_sub}</p>
             </>
           ) : esMio ? (
-            <div className="inrow">
-              <span className="in-flag ok">{t.ins_mine}</span>
-              <span className="inrow-m">{t.ins_mine_sub}</span>
-            </div>
+            <>
+              <div className="inrow">
+                <span className="in-flag ok">
+                  <ShieldCheck size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
+                  {t.ins_mine}
+                </span>
+                <span className="inrow-m">{t.ins_mine_sub}</span>
+              </div>
+            </>
           ) : (
             <div className="inrow col">
               <span className="in-flag warn">{t.ins_of(nombreDe(due))}</span>
               <span className="inrow-m">{t.ins_others_sub}</span>
-              {/* CTA de "enviar propuesta": solo si tengo draft local.
-                  Reemplaza el flujo invisible de "Ctrl+S manda el draft"
-                  con un botón visible para los que no recuerdan el
-                  atajo. Es el mismo flujo del store, no un atajo paralelo. */}
               {tieneDraft && (
                 <>
                   <p className="in-draft-note">
@@ -344,7 +653,6 @@ export function Inspector({
                 {t.ins_no_proposals}
                 {propsMios.length > 0 && t.ins_waiting_others(propsMios.length)}
               </p>
-              {/* Hint contextual: distinto según el rol y si hay draft. */}
               {path && (
                 <p className="in-explain">
                   {tieneDraft
@@ -356,52 +664,15 @@ export function Inspector({
               )}
             </>
           ) : (
-            props.map((p) => {
-              // Capa 28: si es para mí (soy dueño), mostramos el diff y los
-              // botones acá mismo: aceptar/rechazar el dueño. Si la propuse
-              // yo, solo el estado "en revisión".
-              if (esMio) {
-                const filas = diffLineas(s.files[p.path] ?? "", p.content);
-                return (
-                  <div className="inprop" key={p.id}>
-                    <div className="inprop-h">
-                      <span className="inprop-q">
-                        <b>{p.author_name}</b> {t.ins_proposes}
-                      </span>
-                      <span className="inprop-a">
-                        <button
-                          className="ok"
-                          onClick={() => resolver(p.id, true)}
-                          aria-label={t.tr_approve}
-                        >
-                          {t.tr_approve}
-                        </button>
-                        <button
-                          className="no"
-                          onClick={() => resolver(p.id, false)}
-                          aria-label={t.tr_reject}
-                        >
-                          {t.tr_reject}
-                        </button>
-                      </span>
-                    </div>
-                    <div className="diff">
-                      {filas.map((f, i) => (
-                        <div key={i} className={f.t}>{f.x || " "}</div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }
-              return (
-                <div className="inrow col" key={p.id}>
-                  <span className="inrow-n">
-                    <b>{p.author_name}</b> {t.ins_proposes}
-                  </span>
-                  <span className="inrow-m">{t.ins_in_review}</span>
-                </div>
-              );
-            })
+            props.map((p) => (
+              <PropCard
+                key={p.id}
+                p={p}
+                mio={esMio}
+                files={s.files}
+                peerColor={colorPorAutor(p.author_id)}
+              />
+            ))
           )}
         </Sec>
 
@@ -437,10 +708,19 @@ export function Inspector({
           )}
         </Sec>
 
-        {impLo.length > 0 && (
+        {(impLo.length > 0 || totalDrafts > 0) && (
           <div className="in-foot">
-            <AlertTriangle size={12} />
-            {t.ins_impact_count(impLo.length)}
+            {impLo.length > 0 ? (
+              <>
+                <AlertTriangle size={12} />
+                {t.ins_impact_count(impLo.length)}
+              </>
+            ) : (
+              <>
+                <Send size={12} />
+                {totalDrafts} {totalDrafts === 1 ? t.stb_drafts : t.stb_drafts_pl}
+              </>
+            )}
           </div>
         )}
       </div>

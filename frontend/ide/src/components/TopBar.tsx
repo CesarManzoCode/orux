@@ -80,6 +80,22 @@ export function TopBar({
   const extra = otros.length - visibles.length;
   const g = s.git;
 
+  // Contexto rico por peer para tooltip: "Alice — en src/foo.py · línea 42"
+  // o "Alice — aquí, contigo" si está en mi archivo. Esto convierte la
+  // presencia de "puntito de color" a "se exactamente dónde está cada
+  // uno", que es la diferencia entre ver vida y ver datos.
+  function tooltipDe(name: string, p: { path: string | null; line: number }): string {
+    const aqui = s.currentPath && p.path === s.currentPath;
+    if (aqui) {
+      return `${name} — ${t.tb_peer_same_file} · ${t.tb_peer_line(p.line)}`;
+    }
+    if (p.path) {
+      const archivo = p.path.split("/").pop() || p.path;
+      return `${name} — ${t.tb_peer_in_file(archivo)} · ${t.tb_peer_line(p.line)}`;
+    }
+    return `${name} — ${t.tb_peer_in_no_file}`;
+  }
+
   function abrirInvite() {
     // Si no hay código aún, lo pide. El modal se abre con el código vacío
     // y se actualiza al recibir el `invite_created` (UX de un solo paso:
@@ -113,13 +129,31 @@ export function TopBar({
         <>
           <span className="tb-div" />
           <span className="peers" title={otros.map((p) => p.name).join(", ")}>
-            {visibles.map((p) => (
-              <span key={p.client_id} className="av"
-                style={{ background: p.color }} title={p.name}>
-                {iniciales(p.name)}
-              </span>
-            ))}
-            {extra > 0 && <span className="av mas">+{extra}</span>}
+            {visibles.map((p) => {
+              // "Aquí conmigo" marca al peer que está EN el archivo abierto:
+              // un anillo de acento alrededor del avatar. Cero datos
+              // inventados: si están en mi path, lo decimos visualmente.
+              const conmigo = !!(
+                s.currentPath && p.path === s.currentPath
+              );
+              return (
+                <span
+                  key={p.client_id}
+                  className={"av" + (conmigo ? " conmigo" : "")}
+                  style={{ background: p.color }}
+                  title={tooltipDe(p.name, p)}
+                  aria-label={tooltipDe(p.name, p)}
+                >
+                  {iniciales(p.name)}
+                </span>
+              );
+            })}
+            {extra > 0 && (
+              <span
+                className="av mas"
+                title={otros.slice(visibles.length).map((p) => p.name).join(", ")}
+              >+{extra}</span>
+            )}
           </span>
         </>
       )}

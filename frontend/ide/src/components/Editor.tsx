@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
+import { Radio } from "lucide-react";
 import { useStore } from "../useStore";
 import { editar, guardar, presence, setCaret } from "../store";
 import { resaltar, guiasIndent } from "../lang";
 import { proyectar, vistaAFull, fullAVista, cabeceras } from "../plegado";
+import { useI18n } from "../i18n";
 
 // Mismo mecanismo que el cliente vanilla: textarea REAL transparente
 // encima, capas sincronizadas detrás/encima por scroll. El textarea
@@ -20,6 +22,7 @@ const PAD_TOP = 20;
 
 export function Editor() {
   const s = useStore();
+  const { t } = useI18n();
   const path = s.currentPath;
   // Capa 28: el editor renderiza el draft local del no-dueño si lo hay
   // (feedback inmediato de lo que escribió). Si no hay draft, manda el
@@ -445,6 +448,32 @@ export function Editor() {
               title={o.name}
             />
           ))}
+        </div>
+      )}
+      {/* Pill de "co-edición en vivo": discreto, esquina superior derecha
+          del editor. Sólo aparece si HAY peers en este archivo (cero ruido
+          cuando estás solo). El idioma es "X en vivo aquí" — concreto,
+          no es marketing. Los puntos breathe con la misma animación que
+          el LED de conexión: late SÓLO si hay vida. */}
+      {path && overview.length > 0 && (
+        <div className="ed-livepill" title={t.ed_team_tooltip}>
+          <Radio size={11} />
+          <span className="ed-livepill-tx">
+            {t.ed_team_count(overview.length)}
+          </span>
+          <span className="ed-livepill-dots">
+            {overview.slice(0, 4).map((o) => (
+              <span
+                key={o.id}
+                className="ed-livepill-dot"
+                style={{ background: o.color }}
+                title={o.name}
+              />
+            ))}
+            {overview.length > 4 && (
+              <span className="ed-livepill-more">+{overview.length - 4}</span>
+            )}
+          </span>
         </div>
       )}
     </div>
