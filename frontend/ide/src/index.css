@@ -420,22 +420,19 @@ button:active { transform: translateY(1px); }
 .btn-nuevo svg { flex-shrink: 0; color: var(--faint); transition: color var(--tr); }
 .btn-nuevo:hover svg { color: var(--accent); }
 
-/* ── File tree: denso, con GUÍAS DE INDENTACIÓN (la firma de un IDE de
-   verdad). Las guías son una rejilla vertical muy tenue cada 14px (el
-   mismo paso que usa FileTree para sangrar); las filas en reposo son
-   transparentes y la dejan ver, el hover/activo la tapan. Cero cambio de
-   lógica. ── */
+/* ── File tree: denso, con GUÍAS DE INDENTACIÓN al estilo VSCode/JetBrains.
+   Cada nivel pinta una columna `.tg` (14px) con un hairline vertical
+   centrado, conectando archivos con su carpeta padre. Reemplaza el
+   carácter ▸/▾ por un ChevronRight de lucide que rota 90° al abrir.
+   Cero cambio de lógica: la jerarquía sigue derivándose de paths. ── */
 .tree {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column;
-  /* Antes había una rejilla vertical hairline cada 14px como "guía de
-     indentación". Se leía como ruido (líneas que cruzaban los iconos y
-     no tenían función real al lado del twist ▸/▾). El árbol queda
-     limpio: la sangría sola alcanza para leer la jerarquía. */
 }
 .row {
   display: flex; align-items: center; gap: 0.45rem;
-  padding: 0.34rem 0.5rem; border-radius: var(--r-sm); cursor: pointer;
+  padding: 0.34rem 0.5rem 0.34rem 0.25rem;
+  border-radius: var(--r-sm); cursor: pointer;
   font-size: 12.5px; color: var(--muted); position: relative;
   transition: background var(--tr), color var(--tr), box-shadow var(--tr);
 }
@@ -445,13 +442,56 @@ button:active { transform: translateY(1px); }
   box-shadow: inset 2px 0 0 var(--accent);
 }
 .row.dir { color: var(--text-2); }
-.row.dir .twist {
-  width: 0.85em; flex-shrink: 0; color: var(--faint); font-size: 9px;
-  transition: transform var(--tr); display: inline-block; text-align: center;
-}
-.row.dir:hover .twist { color: var(--muted); }
 .row.dir .name { font-weight: 600; }
 .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; letter-spacing: -0.005em; }
+
+/* Bloque indent: guías + slot del chevron. gap=0 para que las columnas
+   queden flush; el resto de la .row mantiene su gap normal para nombre/
+   chip/signals/badges. */
+.row-indent {
+  display: inline-flex; align-self: stretch; align-items: center;
+  flex: none; gap: 0;
+}
+.tg {
+  flex: none;
+  width: 14px;
+  align-self: stretch;
+  position: relative;
+}
+.tg::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 7px;
+  width: 1px;
+  background: var(--border-soft);
+  opacity: 0.6;
+  transition: opacity var(--tr), background var(--tr);
+}
+.row:hover .tg::before { opacity: 0.95; background: var(--border); }
+.row.activo .tg::before {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+/* Chevron de carpeta — slot fijo 14px (igual ancho que una guía) para
+   que la rejilla virtual de niveles encaje. Rotación 90° al abrir,
+   ease del IDE. */
+.row .twist {
+  width: 14px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--faint);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), color var(--tr);
+}
+.row .twist svg { display: block; }
+.row.dir:hover .twist { color: var(--muted); }
+.row.dir.abierta .twist {
+  transform: rotate(90deg);
+  color: var(--text-2);
+}
+/* Slot fantasma del chevron en archivos: misma anchura, sin glyph. Esto
+   alinea el contenido del archivo con el contenido de su carpeta padre
+   (no con el chevron mismo) — el efecto tree clásico de un IDE real. */
+.row .twist-pad { width: 14px; flex: none; align-self: stretch; }
 .chip {
   flex-shrink: 0; font-family: var(--font-mono); font-size: 9px;
   font-weight: 700; line-height: 1; padding: 3px 4px; border-radius: 4px;
@@ -2541,3 +2581,151 @@ select:focus-visible,
   border-color: var(--bad);
 }
 .modal-foot button.primario.danger:hover { filter: brightness(1.06); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ACCESO v3 (capa 29+) — Login y Register separados en una sola pantalla.
+   El bloque que vive AQUÍ no toca .landing/.login-card antiguos: añade
+   tabs, link entre vistas, checkbox legal y el modal de textos legales.
+   Todo SCOPED a .landing (la pantalla de acceso). El IDE sigue intacto.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Segmented control — dos pestañas grandes que dicen claramente en qué
+   vista estás. Estilo "filo de acero": fondo hundido, tab activa con un
+   filo superior accent (mismo idioma que .landing-auth .login-card::before). */
+.landing .lg-tabs {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4px; padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  margin: 0.15rem 0 0.6rem;
+}
+.landing .lg-tab {
+  position: relative;
+  background: transparent; color: var(--muted);
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 0.55rem 0.6rem; font-size: var(--t-sm); font-weight: 650;
+  cursor: pointer; line-height: 1.1;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+.landing .lg-tab:hover:not(:disabled):not(.activo) {
+  background: rgba(255, 255, 255, 0.025); color: var(--text);
+}
+.landing .lg-tab.activo {
+  background: var(--surface); color: var(--text);
+  border-color: var(--border);
+  box-shadow:
+    inset 0 1px 0 var(--hl),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.landing .lg-tab.activo::before {
+  content: ""; position: absolute; left: 16%; right: 16%; top: 0; height: 1px;
+  background: linear-gradient(90deg,
+    transparent, var(--accent-line) 30%, var(--accent-line) 70%, transparent);
+}
+.landing .lg-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Hint inline bajo un campo (errores de validación local: pass corta o
+   contraseñas distintas). No es .err global — queda DEBAJO del input al
+   que se refiere, sin moverlo. Color = misma paleta de error. */
+.landing .fg-hint {
+  font-size: 11.5px; line-height: 1.4; margin-top: 0.25rem;
+  color: var(--faint);
+}
+.landing .fg-hint.err {
+  color: var(--bad);
+}
+
+/* Checkbox de aceptación de TyC + Privacidad. Layout: el checkbox a la
+   izquierda alineado a la primera línea, texto a la derecha multi-línea
+   (puede saltar el "Política de Privacidad" a la siguiente línea sin
+   romper la maquetación). */
+.landing .lg-legal {
+  display: flex; gap: 0.55rem; align-items: flex-start;
+  margin: 0.7rem 0 0.2rem;
+  font-size: 12.5px; line-height: 1.55;
+  color: var(--text-2); cursor: pointer;
+  user-select: none;
+}
+.landing .lg-legal input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; flex: none; margin-top: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong); border-radius: 4px;
+  cursor: pointer; position: relative;
+  transition: background var(--tr), border-color var(--tr);
+}
+.landing .lg-legal input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--accent-line);
+}
+.landing .lg-legal input[type="checkbox"]:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+.landing .lg-legal input[type="checkbox"]:checked::after {
+  content: ""; position: absolute; left: 4px; top: 1px;
+  width: 5px; height: 9px;
+  border: solid var(--steel-ink, #fff);
+  border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.landing .lg-legal input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.landing .lg-legal input[type="checkbox"]:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+
+/* Link estilo "lazo" que vive dentro de texto: para los dos enlaces del
+   checkbox (Términos / Privacidad) y para el cross-link de cambio de
+   vista del footer. Botón sin chrome, sólo el color de accent y un
+   subrayado discreto que se hace fuerte en hover. */
+.landing .lazo-link {
+  background: none; border: none; padding: 0;
+  font: inherit; color: var(--accent);
+  cursor: pointer; text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+  transition: color var(--tr), text-decoration-color var(--tr);
+}
+.landing .lazo-link:hover:not(:disabled) {
+  color: var(--accent-2); text-decoration-color: var(--accent-2);
+}
+.landing .lazo-link:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px;
+}
+.landing .lazo-link:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Footer-link "¿Ya tienes cuenta? Entrar". Pequeño, centrado, separado
+   del bloque de error por un margen pero pegado al cardfoot. */
+.landing .lg-cross {
+  font-size: 12.5px; color: var(--muted);
+  text-align: center; margin-top: 0.4rem;
+}
+
+/* ── Modal de textos legales (Términos / Privacidad). Reusa .modal con
+      un ancho mayor (los textos respiran mejor) y un body scrollable. ── */
+.legal-modal { max-width: 640px; }
+.legal-body {
+  padding: 0.4rem 1.2rem 1rem;
+  overflow-y: auto;
+  flex: 1; min-height: 0;
+}
+.legal-updated {
+  margin: 0.5rem 0 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.legal-intro {
+  margin: 0 0 1rem; font-size: var(--t-sm); line-height: 1.6;
+  color: var(--text-2);
+}
+.legal-sec { margin: 0 0 0.9rem; }
+.legal-sec:last-child { margin-bottom: 0; }
+.legal-h {
+  margin: 0 0 0.3rem; font-size: var(--t-sm); font-weight: 700;
+  color: var(--text); letter-spacing: -0.005em;
+}
+.legal-p {
+  margin: 0; font-size: 12.5px; line-height: 1.65;
+  color: var(--text-2);
+}

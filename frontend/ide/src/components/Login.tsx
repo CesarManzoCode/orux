@@ -1,15 +1,49 @@
+// Pantalla de acceso — split: relato a la izquierda, consola a la derecha.
+// Hasta capa 28 la consola tenía UN solo formulario con dos botones (Entrar
+// + Crear cuenta). Para un usuario nuevo no estaba claro qué pasaba al
+// pulsar uno u otro, y el formulario de registro NO pedía aceptar términos
+// (legalmente débil y feo).
+//
+// Capa 29+: la consola ahora vive en dos vistas separadas — Login y
+// Register — con un segmented control arriba y un link de footer para
+// cruzarse de una a la otra. El panel izquierdo (pitch) NO cambia: es
+// branding, sirve a ambas vistas. La acción de red sigue siendo la misma
+// (`autenticar("login"|"register", …)`) — sólo cambia la UI.
+//
+// Register añade:
+//   · campo "confirmar contraseña" con validación local (mismatch → error
+//     inline, sin viaje al server),
+//   · checkbox de aceptación con enlaces a dos modales (Términos y
+//     Privacidad) que abren `LegalModal` — el envío queda gateado por
+//     `aceptado=true` (no es un "submit y a ver qué dice el server").
 import { useEffect, useState } from "react";
 import { useStore } from "../useStore";
 import { autenticar } from "../store";
 import { useI18n, LangToggle } from "../i18n";
+import { LegalModal, type LegalDoc } from "./LegalModal";
+
+type Modo = "login" | "register";
 
 export function Login() {
   const s = useStore();
   const { t } = useI18n();
+  const [modo, setModo] = useState<Modo>("login");
   const [u, setU] = useState("");
   const [p, setP] = useState("");
+  const [p2, setP2] = useState("");
+  const [aceptado, setAceptado] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Error local del formulario (validación que el server ni siquiera ve):
+  // contraseñas no coinciden, contraseña corta, falta aceptar términos.
+  // Si el server devuelve error vía `s.loginError`, se prioriza ese.
+  const [localErr, setLocalErr] = useState<string>("");
+  // Doc legal abierto (null = ningún modal). Cuando hay valor, se monta
+  // <LegalModal/> por encima de toda la pantalla; cerrar = volver a null.
+  const [legalOpen, setLegalOpen] = useState<LegalDoc | null>(null);
 
+  // El spinner se apaga cuando el server responde (auth ok = se cambia de
+  // vista; auth fail = entra loginError). Si en 7s no llegó nada, lo
+  // libero igual para que no quede colgado el botón.
   useEffect(() => { setBusy(false); }, [s.loginError, s.conn]);
   useEffect(() => {
     if (!busy) return;
@@ -17,14 +51,55 @@ export function Login() {
     return () => clearTimeout(id);
   }, [busy]);
 
-  const offline = s.conn === "desconectado" || s.conn === "error";
-  const vacio = !u.trim() || !p;
-
-  const enviar = (tipo: "login" | "register") => {
-    if (busy || vacio) return;
-    setBusy(true);
-    autenticar(tipo, u.trim(), p);
+  // Al cambiar de modo limpio contraseñas y errores; el usuario se queda
+  // (es la única cosa "estable" entre crear y entrar — la mayoría lo
+  // recuerda y no quiere reescribirlo). El checkbox vuelve a falso porque
+  // sólo aplica al registro y mezclar estados confunde.
+  const cambiar = (nuevo: Modo) => {
+    if (busy || nuevo === modo) return;
+    setModo(nuevo);
+    setP(""); setP2(""); setAceptado(false); setLocalErr("");
   };
+
+  const offline = s.conn === "desconectado" || s.conn === "error";
+  const usuarioVacio = !u.trim();
+  const passVacio = !p;
+  // Reglas mínimas locales antes de viajar al server. El server hará la
+  // suya (los errores de capa 7), pero estas son las que ahorran un
+  // round-trip y son inmediatamente entendibles.
+  const passCorto = modo === "register" && p.length > 0 && p.length < 6;
+  const passDistinto =
+    modo === "register" && p2.length > 0 && p !== p2;
+
+  const noPuede =
+    busy ||
+    usuarioVacio ||
+    passVacio ||
+    (modo === "register" && (
+      !aceptado || p.length < 6 || p !== p2
+    ));
+
+  const enviar = () => {
+    if (noPuede) return;
+    // Re-chequeo defensivo para mensajes claros (el botón ya está
+    // deshabilitado, pero por si alguien dispara Enter con estados raros).
+    if (modo === "register") {
+      if (p.length < 6) { setLocalErr(t.reg_pass_short); return; }
+      if (p !== p2) { setLocalErr(t.reg_pass_mismatch); return; }
+      if (!aceptado) { setLocalErr(t.reg_legal_required); return; }
+    }
+    setLocalErr("");
+    setBusy(true);
+    autenticar(modo, u.trim(), p);
+  };
+
+  const onEnter = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") enviar();
+  };
+
+  // Error a mostrar: si el server respondió algo, eso manda. Si no, el
+  // local. Si no, el de offline. `min-height` en el CSS evita salto.
+  const errVisible = s.loginError || localErr || (offline ? t.login_offline : "");
 
   return (
     <div className="landing">
@@ -76,55 +151,177 @@ export function Login() {
         <div className="login-card">
           <div className="lc-head">
             <div className="lc-brand"><b>Orux</b></div>
-            <div className="cue"><span className="lk" /> {t.login_session_cue}</div>
+            <div className="cue">
+              <span className="lk" />{" "}
+              {modo === "register" ? t.reg_session_cue : t.login_session_cue}
+            </div>
           </div>
-          <p>{t.login_desc}</p>
 
+          {/* Segmented control — el cambio de vista es la decisión más
+              visible del card. Acompaña al footer-link (los dos son
+              redundantes a propósito: el segmented es para usuarios que
+              "ven" la opción; el footer-link es para los que leen). */}
+          <div className="lg-tabs" role="tablist" aria-label="modo de acceso">
+            <button
+              role="tab"
+              aria-selected={modo === "login"}
+              className={"lg-tab " + (modo === "login" ? "activo" : "")}
+              onClick={() => cambiar("login")}
+              disabled={busy}
+            >
+              {t.login_tab_signin}
+            </button>
+            <button
+              role="tab"
+              aria-selected={modo === "register"}
+              className={"lg-tab " + (modo === "register" ? "activo" : "")}
+              onClick={() => cambiar("register")}
+              disabled={busy}
+            >
+              {t.login_tab_register}
+            </button>
+          </div>
+
+          <p>{modo === "register" ? t.reg_desc : t.login_desc}</p>
+
+          {/* Campos comunes: usuario + contraseña. En register se añade
+              un segundo campo de contraseña y el bloque legal. */}
           <div className="fg">
-            <label htmlFor="lg-u">{t.login_user_label}</label>
+            <label htmlFor="lg-u">
+              {modo === "register" ? t.reg_user_label : t.login_user_label}
+            </label>
             <input
-              id="lg-u" placeholder={t.login_user_placeholder}
+              id="lg-u"
+              placeholder={
+                modo === "register" ? t.reg_user_placeholder : t.login_user_placeholder
+              }
               autoComplete="username" autoFocus
               autoCapitalize="off" autoCorrect="off"
               spellCheck={false} maxLength={32}
               value={u} disabled={busy}
               onChange={(e) => setU(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
+              onKeyDown={onEnter}
             />
           </div>
           <div className="fg">
-            <label htmlFor="lg-p">{t.login_pass_label}</label>
+            <label htmlFor="lg-p">
+              {modo === "register" ? t.reg_pass_label : t.login_pass_label}
+            </label>
             <input
               id="lg-p" type="password"
-              placeholder={t.login_pass_placeholder}
-              autoComplete="current-password"
+              placeholder={
+                modo === "register" ? t.reg_pass_placeholder : t.login_pass_placeholder
+              }
+              autoComplete={modo === "register" ? "new-password" : "current-password"}
               maxLength={200}
               value={p} disabled={busy}
               onChange={(e) => setP(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
+              onKeyDown={onEnter}
             />
+            {passCorto && (
+              <div className="fg-hint err">{t.reg_pass_short}</div>
+            )}
           </div>
 
+          {modo === "register" && (
+            <div className="fg">
+              <label htmlFor="lg-p2">{t.reg_pass2_label}</label>
+              <input
+                id="lg-p2" type="password"
+                placeholder={t.reg_pass2_placeholder}
+                autoComplete="new-password"
+                maxLength={200}
+                value={p2} disabled={busy}
+                onChange={(e) => setP2(e.target.value)}
+                onKeyDown={onEnter}
+              />
+              {passDistinto && (
+                <div className="fg-hint err">{t.reg_pass_mismatch}</div>
+              )}
+            </div>
+          )}
+
+          {modo === "register" && (
+            <label className="lg-legal">
+              <input
+                type="checkbox"
+                checked={aceptado}
+                disabled={busy}
+                onChange={(e) => setAceptado(e.target.checked)}
+              />
+              <span>
+                {t.reg_legal_pre}{" "}
+                <button
+                  type="button"
+                  className="lazo-link"
+                  onClick={() => setLegalOpen("terms")}
+                  disabled={busy}
+                >
+                  {t.reg_legal_terms}
+                </button>{" "}
+                {t.reg_legal_and}{" "}
+                <button
+                  type="button"
+                  className="lazo-link"
+                  onClick={() => setLegalOpen("privacy")}
+                  disabled={busy}
+                >
+                  {t.reg_legal_privacy}
+                </button>
+                {t.reg_legal_dot}
+              </span>
+            </label>
+          )}
+
+          {/* Acción primaria — un único botón (en vez de los dos antiguos).
+              Su texto cambia según el modo activo. Eso elimina la duda de
+              "¿este botón crea o entra?" que tenía la versión vieja. */}
           <div className="fila">
             <button
-              className="primario" disabled={busy || vacio}
-              onClick={() => enviar("login")}
+              className="primario" disabled={noPuede}
+              onClick={enviar}
             >
-              {busy
-                ? <><span className="spin" aria-hidden />{t.login_verifying}</>
-                : t.login_enter}
-            </button>
-            <button
-              className="secundario" disabled={busy || vacio}
-              onClick={() => enviar("register")}
-            >
-              {t.login_register}
+              {busy ? (
+                <>
+                  <span className="spin" aria-hidden />
+                  {modo === "register" ? t.reg_creating : t.login_verifying}
+                </>
+              ) : modo === "register" ? t.reg_submit : t.login_enter}
             </button>
           </div>
 
-          <div className="err" role="alert">
-            {s.loginError || (offline ? t.login_offline : "")}
+          <div className="err" role="alert">{errVisible}</div>
+
+          {/* Footer-link al otro modo. Mismo motivo que el segmented: hay
+              dos caminos al cruce porque hay dos formas de leer la UI. */}
+          <div className="lg-cross">
+            {modo === "login" ? (
+              <>
+                {t.login_to_register_pre}{" "}
+                <button
+                  type="button"
+                  className="lazo-link"
+                  onClick={() => cambiar("register")}
+                  disabled={busy}
+                >
+                  {t.login_to_register_link}
+                </button>
+              </>
+            ) : (
+              <>
+                {t.login_to_signin_pre}{" "}
+                <button
+                  type="button"
+                  className="lazo-link"
+                  onClick={() => cambiar("login")}
+                  disabled={busy}
+                >
+                  {t.login_to_signin_link}
+                </button>
+              </>
+            )}
           </div>
+
           <div className="cardfoot">
             {t.login_foot.split("git clone")[0]}
             <code>git clone</code>
@@ -139,6 +336,10 @@ export function Login() {
           <LangToggle className="login-lang" />
         </div>
       </section>
+
+      {legalOpen && (
+        <LegalModal doc={legalOpen} onClose={() => setLegalOpen(null)} />
+      )}
     </div>
   );
 }
