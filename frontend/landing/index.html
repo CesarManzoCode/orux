@@ -5,11 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#08090b" />
-    <title>Orux — capa de coordinación en tiempo real sobre Git</title>
+
+    <title>Orux — Coordinación en tiempo real sobre Git, para equipos de 2 a 50</title>
     <meta
       name="description"
-      content="Una capa de coordinación en tiempo real sobre Git para equipos de ingeniería. Presencia por línea, ownership invisible y análisis de impacto con resolución real — la misma seguridad que branches, PRs y reviews, sin la ceremonia."
+      content="Orux es una capa de coordinación en tiempo real sobre Git: muestra quién toca qué línea, de quién es cada zona y qué se rompe al cambiar una firma — antes del merge. Sin reemplazar GitHub, GitLab ni tu IDE."
     />
+    <link rel="canonical" href="https://orux.space/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Orux" />
+    <meta property="og:url" content="https://orux.space/" />
+    <meta property="og:title" content="Orux — Quién toca qué. De quién es. Qué rompe." />
+    <meta
+      property="og:description"
+      content="Coordinación de código en tiempo real sobre Git. Presencia por línea, ownership vivo y análisis de impacto resueltos antes del merge. Para equipos de 2 a 50 devs."
+    />
+    <meta property="og:image" content="https://orux.space/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Orux — capa de coordinación en tiempo real sobre Git" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Orux — Quién toca qué. De quién es. Qué rompe." />
+    <meta
+      name="twitter:description"
+      content="Coordinación de código en tiempo real sobre Git. Presencia, ownership e impacto antes del merge — sin reemplazar GitHub, GitLab ni tu IDE."
+    />
+    <meta name="twitter:image" content="https://orux.space/og.png" />
+
+    <!-- Schema.org (Software / SaaS) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Orux",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web",
+        "description": "Capa de coordinación en tiempo real sobre Git para equipos de ingeniería: presencia por línea, ownership invisible y análisis de impacto antes del merge.",
+        "url": "https://orux.space/",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
 
     <!--
       Tipografía REAL. El sistema de diseño referencia "Inter" y
@@ -32,6 +73,19 @@
     <style>
       html, body { background: #08090b; }
     </style>
+
+    <!--
+      Ajusta <html lang> ANTES del paint si el usuario tiene preferencia
+      guardada (ES por defecto). Evita el "flash" de SEO/a11y donde el
+      crawler ve es-ES sobre contenido EN. Aislado en try/catch porque
+      localStorage puede no existir (modo privado / SSR).
+    -->
+    <script>
+      try {
+        var l = localStorage.getItem("orux_lang");
+        if (l === "en" || l === "es") document.documentElement.lang = l;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

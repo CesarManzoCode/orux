@@ -313,10 +313,10 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 }
 .signals .sig {
   display: inline-flex; align-items: center; gap: 10px;
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em;
-  color: var(--mut);
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em;
+  color: var(--ink-2);
 }
-.signals .sig b { color: var(--ink-2); font-weight: 600; }
+.signals .sig b { color: var(--ink); font-weight: 600; }
 .signals .sig::before {
   content: ""; width: 5px; height: 5px; border-radius: 1px;
   background: var(--steel-line); transform: rotate(45deg);
@@ -509,58 +509,6 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 .trust .ti .tv i { color: var(--live); font-style: normal; }
 
 /* ─────────────────────────────────────────────────────────────────────
- * EL RIESGO INVISIBLE — el problema, como diagrama de sistema
- * ───────────────────────────────────────────────────────────────────── */
-.risk {
-  margin-top: clamp(44px, 5vw, 64px);
-  display: grid; grid-template-columns: 1fr auto 1fr;
-  align-items: stretch;
-  border: 1px solid var(--line-soft); border-radius: var(--r-isla);
-  background: linear-gradient(180deg, var(--bg-1), var(--bg));
-  box-shadow: inset 0 1px 0 var(--hair);
-  overflow: hidden;
-}
-.risk-col { padding: 32px 34px; }
-.risk-h {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.16em;
-  text-transform: uppercase; color: var(--faint); margin-bottom: 20px;
-}
-.dev { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.dev .av {
-  width: 27px; height: 27px; border-radius: 50%; flex: none;
-  display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #07120c;
-}
-.dev .nm { font-size: 13.5px; color: var(--ink-2); }
-.dev .nm em { font-style: normal; color: var(--mut); font-family: var(--font-mono); font-size: 11px; }
-.risk-mid {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 11px; padding: 0 30px;
-  border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
-  background: var(--bg-1);
-}
-.risk-mid .file {
-  font-family: var(--font-mono); font-size: 12px; color: var(--ink-2);
-  padding: 8px 14px; border-radius: var(--r-sm);
-  background: var(--bg-3); border: 1px solid var(--line);
-}
-.risk-mid .clash {
-  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em;
-  color: var(--bad); padding: 5px 12px; border-radius: var(--r-pill);
-  background: var(--bad-bg); border: 1px solid rgba(224, 96, 108, 0.35);
-}
-.risk-foot {
-  grid-column: 1 / -1; border-top: 1px solid var(--line-soft);
-  padding: 18px 34px; display: flex; align-items: center; gap: 14px;
-  font-size: 13.5px; color: var(--mut);
-}
-.risk-foot .x {
-  width: 21px; height: 21px; border-radius: var(--r-xs); flex: none;
-  display: grid; place-items: center; color: var(--bad); font-weight: 800;
-  background: var(--bad-bg); border: 1px solid rgba(224, 96, 108, 0.3);
-}
-.risk-foot b { color: var(--ink-2); font-weight: 600; }
-
-/* ─────────────────────────────────────────────────────────────────────
  * LO DETECTA SOLO — 3 paneles-instrumento (no icon cards)
  * ───────────────────────────────────────────────────────────────────── */
 .modules {
@@ -628,9 +576,30 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
   display: inline-flex; align-items: center; gap: 7px;
 }
 .scr-imp .ok::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--live); }
-.mod-cap { padding: 18px; border-top: 1px solid var(--line-soft); }
-.mod-cap h3 { font-size: 16px; letter-spacing: -0.012em; color: var(--ink); margin-bottom: 7px; }
-.mod-cap p { font-size: 13px; color: var(--mut); line-height: 1.6; }
+.mod-cap { padding: 20px; border-top: 1px solid var(--line-soft); }
+.mod-cap h3 { font-size: 16.5px; letter-spacing: -0.014em; color: var(--ink); margin-bottom: 14px; }
+.mod-cap p { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0; }
+.mod-bits { display: flex; flex-direction: column; gap: 12px; }
+.mod-bit { display: flex; flex-direction: column; gap: 5px; }
+.mod-bit + .mod-bit {
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.mod-bit .lab {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+.mod-bit p {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.55;
+  margin: 0;
+}
+.mod-bit.benefit p { color: var(--ink); font-weight: 550; }
+.mod-bit.benefit .lab { color: var(--steel); }
 
 /* ─────────────────────────────────────────────────────────────────────
  * COORDINA EN TIEMPO REAL — flujo de propuesta (3 tiempos en banda)
@@ -652,7 +621,7 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 }
 .fn-n::after { content: ""; width: 30px; height: 1px; background: var(--line); }
 .fn h3 { font-size: 16.5px; color: var(--ink); letter-spacing: -0.012em; margin-bottom: 9px; }
-.fn p { font-size: 13px; color: var(--mut); line-height: 1.62; }
+.fn p { font-size: 14px; color: var(--ink-2); line-height: 1.64; }
 .fn .chip {
   margin-top: 18px; display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--font-mono); font-size: 10px;
@@ -661,27 +630,6 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 }
 .fn .chip.go { color: var(--live); border-color: var(--live-line); background: var(--live-bg); }
 .fn .chip.wt { color: var(--risk); border-color: var(--risk-line); background: var(--risk-bg); }
-
-/* ─────────────────────────────────────────────────────────────────────
- * MENOS CEREMONIA — los 3 tiempos, timeline
- * ───────────────────────────────────────────────────────────────────── */
-.steps {
-  margin-top: clamp(44px, 5vw, 60px);
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-}
-.step {
-  position: relative; border-radius: var(--r-isla); padding: 30px 28px;
-  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
-  border: 1px solid var(--line-soft); box-shadow: inset 0 1px 0 var(--hair);
-}
-.step-n {
-  font-family: var(--font-mono); font-weight: 700; font-size: 12.5px;
-  color: var(--steel); margin-bottom: 18px;
-  display: inline-flex; align-items: center; gap: 13px;
-}
-.step-n::after { content: ""; flex: 1; min-width: 44px; height: 1px; background: var(--line); }
-.step h3 { font-size: 17px; letter-spacing: -0.014em; color: var(--ink); margin-bottom: 9px; }
-.step p { color: var(--mut); font-size: 13.5px; line-height: 1.64; }
 
 /* ─────────────────────────────────────────────────────────────────────
  * LO QUE NO SOMOS
@@ -759,7 +707,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
 .foot-l .brand { font-size: 17px; }
 .foot-l p { margin-top: 12px; color: var(--faint); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em; }
 .foot-r { display: flex; gap: 28px; align-items: center; font-size: 13px; }
-.foot-r a { color: var(--mut); transition: color var(--tr); }
+.foot-r a { color: var(--ink-2); transition: color var(--tr); }
 .foot-r a:hover { color: var(--ink); }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -776,22 +724,20 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .card-prop { left: -16px; }
 }
 @media (max-width: 900px) {
-  .modules, .flow, .steps { grid-template-columns: 1fr; }
+  .modules, .flow { grid-template-columns: 1fr; }
   .fn + .fn { border-left: none; border-top: 1px solid var(--line-soft); }
   .trust .wrap { grid-template-columns: repeat(2, 1fr); }
   .trust .ti:nth-child(2) { border-right: none; padding-right: 0; }
   .trust .ti:nth-child(3) { padding-left: 0; }
   .trust .ti:nth-child(1), .trust .ti:nth-child(2) { border-bottom: 1px solid var(--line-soft); padding-bottom: 22px; }
   .trust .ti:nth-child(3), .trust .ti:nth-child(4) { padding-top: 22px; }
-  .nav-links { display: none; }
+  .nav-links { gap: 22px; font-size: 12.5px; }
 }
 @media (max-width: 760px) {
   .prices { grid-template-columns: 1fr; }
-  .risk { grid-template-columns: 1fr; }
-  .risk-mid { flex-direction: row; border: none;
-    border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 22px; }
   .badge { left: 50%; transform: translateX(-50%); }
   .nav-stat { display: none; }
+  .nav-links { display: none; }
   .stage { overflow: hidden; border-radius: var(--r-isla); }
   .card-impact, .card-prop { position: relative; inset: auto; width: auto;
     right: auto; left: auto; top: auto; bottom: auto; margin-top: 14px; box-shadow: var(--sh-2); }
@@ -811,7 +757,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
 }
 @media (max-width: 480px) {
   .wrap { padding: 0 20px; }
-  .risk-col, .fn, .step { padding: 24px; }
+  .fn { padding: 24px; }
   .eyebrow { font-size: 10px; letter-spacing: 0.1em; }
   .brand .tag { display: none; }
 }
@@ -842,5 +788,252 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
 }
 .lnd-lang button:hover { color: rgba(255,255,255,.7); }
 .lnd-lang button.ll-active {
-  background: rgba(76,195,138,.18); color: #4cc38a;
+  background: var(--steel-weak);
+  color: var(--steel-ink);
+  box-shadow: inset 0 0 0 1px var(--steel-line);
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * MICROCOPY DEL STAGE — leyenda compacta debajo del IDE mock. Traduce
+ * lo que el ojo ve en la escena (4 caras, propuesta, impacto) en una
+ * sola frase mono. Hairline arriba lo ata visualmente al stage sin
+ * caja. Color ink-2 (no --mut: la frase es densa, tiene que leerse).
+ * ───────────────────────────────────────────────────────────────────── */
+.hero-stage-col { display: flex; flex-direction: column; }
+.stage-cap {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  letter-spacing: 0.005em;
+  color: var(--ink-2);
+  max-width: 640px;
+}
+.stage-cap b { color: var(--ink); font-weight: 600; }
+.stage-cap .dotg,
+.stage-cap .dotp,
+.stage-cap .dotr {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; margin: 0 8px 1px 0; vertical-align: middle;
+}
+.stage-cap .dotg { background: var(--live); box-shadow: 0 0 0 3px var(--live-bg); }
+.stage-cap .dotp { background: var(--peer); box-shadow: 0 0 0 3px var(--peer-bg); }
+.stage-cap .dotr { background: var(--risk); box-shadow: 0 0 0 3px var(--risk-bg); margin-left: 6px; }
+
+@media (max-width: 1080px) {
+  .stage-cap { margin: 22px auto 0; max-width: 620px; }
+}
+@media (max-width: 600px) {
+  .stage-cap { font-size: 11.5px; padding-top: 14px; margin-top: 22px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * TABLA COMPARATIVA — "Hoy · branches + PRs" vs "Con Orux". Reemplaza
+ * el diagrama .risk: una tabla escaneable en 5 filas hace mucho más
+ * trabajo de conversión que un dibujo bonito. Grid 3 cols (topic |
+ * hoy | orux), no <table>: hairlines limpios y responsive sin reflow.
+ *
+ * Visual: izquierda pesada/opaca con dot rojizo (algo se rompió hoy);
+ * derecha viva con borde acero y dot verde (Orux lo intercepta antes).
+ * Mobile: collapsa a 1 col agrupando por topic — cada celda muestra su
+ * mini-label vía data-label para no perder qué es qué.
+ * ───────────────────────────────────────────────────────────────────── */
+.compare {
+  margin-top: clamp(44px, 5vw, 64px);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-isla);
+  background: linear-gradient(180deg, var(--bg-1), var(--bg));
+  box-shadow: inset 0 1px 0 var(--hair);
+  overflow: hidden;
+}
+.cmp-head, .cmp-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.6fr) 1fr 1fr;
+}
+.cmp-head {
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
+}
+.cmp-head > div {
+  padding: 16px 22px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.cmp-head .cmp-h-topic { padding: 0; }
+.cmp-head .h-left  {
+  color: var(--ink-2);
+  border-right: 1px solid var(--line-soft);
+}
+.cmp-head .h-right {
+  color: var(--ink);
+  border-left: 1px solid var(--steel-line);
+  background: linear-gradient(180deg, var(--steel-weak), transparent);
+}
+.cmp-row { border-top: 1px solid var(--line-soft); }
+.cmp-row > div { padding: 22px; display: flex; align-items: center; min-height: 76px; }
+.cmp-topic {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: rgba(0, 0, 0, 0.16);
+  border-right: 1px solid var(--line-soft);
+}
+.cmp-left {
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+  background: rgba(255, 255, 255, 0.008);
+  position: relative;
+  padding-left: 42px !important;
+  opacity: 0.82;
+}
+.cmp-left::before {
+  content: "";
+  position: absolute;
+  left: 22px; top: 50%; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0 3px rgba(224, 96, 108, 0.12);
+}
+.cmp-right {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  background: linear-gradient(90deg, var(--steel-weak), transparent 60%);
+  border-left: 1px solid var(--steel-line);
+  position: relative;
+  padding-left: 42px !important;
+  font-weight: 550;
+}
+.cmp-right::before {
+  content: "";
+  position: absolute;
+  left: 22px; top: 50%; transform: translateY(-50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 3px var(--live-bg);
+}
+.cmp-foot {
+  border-top: 1px solid var(--line);
+  padding: 18px 22px;
+  display: flex; align-items: center; gap: 14px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  background: var(--bg-2);
+}
+.cmp-foot .x {
+  width: 21px; height: 21px; border-radius: var(--r-xs); flex: none;
+  display: grid; place-items: center;
+  color: var(--bad); font-weight: 800;
+  background: var(--bad-bg);
+  border: 1px solid rgba(224, 96, 108, 0.3);
+}
+.cmp-foot b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .cmp-head { display: none; }
+  .cmp-row { grid-template-columns: 1fr; }
+  .cmp-row > div { padding: 16px 22px 16px 42px; min-height: 0; }
+  .cmp-topic {
+    background: var(--bg-2);
+    border-right: none;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 14px 22px;
+  }
+  .cmp-left, .cmp-right {
+    border-left: none;
+    padding-top: 28px !important;
+    padding-bottom: 18px !important;
+  }
+  .cmp-left { border-bottom: 1px solid var(--line-soft); }
+  .cmp-left::after, .cmp-right::after {
+    content: attr(data-label);
+    position: absolute;
+    top: 8px; left: 42px;
+    font-family: var(--font-mono);
+    font-size: 9px; letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * FAQ — accordion. Un solo open a la vez, chevron acero rotatorio.
+ * Hairlines entre items, sin caja exterior (la sección ya está
+ * encerrada por sec-line y wrap). Animación de altura con framer-motion;
+ * el CSS solo se ocupa de estética y estados.
+ * ───────────────────────────────────────────────────────────────────── */
+.faq {
+  margin: clamp(44px, 5vw, 64px) auto 0;
+  max-width: 820px;
+  border-top: 1px solid var(--line);
+}
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-q {
+  width: 100%;
+  display: flex; align-items: center; gap: 18px;
+  padding: 22px 4px;
+  background: transparent; border: 0; cursor: pointer;
+  text-align: left;
+  font: 600 16.5px/1.4 var(--font-ui);
+  color: var(--ink-2);
+  letter-spacing: -0.006em;
+  transition: color var(--tr);
+}
+.faq-q:hover { color: var(--ink); }
+.faq-item.open .faq-q { color: var(--ink); }
+.faq-q > span:first-child { flex: 1; }
+.faq-q .chev {
+  margin-left: auto; flex: none;
+  width: 28px; height: 28px; border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  background: var(--bg-2); border: 1px solid var(--line-soft);
+  color: var(--steel);
+  transition: transform var(--tr), border-color var(--tr), background var(--tr);
+}
+.faq-q .chev svg { width: 12px; height: 12px; display: block; }
+.faq-item.open .faq-q .chev {
+  transform: rotate(180deg);
+  border-color: var(--steel-line);
+  background: var(--steel-weak);
+}
+.faq-a {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+.faq-a-inner {
+  padding: 2px 4px 24px;
+  max-width: 62ch;
+}
+
+@media (max-width: 600px) {
+  .faq-q { font-size: 15px; padding: 18px 2px; gap: 12px; }
+  .faq-a { font-size: 13.5px; line-height: 1.62; }
+  .faq-q .chev { width: 24px; height: 24px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * CTA — el primario nuevo ("Crear tu workspace" / "Create your
+ * workspace") es más largo que "Entrar a Orux". Reduzco un punto el
+ * padding del .lg para que aguante el grid del hero sin pelearse con
+ * el ghost. En ≤480px el primario gana flex, el ghost cede.
+ * ───────────────────────────────────────────────────────────────────── */
+.btn.primary.lg { padding-left: 22px; padding-right: 22px; }
+.cta { gap: 10px; }
+@media (max-width: 480px) {
+  .btn.lg { padding: 14px 18px; font-size: 14px; }
+  .cta, .final-cta { flex-direction: column; align-items: stretch; }
+  .cta .btn, .final-cta .btn { flex: 1 1 auto; min-width: 0; justify-content: center; }
+}
+
+/* Final CTA queda con los mismos botones lg — repito el padding tight. */
+.final-cta .btn.primary.lg { padding-left: 22px; padding-right: 22px; }
+

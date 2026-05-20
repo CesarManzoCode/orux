@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { T, cargaLang, guardaLang, type Lang, type Traducciones } from "./i18n";
 
 const APP = "/app";
@@ -55,6 +55,112 @@ function LangPill({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void })
   );
 }
 
+/* Tabla comparativa antes/después (reemplaza el diagrama .risk anterior) */
+type CmpRow = { topic: string; left: string; right: string };
+function Compare({
+  headLeft, headRight, rows, foot, footB,
+}: {
+  headLeft: string; headRight: string;
+  rows: readonly CmpRow[];
+  foot: string; footB: string;
+}) {
+  return (
+    <div className="compare">
+      <div className="cmp-head" role="row">
+        <div className="cmp-h-topic" />
+        <div className="h-left" role="columnheader">{headLeft}</div>
+        <div className="h-right" role="columnheader">{headRight}</div>
+      </div>
+      {rows.map((r) => (
+        <div className="cmp-row" role="row" key={r.topic}>
+          <div className="cmp-topic">{r.topic}</div>
+          <div className="cmp-left"  data-label={headLeft}>{r.left}</div>
+          <div className="cmp-right" data-label={headRight}>{r.right}</div>
+        </div>
+      ))}
+      <div className="cmp-foot">
+        <span className="x" aria-hidden>⚠</span>
+        <div>{foot}<b>{footB}</b></div>
+      </div>
+    </div>
+  );
+}
+
+/* Card de pilar con bloques WHAT/WHY/BENEFIT */
+function Pillar({
+  dot, title, idx, screen, h3, what, why, benefit, labels,
+}: {
+  dot: string; title: string; idx: string;
+  screen: ReactNode; h3: string;
+  what: string; why: string; benefit: string;
+  labels: { what: string; why: string; benefit: string };
+}) {
+  return (
+    <div className="mod">
+      <div className="mod-h">
+        <span className="d" style={{ background: dot }} /> {title}
+        <span className="ix">{idx}</span>
+      </div>
+      <div className="mod-screen">{screen}</div>
+      <div className="mod-cap">
+        <h3>{h3}</h3>
+        <div className="mod-bits">
+          <div className="mod-bit"><span className="lab">{labels.what}</span><p>{what}</p></div>
+          <div className="mod-bit"><span className="lab">{labels.why}</span><p>{why}</p></div>
+          <div className="mod-bit benefit"><span className="lab">{labels.benefit}</span><p>{benefit}</p></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* FAQ accordion */
+type FaqItem = { q: string; a: string };
+function Faq({ items }: { items: readonly FaqItem[] }) {
+  const [open, setOpen] = useState<number | null>(0);
+  return (
+    <div className="faq" role="list">
+      {items.map((it, i) => {
+        const isOpen = open === i;
+        const aId = `faq-a-${i}`;
+        return (
+          <div className={"faq-item" + (isOpen ? " open" : "")} key={i} role="listitem">
+            <button
+              type="button"
+              className="faq-q"
+              aria-expanded={isOpen}
+              aria-controls={aId}
+              onClick={() => setOpen(isOpen ? null : i)}
+            >
+              <span>{it.q}</span>
+              <span className="chev" aria-hidden>
+                <svg viewBox="0 0 12 12" fill="none">
+                  <path d="M2 4.5 L6 8.5 L10 4.5" stroke="currentColor"
+                    strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  id={aId}
+                  className="faq-a"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <div className="faq-a-inner">{it.a}</div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Stage({ t }: { t: Traducciones }) {
   return (
     <div className="stage" aria-hidden>
@@ -105,11 +211,13 @@ function Stage({ t }: { t: Traducciones }) {
       <div className="float card-impact">
         <div className="ft"><span className="ic">▲</span> {t.stage_impact_title}</div>
         <div className="body">
-          {t.stage_impact_body1} <code>claim()</code> {t.stage_impact_body2} <b>4 {t.stage_impact_body3.split("—")[0].trim()}</b> — {t.stage_impact_body3.split("—")[1]?.trim()}
+          {t.stage_impact_body1} <code>claim()</code> {t.stage_impact_body2}{" "}
+          <b>4 {t.stage_impact_count}</b> {t.stage_impact_body3}
         </div>
         <div className="uses">
           <span>server/sync.py:142</span>
           <span>api/routes.py:88</span>
+          <span>cli/admin.py:14</span>
           <span>tests/test_own.py:23</span>
         </div>
         <div className="auto">{t.stage_impact_auto}</div>
@@ -143,6 +251,11 @@ export function App() {
     return () => window.removeEventListener("scroll", on);
   }, []);
 
+  // Sincroniza el atributo lang del <html> con el idioma elegido
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const heroInit = reduce ? "show" : "hidden";
 
   return (
@@ -158,6 +271,7 @@ export function App() {
             <a href="#problema">{t.nav_problema}</a>
             <a href="#pilares">{t.nav_pilares}</a>
             <a href="#como">{t.nav_como}</a>
+            <a href="#faq">{t.nav_faq}</a>
             <a href="#precio">{t.nav_precio}</a>
           </div>
           <div className="nav-right">
@@ -200,12 +314,18 @@ export function App() {
             </motion.div>
           </motion.div>
 
-          <motion.div
+          <motion.div className="hero-stage-col"
             initial={reduce ? { opacity: 1 } : { opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.85, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
             <Stage t={t} />
+            <p className="stage-cap" aria-label={t.stage_cap_aria}>
+              <span className="dotg" aria-hidden /><b>{t.stage_cap_1}</b>{" "}
+              <span className="dotp" aria-hidden />{t.stage_cap_2}{" "}
+              <span className="dotr" aria-hidden />
+              <b>{t.stage_cap_3}</b>{" "}{t.stage_cap_4}
+            </p>
           </motion.div>
         </div>
       </header>
@@ -226,7 +346,7 @@ export function App() {
         </div>
       </div>
 
-      {/* ── PROBLEMA ── */}
+      {/* ── PROBLEMA · tabla comparativa antes/después ── */}
       <section id="problema">
         <span className="sec-line" />
         <div className="wrap">
@@ -235,39 +355,18 @@ export function App() {
             <span className="soft">{t.s01_h_2}</span>
           </Head>
           <Reveal delay={0.12}>
-            <div className="risk">
-              <div className="risk-col">
-                <div className="risk-h">{t.risk_now}</div>
-                <div className="dev">
-                  <span className="av" style={{ background: "#43b98a" }}>T</span>
-                  <span className="nm">{t.risk_you} <em>roster.py</em></span>
-                </div>
-                <div className="dev">
-                  <span className="av" style={{ background: "#6ea8e6" }}>A</span>
-                  <span className="nm">Ana · <em>sync.py → usa claim()</em></span>
-                </div>
-              </div>
-              <div className="risk-mid">
-                <span className="file">claim()</span>
-                <span className="clash">{t.risk_collision}</span>
-              </div>
-              <div className="risk-col">
-                <div className="risk-h">{t.risk_git}</div>
-                <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>commit local… push… </span></div>
-                <div className="dev"><span className="nm" style={{ color: "var(--mut)" }}>rama… PR… review…</span></div>
-              </div>
-              <div className="risk-foot">
-                <span className="x">!</span>
-                <div>
-                  {t.risk_foot} <b>{t.risk_foot_b}</b>{t.risk_foot2}
-                </div>
-              </div>
-            </div>
+            <Compare
+              headLeft={t.cmp_head_left}
+              headRight={t.cmp_head_right}
+              rows={t.cmp_rows}
+              foot={t.cmp_foot}
+              footB={t.cmp_foot_b}
+            />
           </Reveal>
         </div>
       </section>
 
-      {/* ── PILARES ── */}
+      {/* ── PILARES · WHAT/WHY/BENEFIT ── */}
       <section id="pilares">
         <span className="sec-line" />
         <div className="wrap">
@@ -277,50 +376,36 @@ export function App() {
           </Head>
           <Reveal delay={0.12}>
             <div className="modules">
-              <div className="mod">
-                <div className="mod-h">
-                  <span className="d" style={{ background: "var(--live)" }} /> {t.mod1_title}
-                  <span className="ix">01 / 03</span>
-                </div>
-                <div className="mod-screen">
+              <Pillar
+                dot="var(--live)" title={t.mod1_title} idx="01 / 03"
+                labels={t.mod_labels}
+                screen={
                   <div className="scr-pres">
                     <div className="pl x a"><span className="n">12</span><span className="bar" /><span className="who">T</span></div>
                     <div className="pl y b"><span className="n">15</span><span className="bar" /><span className="who">A</span></div>
                     <div className="pl"><span className="n">16</span><span className="bar" style={{ background: "var(--bg-3)" }} /></div>
                     <div className="pl y b"><span className="n">22</span><span className="bar" /><span className="who">A</span></div>
                   </div>
-                </div>
-                <div className="mod-cap">
-                  <h3>{t.mod1_h3}</h3>
-                  <p>{t.mod1_p}</p>
-                </div>
-              </div>
-
-              <div className="mod">
-                <div className="mod-h">
-                  <span className="d" style={{ background: "var(--peer)" }} /> {t.mod2_title}
-                  <span className="ix">02 / 03</span>
-                </div>
-                <div className="mod-screen">
+                }
+                h3={t.mod1_h3} what={t.mod1_what} why={t.mod1_why} benefit={t.mod1_benefit}
+              />
+              <Pillar
+                dot="var(--peer)" title={t.mod2_title} idx="02 / 03"
+                labels={t.mod_labels}
+                screen={
                   <div className="scr-own">
                     <div className="row"><span className="fl">roster.py</span><span className="ar">→</span><span className="tg me">{t.mod_own_me}</span></div>
                     <div className="row"><span className="fl">sync.py</span><span className="ar">→</span><span className="tg pe">Ana</span></div>
                     <div className="row"><span className="fl">impact.py</span><span className="ar">→</span><span className="tg fr">{t.mod_own_free}</span></div>
                     <div className="row"><span className="fl">git.py</span><span className="ar">→</span><span className="tg pe">Kai</span></div>
                   </div>
-                </div>
-                <div className="mod-cap">
-                  <h3>{t.mod2_h3}</h3>
-                  <p>{t.mod2_p}</p>
-                </div>
-              </div>
-
-              <div className="mod">
-                <div className="mod-h">
-                  <span className="d" style={{ background: "var(--risk)" }} /> {t.mod3_title}
-                  <span className="ix">03 / 03</span>
-                </div>
-                <div className="mod-screen">
+                }
+                h3={t.mod2_h3} what={t.mod2_what} why={t.mod2_why} benefit={t.mod2_benefit}
+              />
+              <Pillar
+                dot="var(--risk)" title={t.mod3_title} idx="03 / 03"
+                labels={t.mod_labels}
+                screen={
                   <div className="scr-imp">
                     <div className="sig">
                       <code>claim(path)</code> <span className="chg">→ claim(path, user)</span>
@@ -330,19 +415,16 @@ export function App() {
                     <div className="u"><b>test_own.py:23</b></div>
                     <div className="ok">{t.mod_impact_ok}</div>
                   </div>
-                </div>
-                <div className="mod-cap">
-                  <h3>{t.mod3_h3}</h3>
-                  <p>{t.mod3_p}</p>
-                </div>
-              </div>
+                }
+                h3={t.mod3_h3} what={t.mod3_what} why={t.mod3_why} benefit={t.mod3_benefit}
+              />
             </div>
           </Reveal>
         </div>
       </section>
 
-      {/* ── FLUJO ── */}
-      <section>
+      {/* ── FLUJO · cómo funciona en vivo (absorbe los 'pasos') ── */}
+      <section id="como">
         <span className="sec-line" />
         <div className="wrap">
           <Head k={t.s03_k} sub={t.s03_sub}>
@@ -364,46 +446,38 @@ export function App() {
         </div>
       </section>
 
-      {/* ── PASOS ── */}
-      <section id="como">
-        <span className="sec-line" />
-        <div className="wrap">
-          <Head k={t.s04_k} sub={t.s04_sub}>
-            {t.s04_h_1}{" "}
-            <span className="soft">{t.s04_h_2}</span>
-          </Head>
-          <motion.div className="steps" variants={stagger}
-            initial={reduce ? "show" : "hidden"}
-            whileInView="show" viewport={{ once: true, amount: 0.2 }}>
-            {t.pasos.map((s) => (
-              <motion.div key={s.n} className="step" variants={fadeUp}>
-                <div className="step-n">{s.n}</div>
-                <h3>{s.t}</h3>
-                <p>{s.d}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
       {/* ── NO SOMOS ── */}
       <section>
         <span className="sec-line" />
         <div className="wrap">
-          <Head k={t.s05_k}>
-            {t.s05_h_1}{" "}
-            <span className="soft">{t.s05_h_2}</span>
+          <Head k={t.s04_k}>
+            {t.s04_h_1}{" "}
+            <span className="soft">{t.s04_h_2}</span>
           </Head>
           <motion.div className="nots" variants={stagger}
             initial={reduce ? "show" : "hidden"}
             whileInView="show" viewport={{ once: true, amount: 0.3 }}>
             {t.nots.map((n) => (
               <motion.div className="not" key={n} variants={fadeUp}>
-                <span>✕</span>
+                <span aria-hidden>✕</span>
                 <div>{n}</div>
               </motion.div>
             ))}
           </motion.div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section id="faq">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head k={t.s05_k} sub={t.s05_sub}>
+            {t.s05_h_1}{" "}
+            <span className="soft">{t.s05_h_2}</span>
+          </Head>
+          <Reveal delay={0.12}>
+            <Faq items={t.faq} />
+          </Reveal>
         </div>
       </section>
 
@@ -460,6 +534,7 @@ export function App() {
             <a href={APP}>{t.foot_enter}</a>
             <a href="#pilares">{t.foot_what}</a>
             <a href="#como">{t.foot_how}</a>
+            <a href="#faq">{t.foot_faq}</a>
             <a href="#precio">{t.foot_price}</a>
           </div>
         </div>
