@@ -96,12 +96,22 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
   const n = sel.size;
   return (
     <ModalPortal>
-    <div className="ammodal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="amcard">
-        <div className="amhead">
-          <span className="amtit"><Shield size={15} /> {t.am_title}</span>
-          <button className="amx" title={t.am_close} onClick={onClose}><X size={15} /></button>
-        </div>
+    <div
+      className="modalbg"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="am-h"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="modal am-modal">
+        <header className="modal-head">
+          <h2 id="am-h" className="modal-h">
+            <Shield size={15} /> {t.am_title}
+          </h2>
+          <button className="modal-x" aria-label={t.am_close} onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
         <div className="ambar">
           <label className="amsel">
             {t.am_owner_label}
@@ -128,13 +138,13 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
             ? <div className="amvacio">{t.am_no_files}</div>
             : filas}
         </div>
-        <div className="amfoot">
+        <footer className="am-foot">
           {n === 0
             ? t.am_hint_empty
             : user
               ? t.am_hint_assign(user, n)
               : t.am_hint_nouser(n)}
-        </div>
+        </footer>
       </div>
     </div>
     </ModalPortal>

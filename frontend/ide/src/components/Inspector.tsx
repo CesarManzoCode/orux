@@ -564,7 +564,7 @@ export function Inspector({
           colapsadas={colapsadas} toggle={toggle}
         >
           {!path ? (
-            <p className="in-empty">—</p>
+            <p className="in-empty">{t.ins_pick_file}</p>
           ) : !due ? (
             <>
               <div className="inrow">

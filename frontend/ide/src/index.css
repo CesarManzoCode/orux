@@ -87,7 +87,7 @@
 
   /* ── Radii: un punto menos redondo que antes = más instrumento, menos
        burbuja. Consistencia total. ── */
-  --r: 7px; --r-sm: 5px; --r-lg: 10px; --r-isla: 12px; --r-pill: 999px;
+  --r: 7px; --r-sm: 5px; --r-md: 8px; --r-lg: 10px; --r-isla: 12px; --r-pill: 999px;
 
   /* ── Spacing: escala 4px. Usar SIEMPRE estas variables. ── */
   --s-0: 2px; --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
@@ -109,6 +109,19 @@
     Roboto, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
     Consolas, monospace;
+  /* Alias semánticos: el código suele pedir --font-base para "texto del
+     producto"; resuelve al UI sin que cada componente lo conozca. */
+  --font-base: var(--font-ui);
+
+  /* ── Avatares e ink-sobre-acento. Los avatares (presencia, hub teams,
+       ContextBar, Inspector) llevan iniciales sobre un FONDO de color
+       saturado: el texto blanco se ve sucio sobre ámbar/verde claro. El
+       token define el tono de tinta para esos casos (negro azulado, no
+       puro: matchea el fondo del IDE). Cambiar acá = mueve todos los
+       avatares y todas las pills coloreadas a la vez. ── */
+  --av-ink: #0a0c10;             /* tinta sobre relleno claro (avatares)  */
+  --accent-ink: #04130c;         /* tinta sobre el acento (CTA primario)  */
+  --accent-fill: var(--grad);    /* relleno del CTA primario              */
 }
 
 * { box-sizing: border-box; }
@@ -169,7 +182,7 @@ button:active { transform: translateY(1px); }
   line-height: 1; white-space: nowrap; letter-spacing: -0.005em;
 }
 .btn-primario {
-  background: var(--grad); color: #04130c; font-weight: 700;
+  background: var(--grad); color: var(--accent-ink); font-weight: 700;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
     0 4px 14px -8px rgba(52, 217, 191, 0.5);
 }
@@ -515,7 +528,7 @@ button:active { transform: translateY(1px); }
    para recortarlo; sin loop de glow (la vida la da el color + estar). */
 .badge {
   width: 16px; height: 16px; border-radius: 50%; font-size: 8.5px;
-  line-height: 16px; text-align: center; color: #0a0c10;
+  line-height: 16px; text-align: center; color: var(--av-ink);
   font-weight: 750; box-shadow: 0 0 0 2px var(--surface);
 }
 /* El componente pasa "✕" como texto (no un ícono): necesita tamaño y
@@ -586,7 +599,7 @@ button:active { transform: translateY(1px); }
 .aqui { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 .aqui .quien {
   font-size: var(--t-xs); padding: 0.14rem 0.5rem 0.14rem 0.42rem;
-  border-radius: var(--r-pill); color: #0a0c10; font-weight: 700;
+  border-radius: var(--r-pill); color: var(--av-ink); font-weight: 700;
   display: inline-flex; align-items: center; gap: 5px;
 }
 .aqui .quien::before {
@@ -861,7 +874,7 @@ button:active { transform: translateY(1px); }
    despegar del código sin taparlo. */
 .marca .etiqueta {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  font-size: 10px; padding: 1px 7px; border-radius: var(--r-pill); color: #0a0c10;
+  font-size: 10px; padding: 1px 7px; border-radius: var(--r-pill); color: var(--av-ink);
   font-weight: 750; white-space: nowrap; font-family: var(--font-ui);
   letter-spacing: -0.01em; box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.6);
 }
@@ -1401,8 +1414,31 @@ button:active { transform: translateY(1px); }
 .hc-new .fg-hint {
   margin: 4px 0 0; font-size: 11px; color: var(--faint); line-height: 1.5;
 }
-.hc-new .err { font-size: var(--t-sm); color: var(--bad); margin-top: 0.5rem; }
+/* Error de SERVER en el Hub: se enseña con el mismo lenguaje que el
+   login (caja translúcida + disco "!"). Empty => oculto, NO ocupa
+   espacio. Vive al final del card y NO se confunde con el hint del
+   input local (.fg-err). */
+.hc-new .err {
+  font-size: var(--t-sm); color: var(--bad);
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bad-bg);
+  border: 1px solid color-mix(in srgb, var(--bad) 28%, transparent);
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
 .hc-new .err:empty { display: none; }
+.hc-new .err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
+}
 
 /* Costura entre los dos formularios. */
 .hub-sep {
@@ -1787,7 +1823,7 @@ button:active { transform: translateY(1px); }
 .gitp .commitbox input { padding: 0.45rem 0.55rem; font-size: var(--t-sm); }
 .gitp .commitbox button {
   border: none; border-radius: var(--r-sm); padding: 0.45rem 0.7rem;
-  background: var(--grad); color: #04130c; font-size: var(--t-sm);
+  background: var(--grad); color: var(--accent-ink); font-size: var(--t-sm);
   font-weight: 700; cursor: pointer; flex-shrink: 0;
   display: inline-flex; align-items: center; gap: 5px;
   transition: filter var(--tr), transform var(--tr);
@@ -1817,35 +1853,19 @@ button:active { transform: translateY(1px); }
 .gitp .remacc .no { color: var(--bad); }
 .gitp .remacc .no:hover { background: var(--bad-bg); border-color: rgba(232, 99, 111, 0.4); color: var(--bad); }
 
-/* ── Modal admin (reparto masivo) ── */
-.ammodal {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(3px);
-  display: flex; align-items: center; justify-content: center; padding: 2.5rem;
-  animation: fade-in 160ms var(--ease-in) both;
+/* ── Modal admin (reparto masivo) ──
+   Hereda del sistema base (.modalbg + .modal). Solo añade el modifier
+   `.am-modal` para ensanchar el card (la lista de archivos pide más
+   espacio que el modal estándar de 520px). Bordes/animaciones vienen
+   del bloque .modal: una sola fuente de verdad para todos los modales. */
+.modal.am-modal {
+  max-width: 760px;
+  width: 100%;
+  /* Más altura útil: la lista de archivos es lo que el admin viene a
+     ver — dejar respirar. */
+  max-height: calc(100vh - 2.5rem);
 }
-.amcard {
-  width: 760px; max-width: 100%; max-height: 100%; display: flex;
-  flex-direction: column; background: var(--surface);
-  border: 1px solid var(--border-soft); border-radius: var(--r-isla);
-  box-shadow: var(--shadow-modal);
-  animation: rise-in 240ms var(--ease-in) both;
-}
-.amhead {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border-soft);
-}
-.amtit {
-  font-size: var(--t-base); font-weight: 700; color: var(--text);
-  display: flex; align-items: center; gap: 0.5rem; letter-spacing: -0.01em;
-}
-.amtit svg { color: var(--accent); }
-.amx {
-  border: none; background: transparent; color: var(--muted); cursor: pointer;
-  padding: 0.3rem; border-radius: var(--r-sm); line-height: 0;
-  display: flex; transition: background var(--tr), color var(--tr);
-}
-.amx:hover { background: var(--surface-2); color: var(--text); }
+.modal.am-modal .modal-h svg { color: var(--accent); }
 .ambar {
   display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
   padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--border-soft);
@@ -1864,7 +1884,7 @@ button:active { transform: translateY(1px); }
 .ambar button:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .ambar button:disabled { opacity: 0.4; cursor: default; }
 .ambar .amgo {
-  background: var(--grad); color: #04130c; border-color: transparent; font-weight: 700;
+  background: var(--grad); color: var(--accent-ink); border-color: transparent; font-weight: 700;
 }
 .ambar .amgo:hover:not(:disabled) { filter: brightness(1.06); }
 .ambar .amno { color: var(--bad); }
@@ -1888,10 +1908,10 @@ button:active { transform: translateY(1px); }
   border: 1px solid var(--accent-soft);
 }
 .amvacio { color: var(--faint); padding: 1rem; font-family: var(--font-ui); }
-.amfoot {
+.am-foot {
   padding: 0.65rem 1.1rem; border-top: 1px solid var(--border-soft);
   font-size: 11.5px; color: var(--muted); min-height: 2.4em;
-  display: flex; align-items: center; background: var(--bg);
+  display: flex; align-items: center; background: var(--surface-2);
 }
 
 /*
@@ -2132,8 +2152,22 @@ button:active { transform: translateY(1px); }
      del panel derecho (más angosto que el main) */
   font-size: var(--t-xs); max-height: 220px;
 }
-.in-empty, .in-note { font-size: var(--t-sm); color: var(--muted); line-height: 1.55; margin: 0; }
-.in-note { color: var(--text-2); }
+/* Estados vacíos del Inspector: el panel es DENSO; un vacío sin marco
+   se lee como "roto/cargando". Una caja sobria (mismo idioma que el
+   resto: fondo hundido + hairline suave) dice "acá no hay nada AHORA"
+   sin gritar. Distinto de .empty (.ft-empty del árbol) — ese tiene
+   icono y padding generoso porque manda toda una zona; éste vive en
+   secciones ya pequeñas. */
+.in-empty {
+  font-size: var(--t-sm); color: var(--muted); line-height: 1.55;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg);
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--r-sm);
+}
+.in-empty b { color: var(--text-2); font-weight: 600; }
+.in-note { font-size: var(--t-sm); color: var(--text-2); line-height: 1.55; margin: 0; }
 .in-note b { color: var(--text); }
 .inrow { display: flex; align-items: center; gap: 0.5rem; font-size: 12px; color: var(--text-2); }
 .inrow.col { flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -2354,12 +2388,24 @@ button:active { transform: translateY(1px); }
 }
 .inv-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .inv-err {
-  margin: 0 1rem 0.4rem; padding: 0.45rem 0.6rem;
+  margin: 0 1rem 0.4rem; padding: 0.5rem 0.65rem;
   background: var(--bad-bg);
   color: var(--bad);
   border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
   border-radius: var(--r-sm);
   font-size: var(--t-xs);
+  display: flex; align-items: center; gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
+.inv-err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
 }
 .inv-how {
   padding: 0.5rem 1rem 0.2rem;
@@ -2417,12 +2463,33 @@ button:active { transform: translateY(1px); }
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 22%, transparent);
 }
 
-/* Mensajes inline de error y hint (reusados por Hub también) */
+/* Mensajes inline — un único lenguaje para error / hint en TODO el IDE
+   (modales, hub, login). El error es notorio pero no agresivo: tinta
+   roja sobre tinte translúcido, hairline del mismo tono y un disco "!"
+   compacto que dispara el reflejo de "algo que mirar". */
 .fg-err {
-  margin-top: 0.4rem;
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.65rem;
   font-size: var(--t-xs);
   color: var(--bad);
   line-height: 1.45;
+  background: var(--bad-bg);
+  border: 1px solid color-mix(in srgb, var(--bad) 28%, transparent);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
+.fg-err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
 }
 .fg-hint {
   margin: 0.4rem 0 0;

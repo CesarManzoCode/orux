@@ -726,12 +726,22 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
 @media (max-width: 900px) {
   .modules, .flow { grid-template-columns: 1fr; }
   .fn + .fn { border-left: none; border-top: 1px solid var(--line-soft); }
-  .trust .wrap { grid-template-columns: repeat(2, 1fr); }
+  /* Trust 2x2: cuando se rompe de 4 cols a 2, una métrica se pega a la
+     vecina; un gap horizontal modesto restaura la lectura "métricas
+     independientes" sin perder densidad. */
+  .trust .wrap { grid-template-columns: repeat(2, 1fr); column-gap: 28px; }
   .trust .ti:nth-child(2) { border-right: none; padding-right: 0; }
   .trust .ti:nth-child(3) { padding-left: 0; }
   .trust .ti:nth-child(1), .trust .ti:nth-child(2) { border-bottom: 1px solid var(--line-soft); padding-bottom: 22px; }
   .trust .ti:nth-child(3), .trust .ti:nth-child(4) { padding-top: 22px; }
   .nav-links { gap: 22px; font-size: 12.5px; }
+}
+/* Breakpoint intermedio: a partir de aquí los nav-links empiezan a
+   apretarse; reducimos el padding global del wrap para evitar el cuello
+   de botella visual antes de saltar a mobile real. */
+@media (max-width: 820px) {
+  .nav .wrap { gap: 18px; }
+  .nav-right { gap: 12px; }
 }
 @media (max-width: 760px) {
   .prices { grid-template-columns: 1fr; }
@@ -946,21 +956,40 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
     border-bottom: 1px solid var(--line-soft);
     padding: 14px 22px;
   }
+  /* En desktop la dicotomía rojo/verde la lee la posición (col izquierda
+     vs col derecha) y un gradiente acero. En mobile pasa a stack vertical:
+     se pierde la columna y el contraste se va con ella. Solución: subir
+     el tinte sutil a fondo de cada celda + dot más visible + label
+     pintado con el color del estado. La oposición "ceremonia vs orux"
+     se preserva sin recargar la pantalla. */
   .cmp-left, .cmp-right {
     border-left: none;
-    padding-top: 28px !important;
+    padding-top: 30px !important;
     padding-bottom: 18px !important;
   }
-  .cmp-left { border-bottom: 1px solid var(--line-soft); }
+  .cmp-left {
+    background: color-mix(in srgb, var(--bad) 5%, transparent);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cmp-right {
+    background: color-mix(in srgb, var(--live) 6%, transparent);
+  }
+  .cmp-left::before, .cmp-right::before {
+    width: 7px; height: 7px;
+    top: 32px;
+    transform: none;
+  }
   .cmp-left::after, .cmp-right::after {
     content: attr(data-label);
     position: absolute;
-    top: 8px; left: 42px;
+    top: 9px; left: 42px;
     font-family: var(--font-mono);
     font-size: 9px; letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--faint);
+    font-weight: 600;
   }
+  .cmp-left::after { color: var(--bad); }
+  .cmp-right::after { color: var(--live); }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
