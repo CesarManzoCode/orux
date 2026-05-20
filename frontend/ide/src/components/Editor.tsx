@@ -21,7 +21,13 @@ const PAD_TOP = 20;
 export function Editor() {
   const s = useStore();
   const path = s.currentPath;
-  const valor = path ? (s.files[path] ?? "") : ""; // texto COMPLETO (verdad)
+  // Capa 28: el editor renderiza el draft local del no-dueño si lo hay
+  // (feedback inmediato de lo que escribió). Si no hay draft, manda el
+  // espejo del server. La propuesta al dueño se manda recién en Ctrl+S
+  // (store::guardar).
+  const valor = path
+    ? (s.drafts[path] ?? s.files[path] ?? "")
+    : ""; // texto COMPLETO (verdad)
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const codeRef = useRef<HTMLElement>(null);

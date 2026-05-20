@@ -53,8 +53,16 @@ export interface State {
   // Capa 19: archivos con cambios desde el último checkpoint (Ctrl+S). Es
   // el dot de "sin marcar": dispara el reflejo de guardar y es verdad (hay
   // cambios sin analizar). NO es "sin guardar" (el contenido ya viaja en
-  // vivo); el Ctrl+S solo dispara el análisis de impacto.
+  // vivo para el dueño); para un no-dueño con draft, el Ctrl+S es lo que
+  // dispara la propuesta al dueño (ver `drafts` abajo).
   dirty: Record<string, boolean>;
+  // Capa 28: drafts locales del NO-DUEÑO. Mientras tipeás en un archivo
+  // ajeno, lo escrito queda acá (no viaja al server hasta Ctrl+S). El
+  // editor lee `drafts[path] ?? files[path]`; los demás clientes (incluido
+  // el dueño) NO ven nada hasta que confirmás con Ctrl+S y se crea la
+  // propuesta. Un `update` entrante (aprobación, edición del dueño, etc.)
+  // limpia el draft: la verdad del server gana.
+  drafts: Record<string, string>;
   git: GitStatus | null;
   gitResult: { ok: boolean; detail: string; pr_url: string } | null;
   esAdmin: boolean;
@@ -78,7 +86,7 @@ export interface State {
 const inicial: State = {
   conn: "conectando", authed: false, loginError: null, yo: null,
   files: {}, currentPath: null, owners: {}, peers: {}, proposals: {},
-  impacts: {}, dirty: {}, git: null, gitResult: null, esAdmin: false,
+  impacts: {}, dirty: {}, drafts: {}, git: null, gitResult: null, esAdmin: false,
   usuarios: [],
   proyecto:
     location.hostname && location.hostname !== "localhost"
@@ -169,6 +177,33 @@ function send(obj: unknown) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
 
+// Mismo color determinístico que el server (state/presence.py::color_de):
+// SHA-256(username) -> int(hex, 16) % len(PALETA). El mod sobre el entero
+// completo se mantiene char a char en hex porque (m*16 + d) % n preserva
+// el resultado. Web Crypto es async, así que el Hub muestra el accent por
+// defecto un tic hasta que el color cae; el welcome del equipo igual lo
+// sobreescribe luego.
+const PALETA = ["#e0607a", "#5fa8e0", "#8de0a8", "#e0c46a", "#b98de0", "#e09a5f"];
+async function colorDeUsuario(username: string): Promise<string> {
+  const data = new TextEncoder().encode(username);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+  let mod = 0;
+  for (const c of hex) mod = (mod * 16 + parseInt(c, 16)) % PALETA.length;
+  return PALETA[mod];
+}
+function sembrarYo(username: string) {
+  // Identidad mínima inmediata (nombre = usuario, color tentativo) para que
+  // el Hub muestre algo apenas autentica. El color real cae cuando termina
+  // el hash; el welcome del equipo después lo confirma con el del server.
+  set({ yo: { client_id: username, name: username, color: "" } });
+  colorDeUsuario(username).then((color) => {
+    const yo = state.yo;
+    if (yo && yo.client_id === username) set({ yo: { ...yo, color } });
+  }).catch(() => { /* sin crypto.subtle: el welcome traerá el color */ });
+}
+
 function onMessage(raw: string) {
   const m = JSON.parse(raw);
   switch (m.type) {
@@ -177,6 +212,11 @@ function onMessage(raw: string) {
       localStorage.setItem("orux_user", m.username);
       // Autenticado pero todavía sin equipo: el server manda `lobby` a
       // continuación. La app sigue cerrada un escalón más.
+      // Sembramos `yo` con la identidad del usuario para que el Hub
+      // (que se renderiza antes del welcome de equipo) muestre nombre y
+      // color en vez de "—" / "?". El welcome de cada equipo después
+      // confirma color y client_id con la fuente autoritativa.
+      sembrarYo(m.username);
       set({ authed: true, loginError: null, fase: "lobby" });
       break;
     case "auth_error":
@@ -194,7 +234,7 @@ function onMessage(raw: string) {
         equipoError: "",
         // estado de equipo anterior, limpio (por si se cambió de equipo).
         files: {}, owners: {}, peers: {}, proposals: {}, impacts: {},
-        dirty: {}, currentPath: null, inviteCode: "",
+        dirty: {}, drafts: {}, currentPath: null, inviteCode: "",
         // Equipo nuevo = sesión nueva: la bitácora arranca limpia.
         actividad: [], caret: { line: 1, col: 1 },
       });
@@ -213,6 +253,9 @@ function onMessage(raw: string) {
         // Capa 19: el workspace es otro (clone) -> el server re-baseó;
         // acá también arrancamos sin "sin marcar".
         dirty: {},
+        // Capa 28: el workspace es otro -> cualquier draft de no-dueño
+        // del workspace anterior es basura. Se descarta.
+        drafts: {},
       });
       if (primero) presence(primero, 1);
       act("workspace", "", `workspace cargado · ${Object.keys(files).length} archivos`);
@@ -223,9 +266,17 @@ function onMessage(raw: string) {
       // Cambió el contenido (lo tocó alguien): hay cambios sin checkpoint.
       // El checkpoint es global por archivo en el server, así que el dot
       // aplica sin importar quién tipeó (cualquiera puede Ctrl+S).
+      // Capa 28: un update entrante = el server fija una nueva verdad
+      // (aprobación de mi propuesta, edición del dueño, rechazo que
+      // revierte). Cualquier draft local sobre este path queda obsoleto:
+      // se descarta. La verdad gana; si quería seguir proponiendo, vuelvo
+      // a escribir.
+      const drafts = { ...state.drafts };
+      delete drafts[m.path];
       set({
         files: { ...state.files, [m.path]: m.content },
         dirty: { ...state.dirty, [m.path]: true },
+        drafts,
       });
       break;
     }
@@ -235,10 +286,12 @@ function onMessage(raw: string) {
       delete files[m.path];
       const dirty = { ...state.dirty };
       delete dirty[m.path];
+      const drafts = { ...state.drafts };
+      delete drafts[m.path];
       let cur = state.currentPath;
       if (cur === m.path) cur = Object.keys(files).sort()[0] ?? null;
       act("delete", "", "se eliminó", m.path);
-      set({ files, dirty, currentPath: cur });
+      set({ files, dirty, drafts, currentPath: cur });
       break;
     }
     case "welcome": {
@@ -291,7 +344,17 @@ function onMessage(raw: string) {
           act("ownership", "", due ? `${nombreDe(due)} ahora posee` : "sin dueño", p);
         }
       }
-      set({ owners: { ...m.owners } });
+      // Capa 28: si el dueño de un archivo cambió en algo que afecta mi rol
+      // sobre ese path (ya no es de otro, o ahora es mío), el draft local
+      // dejó de tener sentido: o pasa a ser edición directa, o el server
+      // re-fija la verdad. Limpiamos el draft de cualquier path tocado por
+      // este reparto y dejamos la edición normal restaurarse.
+      const drafts = { ...state.drafts };
+      let drafted = false;
+      for (const p of cambiados) {
+        if (p in drafts) { delete drafts[p]; drafted = true; }
+      }
+      set({ owners: { ...ahora }, ...(drafted ? { drafts } : {}) });
       break;
     }
     case "proposal":
@@ -362,23 +425,54 @@ export function seleccionar(path: string) {
 export function cerrarArchivo() {
   set({ currentPath: null });
 }
+// Capa 28: ¿es archivo con dueño distinto a mí? Centraliza la pregunta que
+// gobierna la ruta "propuesta diferida": mientras sea verdad, lo que escribo
+// no viaja al server hasta que pulse Ctrl+S.
+export function esDeOtro(path: string): boolean {
+  const due = state.owners[path];
+  return !!(due && state.yo && due !== state.yo.client_id);
+}
 // Edición local: actualiza el espejo y avisa al server (que NO hace eco al
 // emisor, así que no hay loop — por eso no hace falta el viejo applyingRemote).
+// Capa 28: si el archivo es de OTRO dueño, lo escrito NO viaja: queda en
+// drafts. El editor renderiza el draft (es el feedback inmediato del usuario),
+// pero al dueño no le llega ninguna propuesta hasta que se pulse Ctrl+S.
+// Antes éramos en vivo y eso hacía un flujo de "propuestas por tecla" que
+// invadía la pantalla del dueño.
 export function editar(path: string, content: string) {
+  if (esDeOtro(path)) {
+    set({
+      drafts: { ...state.drafts, [path]: content },
+      dirty: { ...state.dirty, [path]: true },
+    });
+    return;
+  }
   set({
     files: { ...state.files, [path]: content },
     dirty: { ...state.dirty, [path]: true },  // capa 19: sin checkpoint
   });
   send({ type: "update", path, content });
 }
-// Capa 19: checkpoint explícito (Ctrl+S). NO guarda nada (el contenido ya
-// se sincronizó por `editar`); le dice al server "analizá el impacto de
-// este punto coherente". Limpia el dot de "sin marcar".
+// Capa 19/28: checkpoint explícito (Ctrl+S). Dos significados según rol:
+// - Dueño (o archivo sin dueño): NO guarda nada (el contenido ya se
+//   sincronizó por `editar`); le dice al server "analizá el impacto de
+//   este punto coherente".
+// - No-dueño con draft: ESTE es el momento de notificar al dueño. Se manda
+//   `update` con el draft; el server lo convierte en propuesta y avisa al
+//   dueño. NO se manda `save` porque la propuesta aún no es realidad: el
+//   análisis de impacto vendrá cuando el dueño apruebe (server lo hace).
+// Limpia el dot de "sin marcar" en ambos casos.
 export function guardar(path: string | null) {
   if (!path) return;
   const dirty = { ...state.dirty };
   delete dirty[path];
   set({ dirty });
+  if (esDeOtro(path)) {
+    const contenido = state.drafts[path];
+    if (contenido == null) return;  // nada que proponer
+    send({ type: "update", path, content: contenido });
+    return;
+  }
   send({ type: "save", path });
 }
 export function presence(path: string, line: number) {

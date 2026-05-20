@@ -2030,26 +2030,68 @@ button:active { transform: translateY(1px); }
 .in-flag.r-alta { background: var(--bad-bg); color: var(--bad); }
 .in-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 .insec { border-bottom: 1px solid var(--border-soft); }
+/* Capa 28: el header de sección es un botón (toda la fila clickeable;
+   accesible por teclado), no un div. Se ve igual; sumá el chevron al
+   final que indica si está abierta/plegada. */
 .insec-h {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.5rem 0.85rem; background: var(--bg);
   border-bottom: 1px solid var(--border-soft);
+  width: 100%; border-left: none; border-right: none; border-top: none;
+  font: inherit; color: inherit; cursor: pointer; text-align: left;
+  transition: background var(--tr);
 }
+.insec-h:hover { background: var(--surface-2); }
+.insec.plegada > .insec-h { border-bottom-color: transparent; }
 .insec-ic { color: var(--faint); display: flex; }
 .insec.alarma .insec-ic { color: var(--bad); }
 .insec-t {
+  flex: 1;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.12em; color: var(--muted);
 }
 .insec.alarma .insec-t { color: var(--bad); }
 .insec-n {
-  margin-left: auto; font-family: var(--font-mono); font-size: 10px;
+  font-family: var(--font-mono); font-size: 10px;
   color: var(--muted); background: var(--surface-2);
   border: 1px solid var(--border-soft); border-radius: var(--r-pill);
   padding: 1px 7px; min-width: 20px; text-align: center;
 }
 .insec.alarma .insec-n { color: var(--bad); background: var(--bad-bg); border-color: transparent; }
+.insec-chev {
+  color: var(--faint); display: flex;
+  transition: transform var(--tr);
+}
+.insec.plegada .insec-chev { transform: rotate(-90deg); }
 .insec-b { padding: 0.5rem 0.85rem; display: flex; flex-direction: column; gap: 0.4rem; }
+/* Capa 28: propuesta inline dentro del inspector (antes vivía en un tray
+   arriba del editor que invadía). Reusamos el diff/colores de las
+   bandejas pero compactado para encajar en el panel derecho. */
+.inprop {
+  padding: 0.55rem 0; border-top: 1px solid var(--border-soft);
+  animation: fade-in 200ms var(--ease-in) both;
+}
+.inprop:first-child { border-top: none; padding-top: 0; }
+.inprop-h {
+  display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.45rem;
+  font-size: 12px; color: var(--muted);
+}
+.inprop-q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inprop-q b { color: var(--text); font-weight: 650; }
+.inprop-a { display: flex; gap: 0.35rem; }
+.inprop-a button {
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 0.22rem 0.65rem; font-size: var(--t-xs); font-weight: 650;
+  cursor: pointer; transition: filter var(--tr), transform var(--tr);
+}
+.inprop-a button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.inprop-a .ok { background: var(--ok-bg); color: var(--ok); }
+.inprop-a .no { background: var(--bad-bg); color: var(--bad); }
+.inprop .diff {
+  /* el diff común ya tiene fuente/colores; sólo ajustamos para el ancho
+     del panel derecho (más angosto que el main) */
+  font-size: var(--t-xs); max-height: 220px;
+}
 .in-empty, .in-note { font-size: var(--t-sm); color: var(--muted); line-height: 1.55; margin: 0; }
 .in-note { color: var(--text-2); }
 .in-note b { color: var(--text); }

@@ -8,7 +8,6 @@ import { Rail } from "./components/Rail";
 import { Sidebar } from "./components/Sidebar";
 import { Tabs } from "./components/Tabs";
 import { ContextBar } from "./components/ContextBar";
-import { Trays } from "./components/Trays";
 import { Editor } from "./components/Editor";
 import { StatusBar } from "./components/StatusBar";
 import { AdminModal } from "./components/AdminModal";
@@ -115,7 +114,6 @@ export function App() {
         <main className="main isla">
           <Tabs />
           <ContextBar />
-          <Trays />
           <Editor />
         </main>
         {inspOpen && (

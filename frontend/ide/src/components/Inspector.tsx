@@ -1,16 +1,16 @@
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   Radio, KeyRound, Waypoints, GitPullRequest, Activity,
   LogIn, LogOut, GitBranch, Trash2, FolderSync, AlertTriangle,
-  PanelRightClose,
+  PanelRightClose, ChevronDown,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
-  reclamar, seleccionar, nombreDe,
+  reclamar, seleccionar, resolver, nombreDe,
   impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
   type ActItem, type Impact,
 } from "../store";
-import { chipDe } from "../lang";
+import { chipDe, diffLineas } from "../lang";
 import { useI18n } from "../i18n";
 
 function hace(ts: number, ahora: string): string {
@@ -21,18 +21,52 @@ function hace(ts: number, ahora: string): string {
   return Math.floor(s / 3600) + "h";
 }
 
+// Capa 28: el inspector se llenó de secciones (presencia, ownership, impacto,
+// propuestas, actividad). Cada una valiosa, pero juntas el panel pesa. La
+// cura no es esconder señal: es dejarte plegar lo que ahora mismo no querés.
+// El estado de plegado se persiste en localStorage para que el ojo respete
+// como dejaste el panel; el conteo del header sigue visible plegado (la
+// "señal" no se apaga, sólo el detalle).
+const COLAPSO_KEY = "orux_insp_colapso";
+function leerColapso(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLAPSO_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set<string>(arr) : new Set();
+  } catch { return new Set(); }
+}
+function escribirColapso(s: Set<string>) {
+  try { localStorage.setItem(COLAPSO_KEY, JSON.stringify([...s])); } catch {}
+}
+
 function Sec(props: {
-  ic: ReactNode; tit: string; n?: number; tono?: string;
+  k: string; ic: ReactNode; tit: string; n?: number; tono?: string;
+  colapsadas: Set<string>; toggle: (k: string) => void;
   children: ReactNode;
 }) {
+  const plegada = props.colapsadas.has(props.k);
   return (
-    <section className={"insec" + (props.tono ? " " + props.tono : "")}>
-      <div className="insec-h">
+    <section
+      className={
+        "insec" + (props.tono ? " " + props.tono : "") +
+        (plegada ? " plegada" : "")
+      }
+    >
+      <button
+        type="button"
+        className="insec-h"
+        aria-expanded={!plegada}
+        onClick={() => props.toggle(props.k)}
+      >
         <span className="insec-ic">{props.ic}</span>
         <span className="insec-t">{props.tit}</span>
         {props.n != null && <span className="insec-n">{props.n}</span>}
-      </div>
-      <div className="insec-b">{props.children}</div>
+        <span className="insec-chev">
+          <ChevronDown size={13} />
+        </span>
+      </button>
+      {!plegada && <div className="insec-b">{props.children}</div>}
     </section>
   );
 }
@@ -73,20 +107,41 @@ export function Inspector({
   const path = s.currentPath;
   const c = path ? chipDe(path) : null;
 
+  const [colapsadas, setColapsadas] = useState<Set<string>>(leerColapso);
+  const toggle = useCallback((k: string) => {
+    setColapsadas((prev) => {
+      const n = new Set(prev);
+      if (n.has(k)) n.delete(k); else n.add(k);
+      escribirColapso(n);
+      return n;
+    });
+  }, []);
+
   const aqui = path ? presentesEn(path) : [];
   const due = path ? s.owners[path] : undefined;
   const esMio = !!(s.yo && due === s.yo.client_id);
   const impLo = path ? impactosQueAfectan(path) : [];
   const impDesde = path
     ? Object.values(s.impacts).filter((i) => i.source_path === path) : [];
+  // Capa 28: propuestas DEL archivo abierto. Las que están dirigidas a mí
+  // (porque soy dueño) traen diff + aprobar/rechazar acá mismo; antes
+  // vivían en una bandeja arriba del editor que invadía. Las que YO
+  // propuse y están abiertas (otro me revisa) se muestran como estado.
   const props = path ? propuestasDe(path) : [];
+  const propsParaMi = props.filter((p) => esMio);
   const riesgo = severidadMax(impLo);
   const otrosEquipo = Object.values(s.peers).filter(
     (p) => !s.yo || p.client_id !== s.yo.client_id,
   );
+  // Todas las propuestas a la espera de mi review (de cualquier archivo)
+  // — nota global en el header de la sección, no diff.
   const propsMios = Object.values(s.proposals).filter(
     (p) => s.yo && s.owners[p.path] === s.yo.client_id,
   );
+  // El badge de "cambios propuestos" prioriza lo accionable: lo que espera
+  // MI review. Si no hay nada para mí en este archivo, cae al total de
+  // propuestas del archivo (incluye las mías en revisión).
+  const nProps = propsParaMi.length || props.length;
 
   return (
     <aside
@@ -116,7 +171,10 @@ export function Inspector({
       )}
 
       <div className="in-scroll">
-        <Sec ic={<Radio size={13} />} tit={t.ins_presence_title} n={aqui.length}>
+        <Sec
+          k="pres" ic={<Radio size={13} />} tit={t.ins_presence_title}
+          n={aqui.length} colapsadas={colapsadas} toggle={toggle}
+        >
           {aqui.length === 0 ? (
             <p className="in-empty">{t.ins_nobody(otrosEquipo.length)}</p>
           ) : (
@@ -130,7 +188,10 @@ export function Inspector({
           )}
         </Sec>
 
-        <Sec ic={<KeyRound size={13} />} tit={t.ins_ownership_title}>
+        <Sec
+          k="own" ic={<KeyRound size={13} />} tit={t.ins_ownership_title}
+          colapsadas={colapsadas} toggle={toggle}
+        >
           {!path ? (
             <p className="in-empty">—</p>
           ) : !due ? (
@@ -154,8 +215,9 @@ export function Inspector({
         </Sec>
 
         <Sec
-          ic={<Waypoints size={13} />} tit={t.ins_impact_title}
+          k="imp" ic={<Waypoints size={13} />} tit={t.ins_impact_title}
           n={impLo.length} tono={riesgo === "alta" ? "alarma" : undefined}
+          colapsadas={colapsadas} toggle={toggle}
         >
           {impLo.length === 0 && impDesde.length === 0 ? (
             <p className="in-empty">{t.ins_no_impact}</p>
@@ -170,8 +232,8 @@ export function Inspector({
         </Sec>
 
         <Sec
-          ic={<GitPullRequest size={13} />} tit={t.ins_proposals_title}
-          n={props.length}
+          k="prop" ic={<GitPullRequest size={13} />} tit={t.ins_proposals_title}
+          n={nProps} colapsadas={colapsadas} toggle={toggle}
         >
           {props.length === 0 ? (
             <p className="in-empty">
@@ -179,20 +241,57 @@ export function Inspector({
               {propsMios.length > 0 && t.ins_waiting_others(propsMios.length)}
             </p>
           ) : (
-            props.map((p) => (
-              <div className="inrow col" key={p.id}>
-                <span className="inrow-n">
-                  <b>{p.author_name}</b> {t.ins_proposes}
-                </span>
-                <span className="inrow-m">
-                  {esMio ? t.ins_waiting : t.ins_in_review}
-                </span>
-              </div>
-            ))
+            props.map((p) => {
+              // Capa 28: si es para mí (soy dueño), mostramos el diff y los
+              // botones acá mismo: aceptar/rechazar el dueño. Si la propuse
+              // yo, solo el estado "en revisión".
+              if (esMio) {
+                const filas = diffLineas(s.files[p.path] ?? "", p.content);
+                return (
+                  <div className="inprop" key={p.id}>
+                    <div className="inprop-h">
+                      <span className="inprop-q">
+                        <b>{p.author_name}</b> {t.ins_proposes}
+                      </span>
+                      <span className="inprop-a">
+                        <button
+                          className="ok"
+                          onClick={() => resolver(p.id, true)}
+                        >
+                          {t.tr_approve}
+                        </button>
+                        <button
+                          className="no"
+                          onClick={() => resolver(p.id, false)}
+                        >
+                          {t.tr_reject}
+                        </button>
+                      </span>
+                    </div>
+                    <div className="diff">
+                      {filas.map((f, i) => (
+                        <div key={i} className={f.t}>{f.x || " "}</div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="inrow col" key={p.id}>
+                  <span className="inrow-n">
+                    <b>{p.author_name}</b> {t.ins_proposes}
+                  </span>
+                  <span className="inrow-m">{t.ins_in_review}</span>
+                </div>
+              );
+            })
           )}
         </Sec>
 
-        <Sec ic={<Activity size={13} />} tit={t.ins_activity_title} n={s.actividad.length}>
+        <Sec
+          k="act" ic={<Activity size={13} />} tit={t.ins_activity_title}
+          n={s.actividad.length} colapsadas={colapsadas} toggle={toggle}
+        >
           {s.actividad.length === 0 ? (
             <p className="in-empty">{t.ins_no_activity}</p>
           ) : (
