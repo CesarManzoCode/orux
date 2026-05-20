@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, KeyRound } from "lucide-react";
+import { FolderOpen, KeyRound, ChevronRight } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   seleccionar, borrar,
@@ -12,6 +12,23 @@ import { useI18n } from "../i18n";
 function Chip({ path }: { path: string }) {
   const c = chipDe(path);
   return <span className={"chip" + (c.cls ? " " + c.cls : "")}>{c.txt}</span>;
+}
+
+// Guías verticales tipo tree: una columna `.tg` (14px) por nivel de
+// profundidad. Cada columna pinta un hairline vertical centrado, así el
+// ojo conecta archivos con su carpeta sin tener que contar sangría — el
+// mismo patrón que usa VSCode / JetBrains / Sublime. depth=0 no pinta
+// nada (raíz del workspace). aria-hidden porque la jerarquía ya está en
+// el DOM (ul anidado conceptualmente); las guías son sólo señal visual.
+function Guides({ depth }: { depth: number }) {
+  if (depth === 0) return null;
+  return (
+    <>
+      {Array.from({ length: depth }, (_, i) => (
+        <span className="tg" key={i} aria-hidden />
+      ))}
+    </>
+  );
 }
 
 export function FileTree() {
@@ -51,13 +68,22 @@ export function FileTree() {
   const pintar = (nodo: Nodo, ruta: string, depth: number) => {
     for (const nombre of Object.keys(nodo.dirs).sort()) {
       const rd = ruta ? ruta + "/" + nombre : nombre;
+      // "cerrada" se controla por toggle explícito O por revelación
+      // automática del archivo activo (si el current está debajo de
+      // este dir, se considera abierto sin tocar el set). Mismo
+      // comportamiento que antes, sólo cambia el rendering.
       const cerrada = abiertas.has(rd) ? false
         : !(s.currentPath && s.currentPath.startsWith(rd + "/"));
       filas.push(
-        <li key={"d:" + rd} className="row dir"
-            style={{ paddingLeft: depth * 14 + 8 }}
+        <li key={"d:" + rd}
+            className={"row dir" + (cerrada ? "" : " abierta")}
             onClick={() => toggle(rd)}>
-          <span className="twist">{cerrada ? "▸" : "▾"}</span>
+          <span className="row-indent">
+            <Guides depth={depth} />
+            <span className="twist" aria-hidden>
+              <ChevronRight size={12} strokeWidth={2.2} />
+            </span>
+          </span>
           <span className="name">{nombre}</span>
           <span className="sig">
             {hayRiesgoBajo(rd) && (
@@ -81,8 +107,14 @@ export function FileTree() {
       filas.push(
         <li key={"f:" + f.path}
             className={"row file" + (f.path === s.currentPath ? " activo" : "")}
-            style={{ paddingLeft: depth * 14 + 22 }}
             onClick={() => seleccionar(f.path)}>
+          <span className="row-indent">
+            <Guides depth={depth} />
+            {/* twist-pad: mismo ancho que el chevron de las carpetas, así
+                los archivos quedan alineados visualmente con el contenido
+                de su carpeta padre — no con el chevron. */}
+            <span className="twist-pad" aria-hidden />
+          </span>
           <Chip path={f.path} />
           <span className="name">{f.nombre}</span>
           <span className="sig">

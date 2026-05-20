@@ -7,6 +7,7 @@
 import { useEffect } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useI18n } from "../i18n";
+import { ModalPortal } from "./ModalPortal";
 
 export function ConfirmarSalida({
   drafts,
@@ -27,6 +28,7 @@ export function ConfirmarSalida({
   }, [onCancelar]);
 
   return (
+    <ModalPortal>
     <div
       className="modalbg"
       role="dialog"
@@ -60,5 +62,6 @@ export function ConfirmarSalida({
         </footer>
       </div>
     </div>
+    </ModalPortal>
   );
 }

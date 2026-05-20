@@ -9,6 +9,7 @@ import { useStore } from "../useStore";
 import { nuevoArchivo } from "../store";
 import { validarPath } from "../validate";
 import { useI18n } from "../i18n";
+import { ModalPortal } from "./ModalPortal";
 
 type ErrKey = "exists" | ReturnType<typeof validarPath>;
 
@@ -74,6 +75,7 @@ export function NuevoArchivoModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
+    <ModalPortal>
     <div
       className="modalbg"
       role="dialog"
@@ -129,5 +131,6 @@ export function NuevoArchivoModal({ onClose }: { onClose: () => void }) {
         </footer>
       </div>
     </div>
+    </ModalPortal>
   );
 }

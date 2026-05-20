@@ -4,6 +4,7 @@ import { useStore } from "../useStore";
 import { adminAsignarVarios, nombreDe } from "../store";
 import { arbol, archivosDe, chipDe, type Nodo } from "../lang";
 import { useI18n } from "../i18n";
+import { ModalPortal } from "./ModalPortal";
 
 export function AdminModal({ onClose }: { onClose: () => void }) {
   const s = useStore();
@@ -94,6 +95,7 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
 
   const n = sel.size;
   return (
+    <ModalPortal>
     <div className="ammodal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="amcard">
         <div className="amhead">
@@ -135,5 +137,6 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

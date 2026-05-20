@@ -9,6 +9,7 @@ import { Copy, Check, RefreshCw, X } from "lucide-react";
 import { crearInvite } from "../store";
 import { copiarTexto } from "../validate";
 import { useI18n } from "../i18n";
+import { ModalPortal } from "./ModalPortal";
 
 export function InviteModal({
   code,
@@ -56,6 +57,7 @@ export function InviteModal({
   };
 
   return (
+    <ModalPortal>
     <div
       className="modalbg"
       role="dialog"
@@ -123,5 +125,6 @@ export function InviteModal({
         </footer>
       </div>
     </div>
+    </ModalPortal>
   );
 }
