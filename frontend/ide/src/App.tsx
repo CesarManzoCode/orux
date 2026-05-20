@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./useStore";
-import { getState, guardar } from "./store";
+import { getState, guardar, contarDrafts } from "./store";
 import { Login } from "./components/Login";
 import { Lobby } from "./components/Lobby";
 import { TopBar } from "./components/TopBar";
@@ -88,6 +88,29 @@ export function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Pulido pre-mercado: warning al cerrar pestaña / recargar / navegar si
+  // hay drafts (propuestas locales sin enviar al server). Sin esto, capa 28
+  // perdía silenciosamente todo lo escrito en archivos ajenos. El mensaje
+  // de `returnValue` es opcional — los navegadores modernos muestran el
+  // suyo por seguridad ("¿salir del sitio?"), pero seteándolo nos
+  // aseguramos que beforeunload haga el prompt.
+  //
+  // No incluimos `dirty` "solo del dueño" (sin draft): ese contenido YA
+  // viajó al server, lo único pendiente es Ctrl+S para análisis. Perder
+  // el dot no es pérdida de trabajo. Solo gateamos cuando hay drafts.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (contarDrafts() === 0) return;
+      // El standard moderno: preventDefault + setear returnValue. Mensajes
+      // custom ya no se muestran (los navegadores los reemplazaron por
+      // genéricos por seguridad), pero el prompt aparece.
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   // La app está cerrada por dos compuertas: sin autenticar -> login;

@@ -115,3 +115,43 @@ def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
     assert s.existe("quien") is False
     s.registrar("nuevo", "x")  # y sigue usable
     assert s.verificar("nuevo", "x")
+
+
+# Sprint de pulido pre-mercado: reglas de usuario al CREAR cuenta. No afecta
+# a usuarios viejos (login/sesión/existe siguen plano).
+
+
+@pytest.mark.parametrize(
+    "malo",
+    [
+        "",                          # vacío
+        " ",                         # solo espacios
+        "a",                         # muy corto
+        "a" * 33,                    # muy largo
+        ".ana",                      # arranca con puntuación
+        "_ana",
+        "-ana",
+        "ana bonita",                # espacios internos
+        "ana<script>",               # HTML
+        "ana/beto",                  # path traversal-ish
+        "ana\\beto",                 # backslash
+        "ana\nbeto",                 # control char
+        "anɐ",                       # unicode no-ASCII
+        "GH:foo",                    # prefijo reservado (case-insensitive vía normalizar)
+        "gh:bar",
+    ],
+)
+def test_registrar_rechaza_usuario_invalido(tmp_path, malo):
+    s = UserStore(tmp_path / "users.json")
+    with pytest.raises(ValueError):
+        s.registrar(malo, "clave")
+
+
+def test_registrar_acepta_usuario_normal(tmp_path) -> None:
+    # Charset razonable y rango razonable.
+    s = UserStore(tmp_path / "users.json")
+    assert s.registrar("ana", "x") == "ana"
+    assert s.registrar("Ana.Lopez", "x") == "ana.lopez"  # normalizada
+    assert s.registrar("dev_2", "x") == "dev_2"
+    assert s.registrar("a-b-c", "x") == "a-b-c"
+    assert s.registrar("Joaquin99", "x") == "joaquin99"

@@ -405,6 +405,56 @@ export function salir() {
   localStorage.removeItem("orux_user");
   location.reload();
 }
+// Capa 28+: volver al hub SIN cerrar la sesión. El servidor no expone aún un
+// "leave_team" explícito, pero un re-handshake con el token de sesión y SIN
+// `select_team` cae directamente en el lobby (es el flujo que ya hace el
+// auto-login al abrir el IDE). Para no inventar protocolo, cerramos el WS,
+// limpiamos el estado del equipo en el cliente y dejamos que la nueva
+// conexión nos vuelva a poner en el lobby. Resultado: el usuario ve "tus
+// equipos" sin perder identidad, sin reload entero.
+export function salirEquipo() {
+  // 1) Suelta el WS viejo (su onclose ya marca conn=desconectado). El
+  //    server libera la presencia del equipo y los demás verán "se fue".
+  try { ws?.close(); } catch { /* ya cerrado, da igual */ }
+  ws = null;
+  lastPresence = { path: "", line: 0 };
+  // 2) Limpia el estado VOLÁTIL del equipo: archivos, owners, presencia,
+  //    propuestas, impactos, drafts y la bitácora. La sesión, los equipos
+  //    listados y `yo` se mantienen — son del usuario, no del equipo.
+  set({
+    fase: "lobby",
+    files: {}, owners: {}, peers: {}, proposals: {}, impacts: {},
+    dirty: {}, drafts: {}, currentPath: null, inviteCode: "",
+    git: null, gitResult: null, esAdmin: false, usuarios: [],
+    equipo: null, equipoError: "",
+    actividad: [], caret: { line: 1, col: 1 },
+  });
+  // 3) Reconecta. El server verá el SessionMessage del localStorage y nos
+  //    devolverá `lobby` con la lista de equipos del usuario (capa 15).
+  connect();
+}
+// Capa 28+: descartar el draft de un archivo. Útil para "me arrepentí de
+// proponer este cambio" — la verdad del server vuelve a verse en el editor.
+// No manda nada al server (el draft NUNCA viajó). Limpia `dirty` también
+// porque el dot ● solo tiene sentido si hay cambios locales que se podrían
+// enviar.
+export function descartarDraft(path: string) {
+  const drafts = { ...state.drafts };
+  const dirty = { ...state.dirty };
+  delete drafts[path];
+  delete dirty[path];
+  set({ drafts, dirty });
+}
+// Capa 28+: cuántos drafts / archivos sin marcar tengo (para statusbar y
+// para el guard al salir). Son derivaciones puras: dirty puede incluir
+// archivos que ya tienen su contenido en el server (dueño con cambios
+// pre-Ctrl+S); drafts solo cuenta los que aún no salieron de mi máquina.
+export function contarDrafts(): number {
+  return Object.keys(state.drafts).length;
+}
+export function contarDirty(): number {
+  return Object.values(state.dirty).filter(Boolean).length;
+}
 // --- Capa 15: gate de equipo ---
 export function crearEquipo(nombre: string) {
   send({ type: "create_team", nombre });

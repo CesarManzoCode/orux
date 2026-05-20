@@ -4,22 +4,29 @@ import {
   GitBranch, DownloadCloud, UploadCloud,
 } from "lucide-react";
 import { useStore } from "../useStore";
-import { nuevoArchivo, commitear, gitRefresh, clonar, pushear } from "../store";
+import { commitear, gitRefresh, clonar, pushear } from "../store";
 import { useI18n } from "../i18n";
 import { FileTree } from "./FileTree";
+import { NuevoArchivoModal } from "./NuevoArchivoModal";
 
 function PanelArchivos() {
   const { t } = useI18n();
+  // Antes era un `prompt()` nativo. Ahora un modal propio que valida con
+  // las mismas reglas que el backend (validate.ts ↔ paths.py) y muestra
+  // mensajes claros en vez de "el server rebota silencioso".
+  const [abierto, setAbierto] = useState(false);
   return (
     <>
       <div className="h2">{t.sb_explorer}</div>
-      <button className="btn-nuevo" onClick={() => {
-        const n = prompt(t.sb_new_file_prompt);
-        if (n && n.trim()) nuevoArchivo(n.trim());
-      }}>
+      <button
+        className="btn-nuevo"
+        onClick={() => setAbierto(true)}
+        aria-label={t.sb_new_file}
+      >
         <FilePlus2 size={15} /> {t.sb_new_file}
       </button>
       <FileTree />
+      {abierto && <NuevoArchivoModal onClose={() => setAbierto(false)} />}
     </>
   );
 }

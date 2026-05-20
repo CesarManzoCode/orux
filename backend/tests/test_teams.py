@@ -27,6 +27,45 @@ async def test_nombre_vacio_falla() -> None:
         await s.crear_equipo("   ", "ana")
 
 
+@pytest.mark.parametrize(
+    "malo",
+    [
+        None,                              # tipo inválido
+        "",                                # vacío puro
+        "  ",                              # solo espacios
+        "a" * 41,                          # exceso (>40)
+        "Equipo <script>alert(1)</script>", # HTML/XSS dressed
+        "Equipo>algo",                     # otros HTML chars
+        "Equipo\x00malo",                  # NUL
+        "Equipo\nlinea",                   # control char
+        "Equipo\x7fDEL",                   # DEL
+        "Equipo‮con-rtl",             # bidi RTL override (suplantación)
+        "Equipo​zwsp",                # zero-width space
+    ],
+)
+async def test_crear_equipo_rechaza_nombre_invalido(malo):
+    s = MemTeamStore()
+    with pytest.raises(TeamError):
+        await s.crear_equipo(malo, "ana")
+
+
+async def test_crear_equipo_normaliza_espacios() -> None:
+    """Trim al borde + colapso de runs internos: tres equipos con espacios
+    distintos en el medio NO son equipos distintos."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("   Mi  Equipo   ", "ana")
+    assert t["nombre"] == "Mi Equipo"
+
+
+async def test_crear_equipo_acepta_unicode_y_puntuacion() -> None:
+    # Acentos, emoji y puntuación normal son válidos: queremos "Equipo de
+    # Ana", "Founders' Workspace", "ML/CV" etc.
+    s = MemTeamStore()
+    assert (await s.crear_equipo("Equipo de Ana", "ana"))["nombre"] == "Equipo de Ana"
+    assert (await s.crear_equipo("Founders' WS", "beto"))["nombre"] == "Founders' WS"
+    assert (await s.crear_equipo("ML/CV", "caro"))["nombre"] == "ML/CV"
+
+
 async def test_sin_equipo_no_ve_nada() -> None:
     s = MemTeamStore()
     assert await s.equipos_de("nadie") == []

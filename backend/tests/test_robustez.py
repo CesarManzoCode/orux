@@ -50,6 +50,22 @@ from orux.state import DiskStorage, path_seguro
         "..",
         None,               # ni siquiera un str
         123,
+        # Sprint de pulido pre-mercado: caracteres ruidosos que el path_seguro
+        # viejo dejaba pasar y aparecían como archivos absurdos en el árbol.
+        "archivo<script>.py",     # HTML/inyección visual
+        "a>b.py", "a|b.py", "a?b.py", "a*b.py", 'a"b.py',
+        "linea\x7frota.py",       # DEL (chequeo era < 0x20, pasaba)
+        "a​b.py",            # zero-width space
+        "auth‮py.txt",       # bidi RTL override (suplantación)
+        "x﻿.py",             # BOM dentro del path
+        " a.py", "a.py ",         # espacios al borde de segmento
+        "src/ a.py", "src/a.py ", # idem dentro de subcarpeta
+        "a" * 81 + ".py",         # segmento muy largo
+        "x/" * 17 + "y.py",       # profundidad excesiva
+        "a" * 201,                # path total muy largo (era 1024)
+        "CON.txt", "prn.py", "AUX.go", "Nul.tsx",  # reservados Windows
+        "src/com1.py",            # reservado en subcarpeta
+        "C:/Users",               # absoluto Windows sin barra inversa
     ],
 )
 def test_path_seguro_rechaza_lo_peligroso(malo):
@@ -59,7 +75,11 @@ def test_path_seguro_rechaza_lo_peligroso(malo):
 @pytest.mark.parametrize(
     "bueno",
     ["a.py", "src/auth.py", "a/b/c/d.ts", "Carpeta Con Espacios/x.go",
-     "._oculto_pero_valido.py", "a..b.py"],
+     "._oculto_pero_valido.py", "a..b.py",
+     # Acentos y emoji en nombre de carpeta — son válidos (queremos
+     # "café/main.py" del dev hispanohablante; el filesystem y git lo
+     # soportan limpio si todos están en NFC).
+     "café/main.py", "música/x.go"],
 )
 def test_path_seguro_acepta_paths_normales(bueno):
     assert path_seguro(bueno) is True
@@ -206,11 +226,11 @@ async def test_lock_de_estado_no_deadlockea_ni_pierde_convergencia(srv):
     hasta el timeout)."""
     s, port, _ = srv
     async with connect(f"ws://localhost:{port}") as a:
-        await _entrar(a, user="a")
+        await _entrar(a, user="ana")
         # 2º cliente: se une por invitación del admin (a).
         async with connect(f"ws://localhost:{port}") as b:
             await b.send(json.dumps(
-                {"type": "register", "username": "b", "password": "pw"}))
+                {"type": "register", "username": "bb", "password": "pw"}))
             assert json.loads(await b.recv())["type"] == "auth_ok"
             assert json.loads(await b.recv())["type"] == "lobby"
             await a.send(json.dumps({"type": "create_invite"}))
@@ -241,7 +261,7 @@ async def test_lock_de_estado_no_deadlockea_ni_pierde_convergencia(srv):
     own = rt.ownership.snapshot()
     # El claim del creador ya NO corre tras un await sin protección:
     # ambos archivos quedan con dueño (la ventana A2 está cerrada).
-    assert own.get("f1.py") == "a" and own.get("f2.py") == "b"
+    assert own.get("f1.py") == "ana" and own.get("f2.py") == "bb"
 
 
 async def test_auth_backoff_no_rompe_el_login_correcto(srv):

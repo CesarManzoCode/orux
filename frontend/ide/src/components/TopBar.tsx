@@ -1,7 +1,12 @@
-import { GitBranch, UserPlus, PanelRight, PanelRightClose } from "lucide-react";
+import { useState } from "react";
+import {
+  GitBranch, UserPlus, PanelRight, PanelRightClose, Home,
+} from "lucide-react";
 import { useStore } from "../useStore";
-import { salir, crearInvite } from "../store";
+import { salir, salirEquipo, crearInvite, contarDrafts } from "../store";
 import { useI18n, LangToggle } from "../i18n";
+import { InviteModal } from "./InviteModal";
+import { ConfirmarSalida } from "./ConfirmarSalida";
 
 function iniciales(n: string): string {
   const p = n.replace(/@.*/, "").split(/[.\s_-]+/).filter(Boolean);
@@ -34,6 +39,28 @@ export function TopBar({
 }) {
   const s = useStore();
   const { t } = useI18n();
+  // Modal de invitación: abierto sólo cuando el admin lo pide. Antes el
+  // código colgaba pelado del topbar, lo que no era ni claro ni
+  // profesional. Si todavía no tenemos código (admin entra primero), el
+  // botón lo pide al server primero y luego abre el modal al recibirlo.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  // Confirmación al volver al hub con drafts pendientes: el dev podría
+  // tener varios archivos con propuestas locales (capa 28). `salirEquipo`
+  // limpia el estado del equipo, así que sin este guard perdería todo.
+  const [salidaPending, setSalidaPending] = useState<number | null>(null);
+
+  function intentarSalir() {
+    const n = contarDrafts();
+    if (n > 0) {
+      setSalidaPending(n);   // muestra modal
+      return;
+    }
+    salirEquipo();           // sin drafts: vuelve al hub directo
+  }
+  function confirmarSalir() {
+    setSalidaPending(null);
+    salirEquipo();
+  }
 
   const ETIQUETA: Record<string, string> = {
     conectando: t.tb_connecting,
@@ -53,6 +80,14 @@ export function TopBar({
   const extra = otros.length - visibles.length;
   const g = s.git;
 
+  function abrirInvite() {
+    // Si no hay código aún, lo pide. El modal se abre con el código vacío
+    // y se actualiza al recibir el `invite_created` (UX de un solo paso:
+    // se ve "—" un instante y luego el código real).
+    if (!s.inviteCode) crearInvite();
+    setInviteOpen(true);
+  }
+
   return (
     <header className="topbar isla">
       <div className="tb-grp">
@@ -60,6 +95,18 @@ export function TopBar({
         <span className="brand"><b>Orux</b></span>
         <span className="chev">›</span>
         <span className="proy">{s.equipo ? s.equipo.nombre : s.proyecto}</span>
+        {/* Volver al hub: presente solo cuando estamos dentro de un equipo
+            y hay más de uno (caso típico: cambiar de equipo). Si solo hay
+            uno, no aporta — el dev solo entra y sale del IDE. */}
+        {s.equipo && s.equipos.length > 1 && (
+          <button
+            className="tb-hub"
+            onClick={intentarSalir}
+            title={t.tb_hub_title}
+          >
+            <Home size={12} /> {t.tb_hub}
+          </button>
+        )}
       </div>
 
       {visibles.length > 0 && (
@@ -97,16 +144,19 @@ export function TopBar({
       )}
 
       <div className="tb-grp">
+        {/* Botón "invitar" abre el modal SIEMPRE — el código pelado fue
+            reemplazado. Si ya hay código emitido, el modal lo muestra; si
+            no, lo pide al server y luego lo muestra. El admin siempre
+            puede volver a abrirlo (antes el botón desaparecía tras el
+            primer click, sin forma de regenerarlo sin salir del equipo). */}
         {s.equipo?.rol === "admin" && (
-          s.inviteCode ? (
-            <span className="yo" title={t.tb_invite_title}>
-              {t.tb_invite} <code>{s.inviteCode}</code>
-            </span>
-          ) : (
-            <button className="invitar" onClick={crearInvite}>
-              <UserPlus size={12} /> {t.tb_invite}
-            </button>
-          )
+          <button
+            className="invitar"
+            onClick={abrirInvite}
+            title={t.tb_invite_title}
+          >
+            <UserPlus size={12} /> {t.tb_invite}
+          </button>
         )}
         <span className={clase}>{ETIQUETA[s.conn] ?? ETIQUETA.conectando}</span>
       </div>
@@ -135,11 +185,27 @@ export function TopBar({
         <button
           className={"tb-insp" + (inspOpen ? " activo" : "")}
           title={inspOpen ? t.tb_inspector_hide : t.tb_inspector_show}
+          aria-label={inspOpen ? t.tb_inspector_hide : t.tb_inspector_show}
+          aria-pressed={inspOpen}
           onClick={toggleInsp}
         >
           {inspOpen ? <PanelRightClose size={14} /> : <PanelRight size={14} />}
         </button>
       </div>
+
+      {inviteOpen && (
+        <InviteModal
+          code={s.inviteCode}
+          onClose={() => setInviteOpen(false)}
+        />
+      )}
+      {salidaPending != null && (
+        <ConfirmarSalida
+          drafts={salidaPending}
+          onContinuar={confirmarSalir}
+          onCancelar={() => setSalidaPending(null)}
+        />
+      )}
     </header>
   );
 }

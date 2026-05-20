@@ -29,6 +29,48 @@ def normalizar(username: str) -> str:
     return username.strip().lower()
 
 
+# Reglas del usuario nuevo (sólo se aplican al CREAR cuenta; las cuentas
+# viejas siguen existiendo aunque no cumplan — no rompemos a nadie). Charset
+# ASCII estricto y prefijo reservado para OAuth: `gh:` es para identidades
+# que vienen de GitHub (capa OAuth), no se puede registrar uno a mano con
+# ese prefijo o un atacante secuestra al usuario `foo` registrándose como
+# `gh:foo` antes de que entre por GitHub.
+_USUARIO_MIN = 2
+_USUARIO_MAX = 32
+_USUARIO_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789._-+@")
+_USUARIO_PREFIJOS_RESERVADOS = ("gh:",)
+
+
+def validar_nuevo_usuario(username: str) -> str:
+    """Normaliza y valida un usuario PARA REGISTRO (no para login). Devuelve
+    la forma canónica. Lanza `ValueError` con mensaje legible si no pasa.
+
+    Sólo se aplica en `registrar`: las sesiones de usuarios viejos siguen
+    funcionando aunque su nombre tenga caracteres que ya no aceptaríamos
+    (migración sin romper a nadie).
+    """
+    if not isinstance(username, str):
+        raise ValueError("usuario inválido")
+    u = normalizar(username)
+    if not u:
+        raise ValueError("usuario inválido")
+    if len(u) < _USUARIO_MIN:
+        raise ValueError(f"el usuario es muy corto (mínimo {_USUARIO_MIN})")
+    if len(u) > _USUARIO_MAX:
+        raise ValueError(f"el usuario es muy largo (máximo {_USUARIO_MAX})")
+    if u[0] in ".-_":
+        raise ValueError("el usuario debe empezar con letra o número")
+    for c in u:
+        if c not in _USUARIO_CHARS:
+            raise ValueError("usa solo letras, números, '.', '_' o '-'")
+    for pre in _USUARIO_PREFIJOS_RESERVADOS:
+        if u.startswith(pre):
+            raise ValueError(
+                f"el prefijo '{pre}' está reservado — elige otro nombre"
+            )
+    return u
+
+
 class UserStore:
     def __init__(self, path: Path | str | None = None) -> None:
         # None = en memoria (tests), igual que DiskStorage/Ownership. Con ruta,
@@ -66,13 +108,16 @@ class UserStore:
     def registrar(self, username: str, password: str) -> str:
         """Crea un usuario. Devuelve su forma canónica. Persiste.
 
-        Levanta `ValueError` si el usuario está vacío o ya existe: el llamador
+        Levanta `ValueError` si el usuario está vacío, viola las reglas de
+        formato (charset/longitud/prefijo reservado) o ya existe: el llamador
         (server) traduce eso a un error de registro para el cliente, no a una
         caída.
         """
-        u = normalizar(username)
-        if not u:
-            raise ValueError("usuario inválido")
+        # `validar_nuevo_usuario` aplica las reglas DURAS al registrar (sólo
+        # ASCII alfanumérico + `._-`, 2-32 chars, prefijos OAuth reservados).
+        # Cuentas antiguas siguen funcionando vía `verificar` / `existe` con
+        # `normalizar` plano — esto solo gatea la creación de NUEVAS cuentas.
+        u = validar_nuevo_usuario(username)
         if u in self._usuarios:
             raise ValueError("ese usuario ya existe")
         self._usuarios[u] = hash_password(password)  # valida password vacía

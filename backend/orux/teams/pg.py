@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from ..identity.store import normalizar
 from ..plans import PLAN_DEFECTO, limites, permite_miembro
-from .store import TeamError, _codigo, _id_equipo
+from .store import TeamError, _codigo, _id_equipo, validar_nombre_equipo
 
 
 class PgTeamStore:
@@ -17,9 +17,9 @@ class PgTeamStore:
         self._db = db  # orux.db.Database
 
     async def crear_equipo(self, nombre: str, creador: str) -> dict:
-        nombre = (nombre or "").strip()
-        if not nombre:
-            raise TeamError("el nombre del equipo no puede estar vacío")
+        # Misma validación que MemTeamStore (un único validador): trim,
+        # colapsa espacios, rechaza control/invisibles/HTML/excesivos.
+        nombre = validar_nombre_equipo(nombre)
         creador = normalizar(creador)
         async with self._db.tx() as con:
             tid = _id_equipo()

@@ -28,6 +28,59 @@ class TeamError(ValueError):
     lo traduce a un mensaje para el cliente, no a una caída."""
 
 
+# Nombre de equipo: límites del que la UX se queda dentro de un chrome IDE
+# (no es un editor de texto). 40 chars caben en TopBar/Hub sin truncar; cero
+# HTML/control chars/invisibles porque viajan por logs/JSON/Postgres/UI a
+# todo el equipo. La regla es deliberadamente conservadora: ante la duda,
+# inválido. El admin que quiso poner "Equipo `<script>`" recibe un error
+# claro y prueba con "Equipo de Ana" — no es restricción que duela.
+_NOMBRE_MIN = 1
+_NOMBRE_MAX = 40
+# Mismos invisibles que `paths.py`: zero-width y bidi-override sirven para
+# que dos equipos "se vean iguales" cuando no lo son (suplantación visual).
+_NOMBRE_INVISIBLES = {
+    "​", "‌", "‍", "‎", "‏",
+    "‪", "‫", "‬", "‭", "‮",
+    "⁦", "⁧", "⁨", "⁩", "﻿",
+}
+# Caracteres prohibidos: los que rompen al pintarlos como texto en logs/UI
+# (`<`, `>`) o que delatan a alguien jugando con HTML/JSON. NO baneamos
+# acentos, espacios internos ni puntuación normal: queremos "Equipo de
+# Ana 2", "Founders' Workspace", "ML/CV" etc.
+_NOMBRE_PROHIBIDOS = set("<>")
+
+
+def validar_nombre_equipo(nombre: str) -> str:
+    """Normaliza y valida un nombre de equipo. Devuelve la forma canónica
+    (trim + run de espacios interno colapsado). Lanza `TeamError` con un
+    mensaje legible si no pasa. Es PURA: no toca disco ni red — la usan
+    tanto el store en memoria como el adaptador Postgres."""
+    if not isinstance(nombre, str):
+        raise TeamError("nombre de equipo inválido")
+    n = nombre.strip()
+    # Colapsa runs de espacios internos: "  A   B  " -> "A B". Espacios
+    # contiguos son fuente típica de "dos equipos con el mismo nombre" donde
+    # uno tiene un espacio doble invisible.
+    if "  " in n:
+        partes = [p for p in n.split(" ") if p]
+        n = " ".join(partes)
+    if len(n) < _NOMBRE_MIN:
+        raise TeamError("el nombre del equipo no puede estar vacío")
+    if len(n) > _NOMBRE_MAX:
+        raise TeamError(
+            f"el nombre del equipo es muy largo (máximo {_NOMBRE_MAX} caracteres)"
+        )
+    for c in n:
+        co = ord(c)
+        if co < 0x20 or co == 0x7F:
+            raise TeamError("el nombre del equipo tiene caracteres de control")
+        if c in _NOMBRE_INVISIBLES:
+            raise TeamError("el nombre del equipo tiene caracteres invisibles")
+        if c in _NOMBRE_PROHIBIDOS:
+            raise TeamError("usa solo letras, números y puntuación normal")
+    return n
+
+
 def _id_equipo() -> str:
     # Id corto y estable, independiente del nombre (el nombre puede repetir
     # o cambiar; el id no). 8 hex = colisión despreciable a esta escala.
@@ -50,9 +103,10 @@ class MemTeamStore:
 
     async def crear_equipo(self, nombre: str, creador: str) -> dict:
         """Crea un equipo; `creador` queda como admin. Devuelve {id, nombre}."""
-        nombre = (nombre or "").strip()
-        if not nombre:
-            raise TeamError("el nombre del equipo no puede estar vacío")
+        # `validar_nombre_equipo` normaliza (trim + colapsa espacios) y rechaza
+        # control/invisibles/HTML/excesivos. El error que levanta YA tiene
+        # mensaje legible para el cliente — no traducimos.
+        nombre = validar_nombre_equipo(nombre)
         creador = normalizar(creador)
         tid = _id_equipo()
         while tid in self._equipos:  # paranoia: regenerar ante colisión

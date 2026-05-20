@@ -1,12 +1,12 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Radio, KeyRound, Waypoints, GitPullRequest, Activity,
   LogIn, LogOut, GitBranch, Trash2, FolderSync, AlertTriangle,
-  PanelRightClose, ChevronDown,
+  PanelRightClose, ChevronDown, Send, Undo2,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
-  reclamar, seleccionar, resolver, nombreDe,
+  reclamar, seleccionar, resolver, nombreDe, guardar, descartarDraft,
   impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
   type ActItem, type Impact,
 } from "../store";
@@ -116,10 +116,19 @@ export function Inspector({
       return n;
     });
   }, []);
+  // Estado optimista de "reclamando" (UX: el server responde con ownership
+  // en milisegundos pero el feedback visual instantáneo previene
+  // doble-clicks y reasegura al usuario de que su acción se registró). Se
+  // resetea cuando el `owners[path]` realmente cambió a mío, o si pasamos
+  // 3s sin respuesta (paranoia).
+  const [claimingPath, setClaimingPath] = useState<string | null>(null);
 
   const aqui = path ? presentesEn(path) : [];
   const due = path ? s.owners[path] : undefined;
   const esMio = !!(s.yo && due === s.yo.client_id);
+  const esDeOtro = !esMio && !!due;
+  const tieneDraft = !!(path && s.drafts[path] != null);
+  const sinMarcarLocal = !!(path && s.dirty[path]);
   const impLo = path ? impactosQueAfectan(path) : [];
   const impDesde = path
     ? Object.values(s.impacts).filter((i) => i.source_path === path) : [];
@@ -143,6 +152,39 @@ export function Inspector({
   // propuestas del archivo (incluye las mías en revisión).
   const nProps = propsParaMi.length || props.length;
 
+  // Si el ownership real ya muestra que el path es mío, salimos del estado
+  // "reclamando" (era una bandera optimista; el server confirmó). En
+  // useEffect para que React no emita el warning de "setState durante
+  // render" — el guard de igualdad evita re-disparar al infinito.
+  useEffect(() => {
+    if (claimingPath && claimingPath === path && esMio) {
+      setClaimingPath(null);
+    }
+  }, [claimingPath, path, esMio]);
+
+  function reclamarConFeedback() {
+    if (!path) return;
+    setClaimingPath(path);
+    reclamar(path);
+    // Watchdog: si el server no responde en 3s, soltamos el estado
+    // "reclamando" para que el botón vuelva. No reintenta solo (eso es
+    // decisión del usuario).
+    setTimeout(() => {
+      setClaimingPath((p) => (p === path ? null : p));
+    }, 3000);
+  }
+
+  function enviarPropuesta() {
+    if (!path) return;
+    guardar(path);  // capa 28: si soy no-dueño, manda el draft como propuesta
+  }
+
+  function descartar() {
+    if (!path) return;
+    if (!confirm(t.ins_discard_confirm)) return;
+    descartarDraft(path);
+  }
+
   return (
     <aside
       className="inspector isla"
@@ -150,7 +192,12 @@ export function Inspector({
     >
       <header className="in-head">
         <span className="in-eyebrow">{t.ins_title}</span>
-        <button className="in-x" title={t.ins_hide} onClick={onClose}>
+        <button
+          className="in-x"
+          title={t.ins_hide}
+          aria-label={t.ins_hide}
+          onClick={onClose}
+        >
           <PanelRightClose size={15} />
         </button>
       </header>
@@ -161,13 +208,27 @@ export function Inspector({
           <span className="in-file-n" title={path}>
             {path.split("/").pop()}
           </span>
-          {s.dirty[path] && <span className="in-flag warn">{t.ins_unmarked}</span>}
+          {sinMarcarLocal && (
+            <span
+              className="in-flag warn"
+              // Tooltip distinto según el rol: ser honesto sobre QUÉ hará
+              // Ctrl+S (capa 28).
+              title={esDeOtro
+                ? t.ins_unmarked_title_other
+                : t.ins_unmarked_title_owner}
+            >
+              {t.ins_unmarked}
+            </span>
+          )}
           {riesgo && (
             <span className={"in-flag r-" + riesgo}>{t.ins_risk[riesgo]}</span>
           )}
         </div>
       ) : (
-        <div className="in-file off">{t.ins_no_file}</div>
+        <div className="in-file off">
+          <span>{t.ins_no_file}</span>
+          <span className="in-file-sub">{t.ins_no_file_sub}</span>
+        </div>
       )}
 
       <div className="in-scroll">
@@ -176,7 +237,10 @@ export function Inspector({
           n={aqui.length} colapsadas={colapsadas} toggle={toggle}
         >
           {aqui.length === 0 ? (
-            <p className="in-empty">{t.ins_nobody(otrosEquipo.length)}</p>
+            <>
+              <p className="in-empty">{t.ins_nobody(otrosEquipo.length)}</p>
+              <p className="in-explain">{t.ins_presence_explain}</p>
+            </>
           ) : (
             aqui.map((p) => (
               <div className="inrow" key={p.client_id}>
@@ -195,12 +259,20 @@ export function Inspector({
           {!path ? (
             <p className="in-empty">—</p>
           ) : !due ? (
-            <div className="inrow">
-              <span className="in-flag faint">{t.ins_no_owner}</span>
-              <button className="in-act" onClick={() => reclamar(path)}>
-                {t.ins_claim}
-              </button>
-            </div>
+            <>
+              <div className="inrow">
+                <span className="in-flag faint">{t.ins_no_owner}</span>
+                <button
+                  className="in-act"
+                  onClick={reclamarConFeedback}
+                  disabled={claimingPath === path}
+                  aria-busy={claimingPath === path}
+                >
+                  {claimingPath === path ? t.ins_claim_busy : t.ins_claim}
+                </button>
+              </div>
+              <p className="in-explain">{t.ins_no_owner_sub}</p>
+            </>
           ) : esMio ? (
             <div className="inrow">
               <span className="in-flag ok">{t.ins_mine}</span>
@@ -210,6 +282,34 @@ export function Inspector({
             <div className="inrow col">
               <span className="in-flag warn">{t.ins_of(nombreDe(due))}</span>
               <span className="inrow-m">{t.ins_others_sub}</span>
+              {/* CTA de "enviar propuesta": solo si tengo draft local.
+                  Reemplaza el flujo invisible de "Ctrl+S manda el draft"
+                  con un botón visible para los que no recuerdan el
+                  atajo. Es el mismo flujo del store, no un atajo paralelo. */}
+              {tieneDraft && (
+                <>
+                  <p className="in-draft-note">
+                    <span className="in-flag warn-soft">
+                      {t.ins_draft_marker}
+                    </span>
+                  </p>
+                  <div className="in-draft-acc">
+                    <button
+                      className="in-act primario"
+                      onClick={enviarPropuesta}
+                    >
+                      <Send size={11} /> {t.ins_send_proposal}
+                    </button>
+                    <button
+                      className="in-act secundario"
+                      onClick={descartar}
+                      title={t.ins_discard_confirm}
+                    >
+                      <Undo2 size={11} /> {t.ins_discard_draft}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </Sec>
@@ -220,7 +320,10 @@ export function Inspector({
           colapsadas={colapsadas} toggle={toggle}
         >
           {impLo.length === 0 && impDesde.length === 0 ? (
-            <p className="in-empty">{t.ins_no_impact}</p>
+            <>
+              <p className="in-empty">{t.ins_no_impact}</p>
+              <p className="in-explain">{t.ins_impact_explain}</p>
+            </>
           ) : (
             <>
               {impLo.map((im, i) => <ImpactoMini im={im} key={"l" + i} />)}
@@ -236,10 +339,22 @@ export function Inspector({
           n={nProps} colapsadas={colapsadas} toggle={toggle}
         >
           {props.length === 0 ? (
-            <p className="in-empty">
-              {t.ins_no_proposals}
-              {propsMios.length > 0 && t.ins_waiting_others(propsMios.length)}
-            </p>
+            <>
+              <p className="in-empty">
+                {t.ins_no_proposals}
+                {propsMios.length > 0 && t.ins_waiting_others(propsMios.length)}
+              </p>
+              {/* Hint contextual: distinto según el rol y si hay draft. */}
+              {path && (
+                <p className="in-explain">
+                  {tieneDraft
+                    ? t.ins_no_proposals_sub_dirty
+                    : esDeOtro
+                      ? t.ins_no_proposals_sub_owner
+                      : t.ins_no_proposals_sub_plain}
+                </p>
+              )}
+            </>
           ) : (
             props.map((p) => {
               // Capa 28: si es para mí (soy dueño), mostramos el diff y los
@@ -257,12 +372,14 @@ export function Inspector({
                         <button
                           className="ok"
                           onClick={() => resolver(p.id, true)}
+                          aria-label={t.tr_approve}
                         >
                           {t.tr_approve}
                         </button>
                         <button
                           className="no"
                           onClick={() => resolver(p.id, false)}
+                          aria-label={t.tr_reject}
                         >
                           {t.tr_reject}
                         </button>
@@ -293,7 +410,10 @@ export function Inspector({
           n={s.actividad.length} colapsadas={colapsadas} toggle={toggle}
         >
           {s.actividad.length === 0 ? (
-            <p className="in-empty">{t.ins_no_activity}</p>
+            <>
+              <p className="in-empty">{t.ins_no_activity}</p>
+              <p className="in-explain">{t.ins_activity_explain}</p>
+            </>
           ) : (
             <ul className="infeed">
               {s.actividad.slice(0, 40).map((a) => (

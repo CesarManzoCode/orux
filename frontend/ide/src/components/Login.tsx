@@ -85,6 +85,8 @@ export function Login() {
             <input
               id="lg-u" placeholder={t.login_user_placeholder}
               autoComplete="username" autoFocus
+              autoCapitalize="off" autoCorrect="off"
+              spellCheck={false} maxLength={32}
               value={u} disabled={busy}
               onChange={(e) => setU(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
@@ -96,6 +98,7 @@ export function Login() {
               id="lg-p" type="password"
               placeholder={t.login_pass_placeholder}
               autoComplete="current-password"
+              maxLength={200}
               value={p} disabled={busy}
               onChange={(e) => setP(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") enviar("login"); }}
