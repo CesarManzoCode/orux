@@ -22,6 +22,7 @@ import { autenticar } from "../store";
 import { validarUsuarioNuevo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
 import { LegalModal, type LegalDoc } from "./LegalModal";
+import { Logomark } from "./Logomark";
 
 type Modo = "login" | "register";
 
@@ -121,6 +122,7 @@ export function Login() {
         <div className="lp-grid" aria-hidden />
         <div className="lp-inner">
           <div className="lp-marca">
+            <Logomark size={28} className="lp-marca-mk" />
             <b>Orux</b><span>{t.login_eyebrow.split("·")[0].trim()}</span>
           </div>
           <div className="lp-eyebrow">
@@ -164,7 +166,10 @@ export function Login() {
       <section className="landing-auth">
         <div className="login-card">
           <div className="lc-head">
-            <div className="lc-brand"><b>Orux</b></div>
+            <div className="lc-brand">
+              <Logomark size={24} className="lc-brand-mk" />
+              <b>Orux</b>
+            </div>
             <div className="cue">
               <span className="lk" />{" "}
               {modo === "register" ? t.reg_session_cue : t.login_session_cue}

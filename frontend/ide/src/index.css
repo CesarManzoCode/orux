@@ -1111,10 +1111,12 @@ button:active { transform: translateY(1px); }
   display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.35rem;
 }
 .login-card .lc-brand {
+  display: inline-flex; align-items: center; gap: 10px;
   font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em;
   line-height: 1.1; color: var(--text);
 }
 .login-card .lc-brand b { font-weight: 800; color: var(--accent); }
+.login-card .lc-brand-mk { display: block; flex: none; }
 /* Cue de seguridad: registro enterprise, mono, discreto. */
 .login-card .cue {
   display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
@@ -1264,15 +1266,19 @@ button:active { transform: translateY(1px); }
   backdrop-filter: blur(6px);
 }
 .hub-brand {
-  display: inline-flex; align-items: baseline; gap: 11px;
+  display: inline-flex; align-items: center; gap: 11px;
   font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.035em;
   color: var(--text);
 }
 .hub-brand b { font-weight: 800; color: var(--accent); }
+/* El logo va pegado al wordmark; un microajuste vertical lo asienta sobre
+   la línea óptica del texto sin tocar el resto de tipografías. */
+.hub-brand-mk { display: block; flex: none; margin-right: -2px; }
 .hub-brand-sub {
   font-family: var(--font-mono); font-size: 10px; font-weight: 500;
   letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
   padding-left: 11px; border-left: 1px solid var(--border);
+  align-self: center;
 }
 .hub-head-mid { display: flex; justify-content: center; }
 .hub-conn {
@@ -1745,11 +1751,12 @@ button:active { transform: translateY(1px); }
   animation: rise-in .55s var(--ease-in) both;
 }
 .lp-marca {
-  display: inline-flex; align-items: baseline; gap: 9px;
+  display: inline-flex; align-items: center; gap: 11px;
   font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.035em;
   color: var(--text); margin-bottom: 1.5rem;
 }
 .lp-marca b { font-weight: 800; color: var(--accent); }
+.lp-marca-mk { display: block; flex: none; margin-right: -3px; }
 .lp-marca span {
   font-family: var(--font-mono); font-size: 10px; font-weight: 500;
   letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);

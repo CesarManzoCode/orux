@@ -1,8 +1,46 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { T, cargaLang, guardaLang, type Lang, type Traducciones } from "./i18n";
 
 const APP = "/app";
+
+// Logomark de marca — la figura hexafoil. Solo la marca, sin wordmark;
+// el texto "Orux" se compone aparte. Gradiente plateado/acero coherente
+// con la dirección de arte "Infraestructura". useId() le da un id único
+// al <linearGradient> para que dos instancias en la misma página (nav +
+// footer) no colisionen entre sí.
+function Logomark({ size = 22, className }: { size?: number; className?: string }) {
+  const id = useId();
+  const gradId = `lm-silver-${id}`;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="45%" stopColor="#C8C8CC" />
+          <stop offset="100%" stopColor="#6E6E72" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(24,24)" fill="none" stroke={`url(#${gradId})`}
+        strokeWidth="2.2" strokeLinejoin="round">
+        <path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" />
+        <g transform="rotate(60)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" /></g>
+        <g transform="rotate(120)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" /></g>
+        <g transform="rotate(180)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" /></g>
+        <g transform="rotate(240)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" /></g>
+        <g transform="rotate(300)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z" /></g>
+        <circle cx="0" cy="0" r="1.9" fill={`url(#${gradId})`} stroke="none" />
+      </g>
+    </svg>
+  );
+}
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 16 },
@@ -38,7 +76,7 @@ function Head({ k, children, sub }: { k: string; children: ReactNode; sub?: Reac
 function Brand({ href = "#top", tag }: { href?: string; tag?: boolean }) {
   return (
     <a className="brand" href={href}>
-      <span className="mk" aria-hidden />
+      <Logomark className="mk" size={24} />
       <b>Orux</b>
       {tag && <span className="tag">coordination layer</span>}
     </a>

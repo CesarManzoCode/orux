@@ -197,16 +197,10 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
   display: inline-flex; align-items: center; gap: 11px;
   font-weight: 680; font-size: 18px; letter-spacing: -0.02em; color: var(--ink);
 }
-.brand .mk {
-  width: 22px; height: 22px; border-radius: var(--r-sm); flex: none;
-  display: grid; place-items: center;
-  background: var(--steel-fill); border: 1px solid var(--steel-line);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-.brand .mk::before {
-  content: ""; width: 9px; height: 9px; border-radius: 2px;
-  border: 1.5px solid var(--steel-ink); transform: rotate(45deg);
-}
+/* Logo de marca: hexafoil suelto (sin placa). El gradiente plateado del
+   propio SVG aporta la presencia de acero; envolverlo en otra placa de
+   acero duplicaba el material y aplastaba el dibujo. */
+.brand .mk { display: block; flex: none; }
 .brand b { font-weight: 680; }
 .brand .tag {
   font-family: var(--font-mono); font-size: 10px; font-weight: 500;

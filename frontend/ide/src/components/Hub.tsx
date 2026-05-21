@@ -17,6 +17,7 @@ import { useStore } from "../useStore";
 import { crearEquipo, redimirInvite, seleccionarEquipo, salir } from "../store";
 import { validarNombreEquipo, normalizarNombreEquipo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
+import { Logomark } from "./Logomark";
 
 function colorEquipo(seed: string): string {
   let h = 0;
@@ -127,6 +128,7 @@ export function Hub() {
     <div className="hub">
       <header className="hub-head">
         <div className="hub-brand">
+          <Logomark size={26} className="hub-brand-mk" />
           <b>Orux</b>
           <span className="hub-brand-sub">{t.hub_layer}</span>
         </div>

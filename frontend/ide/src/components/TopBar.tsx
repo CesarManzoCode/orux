@@ -7,27 +7,11 @@ import { salir, salirEquipo, crearInvite, contarDrafts } from "../store";
 import { useI18n, LangToggle } from "../i18n";
 import { InviteModal } from "./InviteModal";
 import { ConfirmarSalida } from "./ConfirmarSalida";
+import { Logomark } from "./Logomark";
 
 function iniciales(n: string): string {
   const p = n.replace(/@.*/, "").split(/[.\s_-]+/).filter(Boolean);
   return ((p[0]?.[0] ?? "?") + (p[1]?.[0] ?? "")).toUpperCase();
-}
-
-function Logomark() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="lm-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#4cc38a" />
-          <stop offset="1" stopColor="#34d9bf" />
-        </linearGradient>
-      </defs>
-      <rect x="3.6" y="3.6" width="11.6" height="11.6" rx="3.2"
-        stroke="#5b606e" strokeWidth="1.7" />
-      <rect x="8.8" y="8.8" width="11.6" height="11.6" rx="3.2"
-        fill="url(#lm-grad)" />
-    </svg>
-  );
 }
 
 export function TopBar({
@@ -113,7 +97,7 @@ export function TopBar({
   return (
     <header className="topbar isla">
       <div className="tb-grp">
-        <div className="mark"><Logomark /></div>
+        <div className="mark"><Logomark size={16} /></div>
         <span className="brand"><b>Orux</b></span>
         <span className="chev">›</span>
         <span className="proy">{s.equipo ? s.equipo.nombre : s.proyecto}</span>

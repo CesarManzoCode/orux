@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orux · operador</title>
+
+<!-- Favicon: reusa el de la landing (raíz del dominio en deploy). En dev
+     suelto puede 404 silencioso; el panel ops solo se ve en /admin del
+     deploy real, así que no vale la pena duplicar el asset acá. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <!--
   Capa 23 (+ auth por cuenta): panel de OPERADOR (vos), NO el cliente del
   IDE. Vanilla, una página, sin build, separada de todo. Entrás con TU
@@ -612,7 +617,24 @@ table#teams td {
   <div class="gate-card">
     <div class="gate-header">
       <div class="gate-logo">
-        <div class="gate-logo-mark">L</div>
+        <div class="gate-logo-mark" aria-hidden="true">
+          <!-- Hexafoil: marca de Orux. Stroke en el negro de fondo del
+               tema para que contraste sobre el chip esmeralda; sin
+               gradient acero acá porque la placa ya es verde brillante
+               y un gradient plateado encima se perdería. -->
+          <svg viewBox="0 0 48 48" width="20" height="20" fill="none">
+            <g transform="translate(24,24)" stroke="#060709"
+               stroke-width="2.2" stroke-linejoin="round">
+              <path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/>
+              <g transform="rotate(60)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+              <g transform="rotate(120)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+              <g transform="rotate(180)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+              <g transform="rotate(240)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+              <g transform="rotate(300)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+              <circle cx="0" cy="0" r="1.9" fill="#060709" stroke="none"/>
+            </g>
+          </svg>
+        </div>
         <div class="gate-logo-text">
           <strong>Orux</strong>
           <span id="t-console"></span>
@@ -654,7 +676,20 @@ table#teams td {
 
   <div class="panel-header">
     <div class="panel-brand">
-      <div class="panel-logo-mark">L</div>
+      <div class="panel-logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="18" height="18" fill="none">
+          <g transform="translate(24,24)" stroke="#060709"
+             stroke-width="2.4" stroke-linejoin="round">
+            <path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/>
+            <g transform="rotate(60)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+            <g transform="rotate(120)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+            <g transform="rotate(180)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+            <g transform="rotate(240)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+            <g transform="rotate(300)"><path d="M0 -16 Q8.7 -5.8 0 0 Q-8.7 -5.8 0 -16 Z"/></g>
+            <circle cx="0" cy="0" r="1.9" fill="#060709" stroke="none"/>
+          </g>
+        </svg>
+      </div>
       <div class="panel-brand-text">
         <strong>Orux</strong>
         <span id="t-console2"></span>
