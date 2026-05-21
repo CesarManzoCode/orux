@@ -52,6 +52,11 @@ export function ContextBar() {
         </span>
       )}
 
+      {/* Un solo divisor estructural: separa "qué soy aquí" (modo, draft,
+          nota) de "quién más + acciones". Antes había un divider entre
+          cada chip → la barra parecía un cuadrante de avión. Ahora el
+          ojo agrupa por gap, y la línea solo aparece donde de verdad
+          hay un cambio de tipo de información. */}
       <span className="ctx-div" />
 
       <span className="ctx-seg">
@@ -70,29 +75,23 @@ export function ContextBar() {
       </span>
 
       {(!due || esMio) && (
-        <>
-          <span className="ctx-div" />
-          <span className="ctx-seg">
-            <KeyRound size={12} className="ctx-i" />
-            {!due ? (
-              <button className="reclamar" onClick={() => reclamar(path)}>
-                {t.ctx_reclaim}
-              </button>
-            ) : (
-              <span className="otag tuyo">{t.ctx_mine}</span>
-            )}
-          </span>
-        </>
+        <span className="ctx-seg">
+          <KeyRound size={12} className="ctx-i" />
+          {!due ? (
+            <button className="reclamar" onClick={() => reclamar(path)}>
+              {t.ctx_reclaim}
+            </button>
+          ) : (
+            <span className="otag tuyo">{t.ctx_mine}</span>
+          )}
+        </span>
       )}
 
       {riesgo && (
-        <>
-          <span className="ctx-div" />
-          <span className="ctx-seg">
-            <Waypoints size={12} className="ctx-i" />
-            <span className={"otag r-" + riesgo}>{t.ctx_impact(riesgo)}</span>
-          </span>
-        </>
+        <span className="ctx-seg">
+          <Waypoints size={12} className="ctx-i" />
+          <span className={"otag r-" + riesgo}>{t.ctx_impact(riesgo)}</span>
+        </span>
       )}
     </div>
   );

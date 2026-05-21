@@ -1304,3 +1304,167 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .hero-aud { font-size: 10.5px; padding: 6px 12px 6px 10px; }
 }
 
+/* ═════════════════════════════════════════════════════════════════════════
+   PULIDO SENIOR · 2026-05-21
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico: refina los puntos que hacen la diferencia entre
+   "landing sólida" y "se siente infraestructura premium". Resuelve los
+   hallazgos de la auditoría UX/UI:
+
+   1) "No somos" sin grito rojo: era educación, ahora se lee educativo.
+   2) Hover de cards (mod, aud, sec): sombra "infraestructura", no SaaS.
+   3) Pro tier badge: gana presencia proporcional a su valor.
+   4) Trust strip: respiración real en mobile (padding clamp).
+   5) Sticky CTA: entra con fade limpio, no golpea con slide.
+   6) CTA secundario en mobile: jerarquía clara con el primario.
+   7) Comparison table: data-label menos enfático en mobile (el dot ya
+      lleva el color del estado, no necesita duplicar).
+
+   Regla: tocar la apariencia, jamás el contenido. La marca y dirección
+   "Acero / Infraestructura" se preservan al 100%.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) "No somos" sin rojo ───────────────────────────────────────────
+   La sección es educativa ("estas cosas NO somos"), no es una alerta.
+   El rojo (`--bad`) le daba registro de error, leyéndose como "algo
+   está mal". Lo neutralizamos a tinta tenue sobre superficie discreta
+   — sigue siendo claro que es una negación, sin teatro. El borde
+   izquierdo se queda como anclaje de "lista de exclusión", pero
+   también más sutil. */
+.not {
+  border-left-color: var(--line-strong);
+}
+.not span {
+  color: var(--mut);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── 2) Hover de cards: sobrio, instrumento ──────────────────────────
+   El hover anterior usaba `var(--sh-2)` (sombra blanda 14px de blur)
+   — visualmente "se levanta como un envelope SaaS". Recalibramos a
+   `var(--sh-1)` (1-2px de profundidad sobria) + un realce del borde a
+   tono acero. La pieza sigue "respondiendo" al cursor sin parecer un
+   sofá inflándose. */
+.mod:hover,
+.aud-card:hover {
+  border-color: var(--steel-line);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 var(--hair),
+    var(--sh-1),
+    0 8px 22px -16px rgba(0, 0, 0, 0.5);
+}
+.sec-card:hover {
+  border-color: var(--steel-line);
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  box-shadow:
+    inset 0 1px 0 var(--hair),
+    inset 2px 0 0 var(--steel-line);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mod:hover, .aud-card:hover { transform: none; }
+}
+
+/* ── 3) Pro tier badge — presencia proporcional a su valor ──────────
+   El badge "Recomendado" del tier Pro estaba en 10px / -11px top: el
+   ojo lo cruzaba sin verlo. Lo subimos a 11.5px, peso 700, padding
+   más generoso y un borde superior que se asoma del marco — se siente
+   "etiqueta cosida", no sticker. Acompaña la sombra interna acentuada
+   del card.pro. */
+.price.pro .badge,
+.badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 6px 14px;
+  top: -13px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 14px -8px rgba(60, 90, 126, 0.7);
+}
+.price.pro {
+  /* Refuerzo discreto del card.pro: la sombra exterior es más fría y
+     compacta — ya no es la sombra blanda de antes, es "acero asentado". */
+  box-shadow:
+    inset 0 1px 0 var(--hair),
+    0 0 0 1px var(--steel-line),
+    0 18px 50px -38px rgba(0, 0, 0, 0.9);
+}
+
+/* ── 4) Trust strip — respiración responsive ─────────────────────────
+   En desktop el `padding: 26px 30px` se siente justo. En tablet la
+   misma cantidad de padding hace que las 4 columnas se compriman a
+   2x2 con poco aire interno. Pasamos a clamp: respira en mobile sin
+   sacrificar densidad en desktop. */
+.trust .ti {
+  padding: clamp(20px, 3vw, 26px) clamp(18px, 2.5vw, 30px);
+}
+
+/* ── 5) Sticky CTA: entrada elegante ─────────────────────────────────
+   El slide `translateY(110%) → 0` golpeaba al aparecer (saltaba 50px
+   en 260ms). Mantenemos el movimiento pero más corto (translateY 16px,
+   no 110%) y con opacity como protagonista. Se siente "se asienta",
+   no "salta a la cámara". */
+.sticky-cta {
+  transform: translateY(16px);
+}
+.sticky-cta.visible {
+  transform: translateY(0);
+}
+
+/* ── 6) CTA secundario en mobile — jerarquía clara ───────────────────
+   En <480px los dos botones del hero CTA ocupan toda la fila apilados,
+   ambos `.btn.lg`. Se ven iguales — el ojo no decide. Bajamos el ghost
+   a peso visual menor: sin sombra interna, fondo más cercano al bg y
+   peso de texto regular. El primario manda con su acero pleno; el
+   secundario invita sin competir. */
+@media (max-width: 480px) {
+  .cta .btn.ghost,
+  .final-cta .btn.ghost {
+    background: transparent;
+    border-color: var(--line-soft);
+    box-shadow: none;
+    font-weight: 500;
+  }
+  .cta .btn.ghost:hover,
+  .final-cta .btn.ghost:hover {
+    background: var(--bg-2);
+    border-color: var(--line);
+  }
+}
+
+/* ── 7) Comparison table data-label en mobile — sobrio ───────────────
+   El dot de color (.cmp-left::before / .cmp-right::before) ya lleva
+   el estado. El label arriba duplicaba ese énfasis pintándose en el
+   mismo color (bad/live) — ruido visual. Lo bajamos a tinta neutra
+   con el peso del mono — el dot sigue siendo la firma de color. */
+@media (max-width: 760px) {
+  .cmp-left::after { color: var(--mut); }
+  .cmp-right::after { color: var(--mut); }
+}
+
+/* ── 8) Botón secundario hero: micro-pulido en el "arrow" ─────────────
+   En el btn.ghost no había `<span class="arr">`. Cuando lo agreguen a
+   nivel JSX, esta regla mantiene el patrón de translación coherente
+   con el primario. Es un anchor sin overhead. */
+.btn.ghost .arr { color: var(--mut); }
+.btn.ghost:hover .arr { color: var(--ink); }
+
+/* ── 9) Nav links: subrayado en hover MÁS limpio ──────────────────────
+   La línea bajo `.nav-links a:hover` aparece sin transición de color —
+   solo de `right: 100% → 0`. En navegadores donde la pintura inicial
+   ya está en `right: 100%`, el primer hover puede saltar. Forzamos
+   `will-change` para que el primer hover sea fluido sin layout shift. */
+.nav-links a::after { will-change: right; }
+
+/* ── 10) FAQ — el chevron acero respira más ──────────────────────────
+   Detalle: cuando se abre la pregunta, el chevron pasa de `var(--bg-2)`
+   a `var(--steel-weak)` con border. Añadimos una sombra inset MUY
+   discreta para que en el estado abierto se sienta "encendido" sin
+   neón. Pequeño guiño de instrumento. */
+.faq-item.open .faq-q .chev {
+  box-shadow: inset 0 0 0 1px var(--steel-line);
+}

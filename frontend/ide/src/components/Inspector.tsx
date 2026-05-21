@@ -51,6 +51,13 @@ function Sec(props: {
   children: ReactNode;
 }) {
   const plegada = props.colapsadas.has(props.k);
+  // Plegado animado (capa 32): el cuerpo SIEMPRE se renderiza; el CSS
+  // colapsa la altura vía grid-template-rows 1fr → 0fr. Antes hacíamos
+  // render condicional ({!plegada && <div…/>}) y la sección desaparecía
+  // de golpe — snap visual. Ahora el panel "fluye" cuando lo plegás. La
+  // a11y queda intacta (aria-expanded sigue siendo la única verdad).
+  // aria-hidden cuando está plegado para que screen readers no lean
+  // contenido oculto.
   return (
     <section
       className={
@@ -71,7 +78,7 @@ function Sec(props: {
           <ChevronDown size={13} />
         </span>
       </button>
-      {!plegada && <div className="insec-b">{props.children}</div>}
+      <div className="insec-b" aria-hidden={plegada}>{props.children}</div>
     </section>
   );
 }

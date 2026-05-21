@@ -102,12 +102,16 @@ export function StatusBar() {
       <span className="sb">{lang}</span>
       {s.currentPath && (
         <>
-          <span className="sb-div" />
-          <span className="sb tabnum">
+          {/* Ln/Col + Spaces: prescindibles en pantallas medianas — la
+              info ya vive en el editor (cursor visible). Marcamos con
+              `sb-low` para que el CSS los esconda <=1080px sin tocar
+              la jerarquía de la izquierda (conn/branch/drafts). */}
+          <span className="sb-div sb-div-low" />
+          <span className="sb tabnum sb-low">
             Ln {s.caret.line}, Col {s.caret.col}
           </span>
-          <span className="sb-div" />
-          <span className="sb">{t.stb_spaces}</span>
+          <span className="sb-div sb-div-low" />
+          <span className="sb sb-low">{t.stb_spaces}</span>
         </>
       )}
       <span className="sb-div" />

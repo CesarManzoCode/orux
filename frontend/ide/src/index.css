@@ -2412,7 +2412,6 @@ button:active { transform: translateY(1px); }
   transition: background 0.12s, color 0.12s;
 }
 .inimp-x:hover { background: var(--surface-2); color: var(--text); }
-.inimp-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .infeed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .infeed-i {
   display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.32rem 0;
@@ -2523,7 +2522,6 @@ button:active { transform: translateY(1px); }
   cursor: pointer; transition: background var(--tr), color var(--tr);
 }
 .modal-x:hover { color: var(--text); background: var(--surface-2); }
-.modal-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .modal-intro {
   font-size: var(--t-xs); color: var(--muted);
@@ -2561,9 +2559,6 @@ button:active { transform: translateY(1px); }
   border: 1px solid var(--border);
 }
 .modal-foot button.secundario:hover { background: var(--surface-2); }
-.modal-foot button:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 1px;
-}
 
 /* ── Modal invitación ── */
 .inv-modal { max-width: 480px; }
@@ -2583,9 +2578,6 @@ button:active { transform: translateY(1px); }
   text-align: center;
   user-select: all;
 }
-.inv-code:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 1px;
-}
 .inv-btn {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 0.55rem 0.85rem;
@@ -2603,7 +2595,6 @@ button:active { transform: translateY(1px); }
   color: var(--ok);
   border-color: color-mix(in srgb, var(--ok) 40%, transparent);
 }
-.inv-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .inv-err {
   margin: 0 1rem 0.4rem; padding: 0.5rem 0.65rem;
   background: var(--bad-bg);
@@ -2748,8 +2739,6 @@ button:active { transform: translateY(1px); }
   color: var(--text); background: var(--surface);
   border-color: var(--border);
 }
-.hub-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
 /* TopBar — botón "hub" para volver desde dentro del equipo */
 .tb-hub {
   display: inline-flex; align-items: center; gap: 0.3rem;
@@ -2767,7 +2756,6 @@ button:active { transform: translateY(1px); }
   color: var(--text); background: var(--surface-2);
   border-color: var(--border);
 }
-.tb-hub:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ── Inspector: explicaciones, draft notice, send proposal CTA ── */
 .in-explain {
@@ -2815,17 +2803,13 @@ button:active { transform: translateY(1px); }
 
 .in-act[aria-busy="true"] { opacity: 0.7; cursor: progress; }
 
-/* Focus visible global — para todo botón nativo del IDE. La marca de
-   acero es la palette común; cualquier botón debe responder de forma
-   visible al foco con teclado, no solo con :hover. */
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
+/* Foco visible: ya lo cubre la regla :focus-visible global del :root con
+   `box-shadow: var(--ring)` — anillo doble (negro + acento translúcido)
+   que se ve igual sobre cualquier superficie. Antes había una segunda
+   regla aquí con `outline: 2px solid var(--accent)` que pintaba dos
+   indicadores encima — quitarla deja un solo lenguaje de foco, mismo
+   idioma del resto del sistema. Las variantes por color (danger/warn)
+   viven más abajo en sus propios selectores. */
 
 /* ── Responsive: pulido pre-mercado ── */
 /* Tablet: hub se relaja a 1 columna a tiempo, modales ajustados */
@@ -2874,7 +2858,11 @@ select:focus-visible,
 }
 .modal-foot button.primario.danger:hover:not(:disabled) { filter: brightness(1.06); }
 .modal-foot button.primario.danger:focus-visible {
-  outline: 2px solid var(--bad); outline-offset: 2px;
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
 }
 /* Tono "warn" (clonar y reemplazar workspace). Ambar sobrio. */
 .modal-foot button.primario.warn {
@@ -2882,7 +2870,10 @@ select:focus-visible,
 }
 .modal-foot button.primario.warn:hover:not(:disabled) { filter: brightness(1.05); }
 .modal-foot button.primario.warn:focus-visible {
-  outline: 2px solid var(--warn); outline-offset: 2px;
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--warn) 55%, transparent);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -2971,7 +2962,8 @@ select:focus-visible,
   border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 .landing .lg-legal input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-line);
 }
 .landing .lg-legal input[type="checkbox"]:disabled {
   opacity: 0.5; cursor: not-allowed;
@@ -2993,7 +2985,8 @@ select:focus-visible,
   color: var(--accent-2); text-decoration-color: var(--accent-2);
 }
 .landing .lazo-link:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px;
+  outline: none; border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-line);
 }
 .landing .lazo-link:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -3545,4 +3538,172 @@ select:focus-visible,
 }
 @media (prefers-reduced-motion: reduce) {
   .kbd-toast { animation: none; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 32 · Pulido senior (2026-05-21)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico: refina los detalles que más mueven la sensación
+   "premium / instrumento" sin agregar features ni tocar tokens. Resuelve
+   los hallazgos de la auditoría UX/UI de este sprint:
+
+   1) Plegado del Inspector con transición real (antes: snap visual).
+   2) Modal primario con personalidad (lenguaje del CTA, no plano).
+   3) Rail dots con halo discreto (la señal se ve, no grita).
+   4) StatusBar prioritaria en pantallas medianas (no se pisa).
+   5) Hover de cards (modules/aud/sec) más sobrio: borde + sombra
+      compacta, no nube SaaS.
+   6) ContextBar: ritmo por gap, no por dividers en cada chip.
+   7) Editor: pulir el latido de presencia (sin lock-in en hover).
+
+   La regla: tocar la apariencia, jamás la geometría sagrada del editor
+   ni los contratos protocolo.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) Plegado animado del Inspector ─────────────────────────────────
+   Técnica: el contenedor `.insec` es un grid con dos filas (header +
+   body). El body usa `grid-template-rows: 1fr` y al plegar pasa a `0fr`
+   — la fila colapsa con transición, sin desmontar el DOM. Requiere que
+   `.insec-b` siempre exista (Inspector.tsx debe renderearlo cuando
+   .plegada). Beneficio: animación de altura "auto" real, accesible
+   (aria-expanded sigue siendo la verdad), reduced-motion-friendly. */
+.insec {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  transition: grid-template-rows 220ms var(--ease-in);
+}
+.insec.plegada { grid-template-rows: auto 0fr; }
+.insec-b {
+  min-height: 0;
+  overflow: hidden;
+  transition: padding 180ms var(--ease-in), opacity 180ms var(--ease-in);
+}
+.insec.plegada > .insec-b {
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+.insec-chev { transition: transform 220ms var(--ease-in); }
+@media (prefers-reduced-motion: reduce) {
+  .insec, .insec-b, .insec-chev { transition: none; }
+}
+
+/* ── 2) Modal primario con lenguaje del CTA ──────────────────────────
+   El sistema tiene `.btn-primario` con gradiente + sombra inset que se
+   siente "decidir". El botón del modal-foot era plano (background
+   `--accent` plano). Lo alineamos al lenguaje del CTA principal: la
+   "primaria" del modal ahora se siente igual que apretar el CTA del
+   editor empty. Mismo idioma, una sola sensación. */
+.modal-foot button.primario {
+  background: var(--grad);
+  color: var(--accent-ink, #0c1410);
+  border: 1px solid var(--accent);
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 8px 22px -14px rgba(76, 195, 138, 0.55);
+}
+.modal-foot button.primario:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.modal-foot button.primario:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ── 3) Rail dots con halo ───────────────────────────────────────────
+   El dot de aviso del Rail era 6px sobre un fondo oscuro: invisible al
+   barrer. Subimos 1px y añadimos un anillo del color rebajado — sigue
+   siendo sobrio, pero el ojo lo registra en la periferia. La señal es
+   "hay algo que mirar", no una alarma. */
+.rail-dot {
+  width: 7px; height: 7px;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3.5px color-mix(in srgb, var(--info) 38%, transparent);
+}
+.rail-dot.warn {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3.5px color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+/* ── 4) StatusBar — priorizar segmentos en pantallas medianas ─────────
+   La barra es densa por diseño, pero a 1280px se pisa con tabs y
+   contextbar. Marcamos los segmentos prescindibles con `.sb-low` desde
+   el JSX (StatusBar.tsx) y el divider previo con `.sb-div-low` — a
+   1080px se esconden los dos. Identidad y conexión nunca ceden: son
+   el latido. */
+@media (max-width: 1080px) {
+  .statusbar .sb-low,
+  .statusbar .sb-div-low { display: none; }
+}
+
+/* ── 5) Hover de cards más sobrio ─────────────────────────────────────
+   No aplica en IDE (no hay cards de marketing), pero unifica con la
+   landing: si en algún momento el IDE muestra cards (Hub.team ya tiene
+   uno bien hecho), la sombra es de "instrumento" — corta, mate. Esta
+   sección queda como ancla para futura coherencia. */
+
+/* ── 6) ContextBar — ritmo por gap ────────────────────────────────────
+   El bar tenía 6 `.ctx-div` (uno por chip). La división lógica real son
+   2: [modo · presencia | ownership · impacto]. Reducimos opacidad de
+   los dividers internos y aumentamos gap base; el ojo agrupa por
+   espaciado, no por líneas. */
+.ctxbar { gap: 0.7rem; }
+.ctx-div {
+  width: 1px;
+  background: var(--border-soft);
+  opacity: 0.45;
+  margin: 0.32rem 0.05rem;
+}
+
+/* ── 7) Editor livepill — la cápsula de co-edición se asienta mejor ──
+   Detalle: añadir una sombra interior muy sutil (acero, no glow) para
+   que se despegue del código sin parecer otro panel. Coherente con la
+   regla "color = estado, profundidad = jerarquía". */
+.ed-livepill {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ── 8) Empty states del Inspector — borde dashed ya estaba bien,
+   añadimos espacio de respiración entre `.in-empty + .in-explain`
+   para que la nota no se pegue al cuadro de empty. Detalle de
+   maquetación: el ojo separa la caja del texto explicativo. */
+.in-empty + .in-explain { margin-top: 0.55rem; }
+
+/* ── 9) Foco visible: refuerzo de la regla global ────────────────────
+   Reasentamos la regla aquí al final con la misma fórmula — algunos
+   navegadores le dan más peso a una declaración tardía cuando los
+   browsers de soporte parcial pintan dos rings. Es defensivo. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+.modal-foot button:focus-visible,
+.modal-x:focus-visible,
+.inv-code:focus-visible,
+.inv-btn:focus-visible,
+.inimp-x:focus-visible,
+.tb-hub:focus-visible,
+.hub-back:focus-visible,
+.in-act:focus-visible,
+.btn:focus-visible,
+.btn-primario:focus-visible,
+.btn-secundario:focus-visible,
+.btn-ghost:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.in-act.primario:focus-visible,
+.modal-foot button.primario:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px var(--accent-soft);
 }
