@@ -3211,3 +3211,91 @@ select:focus-visible,
 @media (max-width: 1080px) {
   .ed-livepill-tx { display: none; }
 }
+
+/* ===========================================================================
+   CAPA 30 — Atajos de teclado: hoja de ayuda + toast inline
+   ---------------------------------------------------------------------------
+   La feature acelera lo que ya hacen los botones del Inspector. El CSS por
+   tanto es chico a propósito: la hoja reusa `.modal` (sin re-tematizar) y
+   sólo agrega el grid de filas kbd+descripción. El toast es una píldora
+   discreta abajo a la derecha; nunca tapa el editor.
+   =========================================================================== */
+.kbd-modal { width: min(520px, 92vw); }
+.kbd-modal .modal-intro { margin-bottom: 0.6rem; }
+.kbd-section { margin-top: 0.85rem; }
+.kbd-section-h {
+  margin: 0 0 0.4rem;
+  font: 600 10px/1 var(--font-base);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.kbd-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.kbd-row:first-child { border-top: 0; }
+.kbd-keys { display: inline-flex; align-items: center; gap: 0.3rem; }
+.kbd-row kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 22px;
+  padding: 0 0.4rem;
+  font: 600 11px/1 var(--font-mono);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+.kbd-plus {
+  font: 700 11px/1 var(--font-mono);
+  color: var(--muted);
+  padding: 0 1px;
+}
+.kbd-desc {
+  font: 400 12px/1.35 var(--font-base);
+  color: var(--ink);
+}
+.kbd-hint {
+  margin-top: 0.85rem;
+  font: 400 11px/1.4 var(--font-base);
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Toast: aparece abajo-derecha, no roba foco, desaparece sola. Pensado para
+   confirmar visualmente un atajo (cuando el ojo no estaba en el botón). */
+.kbd-toast {
+  position: fixed;
+  bottom: 32px;
+  right: 24px;
+  z-index: 2200;
+  padding: 0.55rem 0.85rem;
+  font: 600 12px/1.2 var(--font-base);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--ok) 38%, transparent);
+  color: var(--ok);
+  border-radius: var(--r-sm);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+  animation: kbd-toast-in 180ms var(--ease-out, ease-out) both;
+  pointer-events: none;
+  max-width: 60vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kbd-toast.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 38%, transparent);
+}
+@keyframes kbd-toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kbd-toast { animation: none; }
+}

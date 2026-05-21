@@ -179,7 +179,7 @@ function PropCard({
               className="ok"
               onClick={() => resolver(p.id, true)}
               aria-label={t.tr_approve}
-              title={t.tr_approve}
+              title={t.kbd_btn_hint_approve}
             >
               {t.tr_approve}
             </button>
@@ -187,7 +187,7 @@ function PropCard({
               className="no"
               onClick={() => resolver(p.id, false)}
               aria-label={t.tr_reject}
-              title={t.tr_reject}
+              title={t.kbd_btn_hint_reject}
             >
               {t.tr_reject}
             </button>

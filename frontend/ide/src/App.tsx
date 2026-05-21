@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./useStore";
-import { getState, guardar, contarDrafts } from "./store";
+import { getState, guardar, contarDrafts, resolver, seleccionar } from "./store";
 import { Login } from "./components/Login";
 import { Lobby } from "./components/Lobby";
 import { TopBar } from "./components/TopBar";
@@ -13,6 +13,8 @@ import { StatusBar } from "./components/StatusBar";
 import { AdminModal } from "./components/AdminModal";
 import { Inspector } from "./components/Inspector";
 import { Splitter } from "./components/Splitter";
+import { KbdHelp } from "./components/KbdHelp";
+import { useI18n } from "./i18n";
 
 // Capa 27 — Anchos redimensionables del Sidebar y el Inspector.
 // Límites: dejamos respirar al editor (mínimos generosos) sin que ningún
@@ -34,8 +36,14 @@ function leerAncho(key: string, def: number, min: number, max: number): number {
 
 export function App() {
   const s = useStore();
+  const { t } = useI18n();
   const [vista, setVista] = useState<"archivos" | "git">("archivos");
   const [adminOpen, setAdminOpen] = useState(false);
+  // Capa 30 — Cheatsheet de atajos y toast inline. El toast es texto + ttl;
+  // suficiente para confirmar "aprobada"/"rechazada" tras un atajo (cuando
+  // el ojo no estaba en el botón). Mismo patrón micro que el del Hub.
+  const [kbdOpen, setKbdOpen] = useState(false);
+  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
   // Capa 26: el inspector se puede colapsar (pantallas medianas, o quien
   // quiere todo el ancho para el código). La preferencia persiste — una
   // herramienta de uso diario respeta cómo la dejaste.
@@ -79,16 +87,105 @@ export function App() {
   // Editor ya lo captura cuando el textarea tiene foco; este handler cubre
   // el resto (el reflejo del dev no depende de dónde esté el foco) y
   // bloquea el "guardar página" del navegador siempre.
+  //
+  // Capa 30: este mismo handler también canaliza los atajos de coordinación
+  // (Alt+A/R/J/K y «?»). Son aceleradores del Inspector — no inventan
+  // protocolo; reusan `resolver` y `seleccionar`. Reglas para no romper el
+  // editor: Alt-* se ignora si el target es un campo de texto editable
+  // (Alt+letra ya escribe en algunos layouts); «?» se ignora si el foco
+  // está en input/textarea/contenteditable.
   useEffect(() => {
+    function esCampoEditable(el: EventTarget | null): boolean {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return true;
+      return el.isContentEditable;
+    }
+    function mostrarToast(text: string, ok = true) {
+      setToast({ text, ok });
+      setTimeout(() => setToast((cur) => (cur && cur.text === text ? null : cur)), 1800);
+    }
+    // Propuestas esperando MI review (yo soy dueño). Reusa la misma lógica
+    // que el Inspector — sin selectores derivados nuevos para no inflar el
+    // store por una feature de polish.
+    function propuestasParaMi() {
+      const st = getState();
+      const yo = st.yo?.client_id;
+      if (!yo) return [];
+      return Object.values(st.proposals).filter(
+        (p) => st.owners[p.path] === yo,
+      );
+    }
+    function archivosConPropPendiente(): string[] {
+      // Únicos paths con propuesta-para-mí, ordenados (estabilidad de
+      // navegación: la lista no debe bailar entre Alt+J consecutivos).
+      const ps = propuestasParaMi();
+      return [...new Set(ps.map((p) => p.path))].sort();
+    }
+    function navegar(delta: 1 | -1) {
+      const paths = archivosConPropPendiente();
+      if (paths.length === 0) { mostrarToast(t.kbd_toast_no_targets, false); return; }
+      const actual = getState().currentPath;
+      const idx = actual ? paths.indexOf(actual) : -1;
+      // Si el archivo abierto no está en la lista, J va al primero; K al último.
+      const nextIdx = idx < 0
+        ? (delta > 0 ? 0 : paths.length - 1)
+        : (idx + delta + paths.length) % paths.length;
+      seleccionar(paths[nextIdx]);
+    }
+
     function onKey(e: KeyboardEvent) {
+      // Ctrl/Cmd+S — capa 19, intacto.
       if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
         e.preventDefault();
         guardar(getState().currentPath);
+        return;
+      }
+      // Atajos Alt-* (sin Ctrl/Meta/Shift): aceleradores del Inspector.
+      // Bloqueamos si el foco está editando texto (evita que Alt+A escriba
+      // un carácter especial según layout). Los demás atajos del editor
+      // (que no usan Alt) siguen funcionando dentro del textarea.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (esCampoEditable(e.target)) return;
+        const k = e.key.toLowerCase();
+        if (k === "a" || k === "r") {
+          const ps = propuestasParaMi();
+          if (ps.length === 0) {
+            e.preventDefault();
+            mostrarToast(t.kbd_toast_no_props, false);
+            return;
+          }
+          // Preferir la propuesta del archivo abierto (lo que el ojo está
+          // mirando); si no hay, tomar la primera global.
+          const cur = getState().currentPath;
+          const target = ps.find((p) => p.path === cur) ?? ps[0];
+          e.preventDefault();
+          resolver(target.id, k === "a");
+          mostrarToast(
+            (k === "a" ? t.kbd_toast_approved : t.kbd_toast_rejected) + " · " + target.path,
+            k === "a",
+          );
+          return;
+        }
+        if (k === "j" || k === "k") {
+          e.preventDefault();
+          navegar(k === "j" ? 1 : -1);
+          return;
+        }
+      }
+      // «?» abre la hoja de atajos. En el layout US es Shift+/, así que
+      // chequeamos por `key` directamente (es independiente del layout).
+      // Lo ignoramos si el foco está editando texto (no querés que abrir
+      // ayuda interrumpa una búsqueda).
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (esCampoEditable(e.target)) return;
+        e.preventDefault();
+        setKbdOpen((v) => !v);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [t]);
 
   // Pulido pre-mercado: warning al cerrar pestaña / recargar / navegar si
   // hay drafts (propuestas locales sin enviar al server). Sin esto, capa 28
@@ -152,6 +249,12 @@ export function App() {
       </div>
       <StatusBar />
       {adminOpen && s.esAdmin && <AdminModal onClose={() => setAdminOpen(false)} />}
+      {kbdOpen && <KbdHelp onClose={() => setKbdOpen(false)} />}
+      {toast && (
+        <div className={"kbd-toast " + (toast.ok ? "ok" : "warn")} role="status">
+          {toast.text}
+        </div>
+      )}
     </div>
   );
 }

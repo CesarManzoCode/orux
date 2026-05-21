@@ -471,6 +471,32 @@ export const T = {
       `"asignar" pondrá a «${user}» como dueño de ${n} archivo(s). "quitar" los deja sin dueño.`,
     am_hint_nouser: (n: number) =>
       `${n} archivo(s) seleccionados — elige un usuario, o usa "quitar dueño".`,
+
+    // Capa 30 — Atajos de teclado. Coordinar bien también es decidir rápido:
+    // cuando hay propuestas esperando tu review, levantar la mano del mouse
+    // marca la diferencia. Los atajos NO son una feature nueva: aceleran lo
+    // que ya hacen los botones del Inspector. Por eso van con el modificador
+    // Alt, para no chocar con el editor (Ctrl+S sigue siendo el único atajo
+    // de "checkpoint" del producto).
+    kbd_help_title: "atajos de teclado",
+    kbd_help_sub: "los atajos no inventan nada — aceleran lo del Inspector. Alt evita pisar el editor.",
+    kbd_help_close: "cerrar",
+    kbd_help_hint: "abre con «?» en cualquier momento.",
+    kbd_section_review: "revisar propuestas",
+    kbd_section_nav: "navegar atención",
+    kbd_section_global: "global",
+    kbd_approve: "aprobar la propuesta esperando tu review",
+    kbd_reject: "rechazar la propuesta esperando tu review",
+    kbd_save: "marcar punto coherente (analiza impacto)",
+    kbd_next: "siguiente archivo con propuestas para ti",
+    kbd_prev: "archivo anterior con propuestas para ti",
+    kbd_help_open: "abrir esta hoja de atajos",
+    kbd_toast_no_props: "no tienes propuestas esperando review",
+    kbd_toast_approved: "aprobada",
+    kbd_toast_rejected: "rechazada",
+    kbd_toast_no_targets: "ningún archivo con propuestas para ti",
+    kbd_btn_hint_approve: "aprobar (Alt+A)",
+    kbd_btn_hint_reject: "rechazar (Alt+R)",
   },
 
   en: {
@@ -930,6 +956,27 @@ export const T = {
       `"assign" will set «${user}» as owner of ${n} file(s). "remove" leaves them without owner.`,
     am_hint_nouser: (n: number) =>
       `${n} file(s) selected — choose a user, or use "remove owner".`,
+
+    // Layer 30 — Keyboard shortcuts (see ES copy for the design note).
+    kbd_help_title: "keyboard shortcuts",
+    kbd_help_sub: "shortcuts invent nothing — they speed up the Inspector. Alt avoids clashing with the editor.",
+    kbd_help_close: "close",
+    kbd_help_hint: "open this sheet with «?» any time.",
+    kbd_section_review: "review proposals",
+    kbd_section_nav: "navigate attention",
+    kbd_section_global: "global",
+    kbd_approve: "approve the proposal awaiting your review",
+    kbd_reject: "reject the proposal awaiting your review",
+    kbd_save: "mark coherent point (run impact analysis)",
+    kbd_next: "next file with proposals for you",
+    kbd_prev: "previous file with proposals for you",
+    kbd_help_open: "open this shortcuts sheet",
+    kbd_toast_no_props: "you have no proposals awaiting review",
+    kbd_toast_approved: "approved",
+    kbd_toast_rejected: "rejected",
+    kbd_toast_no_targets: "no file with proposals for you",
+    kbd_btn_hint_approve: "approve (Alt+A)",
+    kbd_btn_hint_reject: "reject (Alt+R)",
   },
 } as const;
 
