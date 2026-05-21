@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./useStore";
-import { getState, guardar, contarDrafts, resolver, seleccionar } from "./store";
+import {
+  getState, guardar, contarDrafts, resolver, seleccionar,
+  subscribeToasts, emitToast, esDeOtro, type ToastTone,
+} from "./store";
 import { Login } from "./components/Login";
 import { Lobby } from "./components/Lobby";
 import { TopBar } from "./components/TopBar";
@@ -43,7 +46,12 @@ export function App() {
   // suficiente para confirmar "aprobada"/"rechazada" tras un atajo (cuando
   // el ojo no estaba en el botón). Mismo patrón micro que el del Hub.
   const [kbdOpen, setKbdOpen] = useState(false);
-  const [toast, setToast] = useState<{ text: string; ok: boolean } | null>(null);
+  // El toast es la única señal "no modal" que el producto se permite. Lo
+  // promovimos a bus global (store::subscribeToasts) para que acciones de
+  // cualquier capa puedan reusarlo: guardar (Ctrl+S), aprobar/rechazar
+  // (Alt+A/R), copiar invitación, etc. El último toast gana; el timer se
+  // resetea por ID para que toasts en cadena no se canibalicen.
+  const [toast, setToast] = useState<{ id: number; text: string; tone: ToastTone } | null>(null);
   // Capa 26: el inspector se puede colapsar (pantallas medianas, o quien
   // quiere todo el ancho para el código). La preferencia persiste — una
   // herramienta de uso diario respeta cómo la dejaste.
@@ -102,8 +110,7 @@ export function App() {
       return el.isContentEditable;
     }
     function mostrarToast(text: string, ok = true) {
-      setToast({ text, ok });
-      setTimeout(() => setToast((cur) => (cur && cur.text === text ? null : cur)), 1800);
+      emitToast(text, ok ? "ok" : "warn");
     }
     // Propuestas esperando MI review (yo soy dueño). Reusa la misma lógica
     // que el Inspector — sin selectores derivados nuevos para no inflar el
@@ -135,10 +142,35 @@ export function App() {
     }
 
     function onKey(e: KeyboardEvent) {
-      // Ctrl/Cmd+S — capa 19, intacto.
+      // Ctrl/Cmd+S — capa 19, ahora con feedback. El usuario teclea el
+      // atajo sin "ver" si pasó algo: el toast confirma qué hizo el sistema.
+      // Diferenciamos:
+      //   · sin archivo abierto → aviso neutro (no es error, es "nada que
+      //     guardar"; mejora la sensación de respuesta).
+      //   · no-dueño con draft → "propuesta enviada" (es el cambio de
+      //     contrato que vive bajo Ctrl+S desde capa 28).
+      //   · dueño / archivo libre → "cambios analizados" (el save dispara
+      //     análisis de impacto del lado del server).
+      //   · sin draft ni dirty (nada que mover) → "todo al día".
       if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
         e.preventDefault();
-        guardar(getState().currentPath);
+        const st = getState();
+        const path = st.currentPath;
+        if (!path) {
+          emitToast(t.toast_save_no_file, "warn");
+          return;
+        }
+        const tenia_draft = st.drafts[path] != null;
+        const era_de_otro = esDeOtro(path);
+        const dirty = !!st.dirty[path];
+        guardar(path);
+        if (era_de_otro && tenia_draft) {
+          emitToast(t.toast_save_proposed(path), "ok");
+        } else if (dirty || tenia_draft) {
+          emitToast(t.toast_save_analyzed, "ok");
+        } else {
+          emitToast(t.toast_save_clean, "ok");
+        }
         return;
       }
       // Atajos Alt-* (sin Ctrl/Meta/Shift): aceleradores del Inspector.
@@ -186,6 +218,18 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [t]);
+
+  // Suscripción al bus de toasts (store::subscribeToasts). El timer se
+  // re-evalúa por ID — si entra un toast nuevo mientras el anterior está
+  // a la vista, el viejo se reemplaza limpiamente. 2.4s da tiempo para
+  // leer y no fatiga. `prefers-reduced-motion` ya neutraliza la entrada
+  // en CSS — acá no hace falta lógica extra.
+  useEffect(() => {
+    return subscribeToasts((t) => {
+      setToast({ id: t.id, text: t.text, tone: t.tone });
+      setTimeout(() => setToast((cur) => (cur && cur.id === t.id ? null : cur)), 2400);
+    });
+  }, []);
 
   // Pulido pre-mercado: warning al cerrar pestaña / recargar / navegar si
   // hay drafts (propuestas locales sin enviar al server). Sin esto, capa 28
@@ -251,7 +295,11 @@ export function App() {
       {adminOpen && s.esAdmin && <AdminModal onClose={() => setAdminOpen(false)} />}
       {kbdOpen && <KbdHelp onClose={() => setKbdOpen(false)} />}
       {toast && (
-        <div className={"kbd-toast " + (toast.ok ? "ok" : "warn")} role="status">
+        <div
+          className={"kbd-toast t-" + toast.tone}
+          role={toast.tone === "bad" ? "alert" : "status"}
+          aria-live={toast.tone === "bad" ? "assertive" : "polite"}
+        >
           {toast.text}
         </div>
       )}

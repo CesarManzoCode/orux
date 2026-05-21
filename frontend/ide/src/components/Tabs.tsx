@@ -19,7 +19,7 @@ export function Tabs() {
   if (!s.currentPath) {
     return (
       <div className="tabs">
-        <span className="vacio"><FileQuestion size={14} /> sin archivo abierto</span>
+        <span className="vacio"><FileQuestion size={14} /> {t.tab_no_file}</span>
       </div>
     );
   }

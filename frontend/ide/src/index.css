@@ -531,16 +531,23 @@ button:active { transform: translateY(1px); }
   line-height: 16px; text-align: center; color: var(--av-ink);
   font-weight: 750; box-shadow: 0 0 0 2px var(--surface);
 }
-/* El componente pasa "✕" como texto (no un ícono): necesita tamaño y
-   alto de línea reales para centrarse. */
+/* Botón "borrar archivo" — invisible en reposo, aparece al hover/focus
+   de la fila. Iconito lucide en vez del "✕" tipográfico anterior: queda
+   centrado y consistente con el resto del UI. Tono "bad" al hover/focus
+   para anunciar que es destructivo. */
 .delx {
   border: none; background: transparent; color: var(--faint);
-  cursor: pointer; font-size: 11px; line-height: 1; padding: 3px 4px;
-  border-radius: var(--r-sm); opacity: 0; display: flex;
+  cursor: pointer; padding: 4px 5px; border-radius: var(--r-sm);
+  opacity: 0; display: inline-flex; align-items: center;
   transition: opacity var(--tr), color var(--tr), background var(--tr);
 }
-.row:hover .delx, .row:focus-within .delx { opacity: 1; }
+.delx svg { display: block; }
+.row:hover .delx, .row:focus-within .delx, .delx:focus-visible { opacity: 1; }
 .delx:hover { color: var(--bad); background: var(--bad-bg); }
+.delx:focus-visible {
+  outline: none; color: var(--bad); background: var(--bad-bg);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--bad);
+}
 
 /* ── Main ── */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -751,15 +758,92 @@ button:active { transform: translateY(1px); }
   -webkit-mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
   mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
 }
-/* Estado vacío del editor: invitación tipográfica con jerarquía, no una
-   sola línea suelta de error. */
-.editorwrap.off::after {
-  content: "ningún archivo abierto\A elegí uno en el árbol o creá uno nuevo";
-  position: absolute; inset: 0; display: grid; place-items: center;
-  text-align: center; padding: 2rem; color: var(--faint);
-  font-family: var(--font-mono); font-size: var(--t-sm);
-  letter-spacing: 0.06em; text-transform: uppercase; line-height: 2.1;
-  pointer-events: none; white-space: pre-wrap; z-index: 1;
+/* Estado vacío del editor (capa 31): tarjeta centrada con jerarquía y
+   CTAs reales. El ::after viejo era texto hard-coded en español y sin
+   afordancia — ahora la React renderea `.ed-empty` con i18n. Conservo el
+   patrón "blueprint" del fondo: la decoración existe (la capa
+   `.editorwrap.off::before` sigue activa).
+   La card no roba el espacio del overlay de presencia/marcas: tiene
+   pointer-events: auto solo en su contenido. */
+.ed-empty {
+  position: absolute; inset: 0; z-index: 5; display: grid;
+  place-items: center; padding: 2rem;
+  pointer-events: none;
+}
+.ed-empty-card {
+  pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  max-width: min(440px, 92%);
+  padding: 1.6rem 1.6rem 1.4rem;
+  border-radius: var(--r-isla);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), transparent 35%),
+    var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 28px 60px -28px rgba(0,0,0,0.7),
+    inset 0 1px 0 var(--hl);
+}
+.ed-empty-ic {
+  display: grid; place-items: center; width: 46px; height: 46px;
+  border-radius: 13px; margin-bottom: 0.85rem;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+}
+.ed-empty-tit {
+  margin: 0 0 0.4rem; font: 700 var(--t-lg)/1.3 var(--font-ui);
+  color: var(--text); letter-spacing: -0.015em;
+}
+.ed-empty-sub {
+  margin: 0 0 1rem; font-size: var(--t-sm); color: var(--muted);
+  line-height: 1.55; max-width: 34ch;
+}
+.ed-empty-cta {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0.55rem 1rem; border-radius: var(--r);
+  background: var(--grad); color: var(--accent-ink, var(--bg-deep));
+  border: 1px solid var(--accent-line); cursor: pointer;
+  font: 700 var(--t-sm)/1 var(--font-ui); letter-spacing: -0.005em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18),
+    0 10px 22px -14px rgba(76,195,138,0.55);
+  transition: filter var(--tr), transform var(--tr);
+}
+.ed-empty-cta:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.ed-empty-cta:active { transform: translateY(0); }
+.ed-empty-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent);
+}
+/* Ejemplos típicos — chips no clicables, pista del lenguaje del producto. */
+.ed-empty-ex {
+  list-style: none; padding: 0;
+  margin: 0.9rem 0 0; display: flex; flex-wrap: wrap; gap: 6px 8px;
+  justify-content: center;
+}
+.ed-empty-ex li code {
+  font: 500 11px/1 var(--font-mono); color: var(--muted);
+  background: var(--surface-2); padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+}
+/* Tips de atajos cuando el workspace TIENE archivos. Pequeña enseñanza
+   del flujo sin gastar pantalla. */
+.ed-empty-tips {
+  list-style: none; padding: 0;
+  margin: 0.4rem 0 0; display: flex; flex-direction: column;
+  gap: 8px; text-align: left; width: 100%; max-width: 320px;
+}
+.ed-empty-tips li {
+  display: flex; align-items: center; gap: 10px;
+  font-size: var(--t-sm); color: var(--text-2);
+}
+.ed-empty-tips li > span { color: var(--muted); }
+.ed-empty-tips li kbd {
+  font: 600 11px/1 var(--font-mono); color: var(--text);
+  background: var(--surface-2);
+  padding: 3px 7px; border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.18);
 }
 /* Banda de línea activa PREMIUM: degradado lateral muy sutil (luz que cae
    del filo de acento, no un bloque plano) + filo de acento a la izquierda
@@ -1303,15 +1387,17 @@ button:active { transform: translateY(1px); }
 .hub-teams {
   display: flex; flex-direction: column; gap: 8px;
   max-height: 540px; overflow-y: auto;
+  list-style: none; padding: 0; margin: 0;
   scrollbar-width: thin;
 }
+.hub-teams > li { list-style: none; }
 .hub-teams::-webkit-scrollbar { width: 7px; }
 .hub-teams::-webkit-scrollbar-thumb {
   background: var(--border); border-radius: 99px;
 }
 .hub-team {
   display: flex; align-items: center; gap: 13px; width: 100%;
-  padding: 0.78rem 0.9rem; border-radius: var(--r);
+  padding: 0.85rem 0.95rem; border-radius: var(--r);
   background: var(--surface-2); border: 1px solid var(--border);
   color: var(--text); cursor: pointer; text-align: left;
   transition: background var(--tr), border-color var(--tr),
@@ -1319,46 +1405,136 @@ button:active { transform: translateY(1px); }
 }
 .hub-team:hover {
   background: var(--surface-3); border-color: var(--accent-line);
-  box-shadow: inset 2px 0 0 var(--accent); transform: translateY(-1px);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 10px 28px -22px rgba(76, 195, 138, 0.6);
+  transform: translateY(-1px);
 }
+.hub-team:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+}
+.hub-team:active { transform: translateY(0); }
 .ht-ava {
-  width: 34px; height: 34px; border-radius: 9px; flex: none;
+  width: 36px; height: 36px; border-radius: 9px; flex: none;
   display: grid; place-items: center;
-  font-size: 14px; font-weight: 800; color: var(--bg-deep);
+  font-size: 15px; font-weight: 800; color: var(--bg-deep);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .ht-meta {
-  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 9px;
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px;
+  flex-wrap: wrap; row-gap: 4px;
 }
 .ht-name {
   font-size: var(--t-md); font-weight: 650; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: -0.01em; max-width: 100%;
 }
+/* Badge de rol — icono + texto. La diferencia ADMIN vs MIEMBRO se ve
+   sin leer (Shield acento / Users muted), y con texto (a11y). */
 .ht-rol {
-  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
-  background: var(--bg); padding: 2px 7px; border-radius: 999px;
-  border: 1px solid var(--border-soft); flex: none;
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+  background: var(--bg); padding: 3px 9px 3px 7px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
 }
-.hub-team:hover .ht-rol { color: var(--accent); border-color: var(--accent-soft); }
+.ht-rol svg { display: block; opacity: 0.9; }
+.ht-rol.r-admin {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: var(--accent-weak);
+}
+.ht-rol.r-member { color: var(--muted); }
+.hub-team:hover .ht-rol.r-member { color: var(--text-2); border-color: var(--border); }
+/* "Abrir" — antes texto plano "abrir →"; ahora pill con chevron animado.
+   Esta es la afordancia que el testing real pidió: el botón completo era
+   clicable, pero los usuarios nuevos no se atrevían a tocarlo sin un CTA
+   visible. La pill no roba foco (la card sigue siendo el botón), solo
+   *anuncia* que algo va a pasar. */
 .ht-go {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  letter-spacing: 0.06em; color: var(--faint); flex: none;
-  transition: color var(--tr), transform var(--tr);
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint);
+  padding: 5px 10px 5px 12px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border-soft);
+  transition: color var(--tr), background var(--tr),
+    border-color var(--tr), transform var(--tr);
 }
-.hub-team:hover .ht-go { color: var(--accent); transform: translateX(2px); }
+.ht-go svg { transition: transform var(--tr); }
+.ht-go-tx {
+  /* En tarjetas estrechas escondemos el texto, dejamos solo el icono.
+     La a11y queda cubierta por aria-label de la tarjeta. */
+}
+.hub-team:hover .ht-go {
+  color: var(--accent-ink, var(--bg-deep));
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.hub-team:hover .ht-go svg { transform: translateX(3px); }
+@media (max-width: 540px) {
+  .ht-go-tx { display: none; }
+  .ht-go { padding: 5px 8px; }
+}
 
-/* Empty-state: ahora con jerarquía interna (b + span). */
+/* Empty-state: ahora con icono guía + texto + flecha al CTA. La flecha
+   apunta al formulario "crear o unirme" — redundancia útil para usuarios
+   que no exploran columnas. */
 .hub-empty {
-  display: flex; flex-direction: column; gap: 6px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px;
   font-size: var(--t-sm); color: var(--muted); line-height: 1.6;
-  padding: 1.1rem 1.2rem; border-radius: var(--r);
+  padding: 1.15rem 1.25rem; border-radius: var(--r);
   background: rgba(0, 0, 0, 0.22);
   border: 1px dashed var(--border);
 }
+.hub-empty-ic {
+  display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: 11px; flex: none;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-soft);
+}
+.hub-empty-tx { display: flex; flex-direction: column; gap: 6px; }
 .hub-empty b {
   font-size: var(--t-md); font-weight: 700; color: var(--text);
   letter-spacing: -0.01em;
+}
+.hub-empty-arrow {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent);
+  padding: 6px 11px; border-radius: 999px;
+  background: var(--accent-weak); border: 1px solid var(--accent-soft);
+  animation: hub-empty-pulse 2.6s ease-in-out infinite;
+}
+.hub-empty-arrow svg { color: var(--accent); }
+@keyframes hub-empty-pulse {
+  0%, 100% { transform: translateX(0); opacity: 0.95; }
+  50%      { transform: translateX(2px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub-empty-arrow { animation: none; }
+}
+@media (max-width: 600px) {
+  .hub-empty { grid-template-columns: auto 1fr; }
+  .hub-empty-arrow { grid-column: 1 / -1; justify-self: flex-start; }
+}
+/* Botón "volver al equipo previo" en la cabecera del Hub — ahora con icono. */
+.hub-back {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  background: transparent; border: 1px solid var(--border-soft);
+  padding: 5px 11px 5px 9px; border-radius: 999px;
+  cursor: pointer; transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.hub-back:hover { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-weak); }
+.hub-back:focus-visible {
+  outline: none; color: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
 }
 
 /* ── IDENTIDAD: avatar grande + KPIs + nota. */
@@ -2010,6 +2186,28 @@ button:active { transform: translateY(1px); }
 .ctx-mode .ctx-arrow { font-style: normal; opacity: 0.65; padding: 0 1px; }
 .ctx-div { width: 1px; align-self: stretch; margin: 0.28rem 0.15rem; background: var(--border-soft); }
 .ctx-mut { color: var(--faint); font-size: var(--t-xs); }
+/* Chip de borrador no-enviado — vive a la derecha del chip de modo cuando
+   el usuario está proponiendo y todavía no ha pulsado Ctrl+S. Tono ámbar
+   (warn) porque indica "trabajo en local" — distinto del "modo" (info).
+   El texto es un atajo, no un nombre: convierte el chip en una pista
+   accionable. */
+.ctx-draft {
+  display: inline-flex; align-items: center; gap: 0.42rem;
+  font-size: var(--t-xs); font-weight: 700; line-height: 1;
+  padding: 0.28rem 0.62rem; border-radius: var(--r-sm);
+  background: var(--warn-bg); color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  letter-spacing: -0.005em; flex-shrink: 0;
+  animation: ctx-draft-pulse 2.8s ease-in-out infinite;
+}
+.ctx-draft svg { flex-shrink: 0; }
+@keyframes ctx-draft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 30%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctx-draft { animation: none; }
+}
 .otag.r-baja { background: var(--surface-2); color: var(--faint); }
 .otag.r-media { background: var(--warn-bg); color: var(--warn); }
 .otag.r-alta { background: var(--bad-bg); color: var(--bad); }
@@ -2650,16 +2848,35 @@ select:focus-visible,
   .tb-hub span { display: none; }  /* solo el icono */
 }
 
-/* ── Modal de confirmación al "volver al hub" con drafts ── */
-.cnf-modal { max-width: 420px; }
-.cnf-h { color: var(--warn); }
-.cnf-desc { color: var(--text); padding-top: 0.8rem; }
+/* ── Modal de confirmación: usado por ConfirmarSalida y ConfirmDialog.
+   El componente reusable tiñe el header según `tone` y el botón primario
+   según `tone` también — un único bloque CSS para todas las
+   confirmaciones del producto. */
+.cnf-modal { max-width: 460px; }
+.cnf-h { display: inline-flex; align-items: center; gap: 8px; color: var(--warn); }
+.cnf-h svg { color: var(--warn); }
+.cnf-desc { color: var(--text); padding-top: 0.8rem; line-height: 1.55; }
+/* Tono "danger" (eliminar, push fuerza). Rojo PROFESIONAL: borde + fondo
+   suave, sin grito visual. Mismo "anillo" en focus que el resto del UI. */
 .modal-foot button.primario.danger {
   background: var(--bad);
   color: #fff;
   border-color: var(--bad);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12),
+    0 8px 22px -14px rgba(232, 99, 111, 0.7);
 }
-.modal-foot button.primario.danger:hover { filter: brightness(1.06); }
+.modal-foot button.primario.danger:hover:not(:disabled) { filter: brightness(1.06); }
+.modal-foot button.primario.danger:focus-visible {
+  outline: 2px solid var(--bad); outline-offset: 2px;
+}
+/* Tono "warn" (clonar y reemplazar workspace). Ambar sobrio. */
+.modal-foot button.primario.warn {
+  background: var(--warn); color: #14110a; border-color: var(--warn);
+}
+.modal-foot button.primario.warn:hover:not(:disabled) { filter: brightness(1.05); }
+.modal-foot button.primario.warn:focus-visible {
+  outline: 2px solid var(--warn); outline-offset: 2px;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    ACCESO v3 (capa 29+) — Login y Register separados en una sola pantalla.
@@ -3267,33 +3484,56 @@ select:focus-visible,
   font-style: italic;
 }
 
-/* Toast: aparece abajo-derecha, no roba foco, desaparece sola. Pensado para
-   confirmar visualmente un atajo (cuando el ojo no estaba en el botón). */
+/* Toast: aparece abajo-derecha, no roba foco, desaparece sola. Bus global
+   en store.ts (emitToast); App.tsx renderiza el último. Tres tonos —
+   cada uno con borde + color suave para que el ojo lea el TIPO antes que
+   el contenido (verde = ok, ámbar = atención, rojo = falló). Iconito a la
+   izquierda como redundancia no-cromática (a11y daltonismo). */
 .kbd-toast {
   position: fixed;
   bottom: 32px;
   right: 24px;
   z-index: 2200;
-  padding: 0.55rem 0.85rem;
-  font: 600 12px/1.2 var(--font-base);
+  padding: 0.6rem 0.95rem;
+  font: 600 12.5px/1.25 var(--font-base);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--ok) 38%, transparent);
-  color: var(--ok);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   border-radius: var(--r-sm);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
-  animation: kbd-toast-in 180ms var(--ease-out, ease-out) both;
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  animation: kbd-toast-in 220ms var(--ease-in) both;
   pointer-events: none;
-  max-width: 60vw;
+  max-width: min(420px, 60vw);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.005em;
 }
-.kbd-toast.warn {
+.kbd-toast.t-ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.kbd-toast.t-warn {
   color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 38%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--warn) 12%, transparent);
 }
+.kbd-toast.t-bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--bad) 12%, transparent);
+}
+/* Compat: las dos clases viejas (.ok / .warn sueltas) siguen funcionando
+   por si quedó algún call site sin migrar. */
+.kbd-toast.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 38%, transparent); }
+.kbd-toast.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 38%, transparent); }
 @keyframes kbd-toast-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {

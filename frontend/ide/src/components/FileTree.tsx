@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { FolderOpen, KeyRound, ChevronRight } from "lucide-react";
+import { FolderOpen, KeyRound, ChevronRight, Trash2 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
-  seleccionar, borrar,
+  seleccionar, borrar, emitToast,
   impactosQueAfectan, propuestasDe, severidadMax,
   type Peer,
 } from "../store";
 import { arbol, chipDe, inicial, type Nodo } from "../lang";
 import { useI18n } from "../i18n";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 function Chip({ path }: { path: string }) {
   const c = chipDe(path);
@@ -35,6 +36,10 @@ export function FileTree() {
   const s = useStore();
   const { t } = useI18n();
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
+  // Modal de confirmación al borrar — reemplaza window.confirm() (mismo
+  // mensaje, mejor presentación + a11y). `confirmDel` guarda el path en
+  // espera de confirmación; null = sin modal.
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const paths = Object.keys(s.files);
 
   if (paths.length === 0) {
@@ -143,15 +148,39 @@ export function FileTree() {
               </span>
             ))}
           </span>
-          <button className="delx" title={t.ft_delete_title(f.path)}
+          <button className="delx"
+            title={t.ft_delete_title(f.path)}
+            aria-label={t.ft_delete_title(f.path)}
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(t.ft_delete_confirm(f.path))) borrar(f.path);
-            }}>✕</button>
+              setConfirmDel(f.path);
+            }}>
+            <Trash2 size={11} />
+          </button>
         </li>
       );
     }
   };
   pintar(arbol(paths), "", 0);
-  return <ul className="tree">{filas}</ul>;
+  return (
+    <>
+      <ul className="tree">{filas}</ul>
+      {confirmDel && (
+        <ConfirmDialog
+          title={t.confirm_delete_title}
+          message={t.confirm_delete_msg(confirmDel)}
+          okLabel={t.confirm_delete_ok}
+          cancelLabel={t.confirm_default_cancel}
+          tone="danger"
+          onCancel={() => setConfirmDel(null)}
+          onConfirm={() => {
+            const p = confirmDel;
+            setConfirmDel(null);
+            borrar(p);
+            emitToast(t.toast_delete_done(p), "ok");
+          }}
+        />
+      )}
+    </>
+  );
 }

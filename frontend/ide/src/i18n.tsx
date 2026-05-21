@@ -67,6 +67,7 @@ export const T = {
     reg_desc: "Elige un usuario y contraseña. Tu identidad queda lista para entrar a equipos.",
     reg_user_label: "Usuario",
     reg_user_placeholder: "elige un usuario",
+    reg_user_hint: "Mínimo 2 caracteres. Letras, números y · _ - @ +",
     reg_pass_label: "Contraseña",
     reg_pass_placeholder: "mínimo 6 caracteres",
     reg_pass2_label: "Confirma la contraseña",
@@ -159,9 +160,18 @@ export const T = {
     hub_teams_eyebrow: "tus equipos",
     hub_teams_empty: "aún vacío",
     hub_teams_hint: "elige uno para abrir su workspace",
-    hub_open: "abrir →",
+    hub_open: "abrir →", // compat: lo dejamos por si algún call site externo lo usa
+    hub_open_short: "abrir",
+    hub_open_title: "abrir el workspace de este equipo",
+    hub_open_aria: (nombre: string, rol: string) =>
+      `abrir workspace de ${nombre} — entras como ${rol}`,
+    hub_role_admin_label: "Admin",
+    hub_role_member_label: "Miembro",
+    hub_role_admin_title: "Tienes permisos de admin en este equipo",
+    hub_role_member_title: "Colaboras en este equipo (sin permisos de admin)",
     hub_empty_title: "Aún no estás en ningún equipo.",
     hub_empty_desc: "Crea uno (quedas como admin) o únete con un código que te pasó un admin. Otro equipo no existe para ti hasta que estés dentro del tuyo.",
+    hub_empty_arrow: "Empieza por aquí",
     hub_id_eyebrow: "tu identidad",
     hub_kpi_team: "equipo",
     hub_kpi_teams: "equipos",
@@ -202,6 +212,10 @@ export const T = {
     tb_signout: "salir",
     tb_hub: "hub",
     tb_hub_title: "volver al hub (sin cerrar sesión)",
+    tb_more_peers: (n: number) => `+${n} ${n === 1 ? "persona más" : "personas más"} en el equipo`,
+    tb_aria_connected: "Conectado al servidor de coordinación.",
+    tb_aria_connecting: "Conectando con el servidor…",
+    tb_aria_offline: "Sin conexión con el servidor. La presencia y las propuestas en vivo no funcionan hasta restablecerla.",
 
     // Invite modal
     inv_title: "invitar a este equipo",
@@ -297,6 +311,8 @@ export const T = {
     ctx_live_title: "editas directo: tus cambios se aplican en vivo",
     ctx_mode_prop: "modo propuesta",
     ctx_mode_live: "edición directa",
+    ctx_draft_label: "Ctrl+S para enviar",
+    ctx_draft_title: "Tienes cambios locales sin enviar. Pulsa Ctrl+S para que el dueño los reciba como propuesta.",
     ctx_prop_note: (name: string) =>
       "pulsa Ctrl+S para enviar la propuesta a " + name,
     ctx_alone: "solo aquí",
@@ -407,6 +423,15 @@ export const T = {
     ed_team_alone: "tú solo en este archivo",
     ed_team_count: (n: number) => n === 1 ? "1 en vivo aquí" : `${n} en vivo aquí`,
     ed_team_tooltip: "personas editando este archivo ahora",
+    // Empty-state del editor — diferenciado: workspace vacío vs archivo sin abrir.
+    ed_empty_ws_title: "Workspace listo, sin archivos todavía",
+    ed_empty_ws_sub: "Crea el primero y los demás del equipo lo verán al instante. Cada archivo es un commit Git real — git clone sigue bastando.",
+    ed_empty_ws_cta: "Crear primer archivo",
+    ed_empty_nofile_title: "Elige un archivo o crea uno nuevo",
+    ed_empty_nofile_sub: "Al abrir un archivo verás presencia por línea, ownership e impacto en el inspector. El editor responde a estos atajos:",
+    ed_empty_tip_save: "marcar punto coherente · enviar propuesta",
+    ed_empty_tip_review: "aprobar / rechazar propuesta abierta",
+    ed_empty_tip_help: "abrir hoja de atajos",
 
     // TopBar avatar contexto
     tb_peer_in_file: (file: string) => "en " + file,
@@ -447,6 +472,7 @@ export const T = {
     stb_spaces: "4 esp · UTF-8",
 
     // Tabs
+    tab_no_file: "sin archivo abierto",
     tab_close: "cerrar archivo",
     tab_close_dirty: "este archivo tiene cambios sin marcar — pulsa Ctrl+S antes de cerrar",
     tab_own_mine: "tuyo · editas directo",
@@ -497,6 +523,30 @@ export const T = {
     kbd_toast_no_targets: "ningún archivo con propuestas para ti",
     kbd_btn_hint_approve: "aprobar (Alt+A)",
     kbd_btn_hint_reject: "rechazar (Alt+R)",
+
+    // Toast — feedback de Ctrl+S y acciones silenciosas. Los textos cortos
+    // a propósito: cápsula de 1 línea que el ojo lee en 0,3 s.
+    toast_save_analyzed: "✓ punto guardado · análisis al día",
+    toast_save_proposed: (path: string) => `✓ propuesta enviada · ${path.split("/").pop()}`,
+    toast_save_clean: "todo al día",
+    toast_save_no_file: "no hay archivo abierto que guardar",
+    toast_clone_started: "clonando workspace…",
+    toast_delete_done: (path: string) => `archivo eliminado · ${path.split("/").pop()}`,
+    toast_invite_copied: "código copiado al portapapeles",
+    toast_invite_failed: "no pude copiar — selecciona el código y Ctrl+C",
+
+    // ConfirmDialog — diálogo genérico para acciones destructivas (sustituye
+    // a window.confirm que no es accesible ni se puede estilar).
+    confirm_default_ok: "continuar",
+    confirm_default_cancel: "cancelar",
+    confirm_delete_title: "eliminar archivo",
+    confirm_delete_msg: (path: string) =>
+      `Vas a eliminar "${path}" del workspace. La acción se ve en todo el equipo y deja un commit. Si nadie clonó luego, queda en el historial Git.`,
+    confirm_delete_ok: "eliminar",
+    confirm_clone_title: "clonar y reemplazar workspace",
+    confirm_clone_msg:
+      "Esto reemplaza TODO el workspace con el remoto indicado. Los drafts, propuestas y ownership del equipo se reinician. Solo el admin debería hacerlo.",
+    confirm_clone_ok: "clonar y reemplazar",
   },
 
   en: {
@@ -552,6 +602,7 @@ export const T = {
     reg_desc: "Pick a username and password. Your identity will be ready to join teams.",
     reg_user_label: "Username",
     reg_user_placeholder: "pick a username",
+    reg_user_hint: "Minimum 2 characters. Letters, digits and · _ - @ +",
     reg_pass_label: "Password",
     reg_pass_placeholder: "minimum 6 characters",
     reg_pass2_label: "Confirm password",
@@ -645,8 +696,17 @@ export const T = {
     hub_teams_empty: "still empty",
     hub_teams_hint: "choose one to open its workspace",
     hub_open: "open →",
+    hub_open_short: "open",
+    hub_open_title: "open this team's workspace",
+    hub_open_aria: (nombre: string, rol: string) =>
+      `open ${nombre} workspace — you enter as ${rol}`,
+    hub_role_admin_label: "Admin",
+    hub_role_member_label: "Member",
+    hub_role_admin_title: "You have admin rights in this team",
+    hub_role_member_title: "You collaborate in this team (no admin rights)",
     hub_empty_title: "You're not in any team yet.",
     hub_empty_desc: "Create one (you become admin) or join with a code from an admin. Another team doesn't exist for you until you're inside yours.",
+    hub_empty_arrow: "Start here",
     hub_id_eyebrow: "your identity",
     hub_kpi_team: "team",
     hub_kpi_teams: "teams",
@@ -687,6 +747,10 @@ export const T = {
     tb_signout: "sign out",
     tb_hub: "hub",
     tb_hub_title: "back to hub (keep session)",
+    tb_more_peers: (n: number) => `+${n} more ${n === 1 ? "person" : "people"} in the team`,
+    tb_aria_connected: "Connected to the coordination server.",
+    tb_aria_connecting: "Connecting to the server…",
+    tb_aria_offline: "No connection to the server. Live presence and proposals don't work until it's back.",
 
     // Invite modal
     inv_title: "invite to this team",
@@ -782,6 +846,8 @@ export const T = {
     ctx_live_title: "you edit directly: your changes apply live",
     ctx_mode_prop: "proposal mode",
     ctx_mode_live: "direct edit",
+    ctx_draft_label: "Ctrl+S to send",
+    ctx_draft_title: "You have unsent local changes. Press Ctrl+S so the owner receives them as a proposal.",
     ctx_prop_note: (name: string) =>
       "press Ctrl+S to send the proposal to " + name,
     ctx_alone: "only you here",
@@ -892,6 +958,15 @@ export const T = {
     ed_team_alone: "you alone in this file",
     ed_team_count: (n: number) => n === 1 ? "1 live here" : `${n} live here`,
     ed_team_tooltip: "people editing this file right now",
+    // Editor empty-state — distinguishes empty workspace vs no-file-open.
+    ed_empty_ws_title: "Workspace ready, no files yet",
+    ed_empty_ws_sub: "Create the first one and the team sees it instantly. Each file is a real Git commit — git clone is still enough.",
+    ed_empty_ws_cta: "Create first file",
+    ed_empty_nofile_title: "Pick a file or create a new one",
+    ed_empty_nofile_sub: "Once you open a file you'll see per-line presence, ownership and impact in the inspector. The editor responds to these shortcuts:",
+    ed_empty_tip_save: "checkpoint · send proposal",
+    ed_empty_tip_review: "approve / reject open proposal",
+    ed_empty_tip_help: "open shortcuts sheet",
 
     // TopBar avatar context
     tb_peer_in_file: (file: string) => "in " + file,
@@ -932,6 +1007,7 @@ export const T = {
     stb_spaces: "4 spc · UTF-8",
 
     // Tabs
+    tab_no_file: "no file open",
     tab_close: "close file",
     tab_close_dirty: "this file has unmarked changes — press Ctrl+S before closing",
     tab_own_mine: "yours · you edit directly",
@@ -977,6 +1053,28 @@ export const T = {
     kbd_toast_no_targets: "no file with proposals for you",
     kbd_btn_hint_approve: "approve (Alt+A)",
     kbd_btn_hint_reject: "reject (Alt+R)",
+
+    // Toast — Ctrl+S feedback and silent actions.
+    toast_save_analyzed: "✓ checkpoint saved · analysis up to date",
+    toast_save_proposed: (path: string) => `✓ proposal sent · ${path.split("/").pop()}`,
+    toast_save_clean: "all up to date",
+    toast_save_no_file: "no open file to save",
+    toast_clone_started: "cloning workspace…",
+    toast_delete_done: (path: string) => `file deleted · ${path.split("/").pop()}`,
+    toast_invite_copied: "invite code copied to clipboard",
+    toast_invite_failed: "couldn't copy — select the code and Ctrl+C",
+
+    // ConfirmDialog — generic destructive-action dialog (replaces native confirm).
+    confirm_default_ok: "continue",
+    confirm_default_cancel: "cancel",
+    confirm_delete_title: "delete file",
+    confirm_delete_msg: (path: string) =>
+      `You're about to delete "${path}" from the workspace. The action is visible to the whole team and leaves a commit. If nobody re-clones, it stays in the Git history.`,
+    confirm_delete_ok: "delete",
+    confirm_clone_title: "clone and replace workspace",
+    confirm_clone_msg:
+      "This replaces the ENTIRE workspace with the given remote. Drafts, proposals and ownership reset. Only the admin should do this.",
+    confirm_clone_ok: "clone and replace",
   },
 } as const;
 

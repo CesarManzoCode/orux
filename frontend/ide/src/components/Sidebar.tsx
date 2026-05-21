@@ -4,10 +4,11 @@ import {
   GitBranch, DownloadCloud, UploadCloud,
 } from "lucide-react";
 import { useStore } from "../useStore";
-import { commitear, gitRefresh, clonar, pushear } from "../store";
+import { commitear, gitRefresh, clonar, pushear, emitToast } from "../store";
 import { useI18n } from "../i18n";
 import { FileTree } from "./FileTree";
 import { NuevoArchivoModal } from "./NuevoArchivoModal";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 function PanelArchivos() {
   const { t } = useI18n();
@@ -40,6 +41,8 @@ function PanelGit() {
   const [user, setUser] = useState("");
   const [tok, setTok] = useState("");
   const [rama, setRama] = useState("");
+  // Reemplaza window.confirm() del clone — modal estilizado y accesible.
+  const [pidiendoClone, setPidiendoClone] = useState(false);
 
   return (
     <div className="gitp">
@@ -111,9 +114,7 @@ function PanelGit() {
             <div className="remacc">
               <button className="no" onClick={() => {
                 if (!url.trim()) return;
-                if (!confirm(t.sg_clone_confirm)) return;
-                clonar(url.trim(), user.trim(), tok);
-                setTok("");
+                setPidiendoClone(true);
               }}>
                 <DownloadCloud size={12} style={{ verticalAlign: "-2px" }} /> {t.sg_clone_btn}
               </button>
@@ -122,6 +123,22 @@ function PanelGit() {
               </button>
             </div>
           </div>
+          {pidiendoClone && (
+            <ConfirmDialog
+              title={t.confirm_clone_title}
+              message={t.confirm_clone_msg}
+              okLabel={t.confirm_clone_ok}
+              cancelLabel={t.confirm_default_cancel}
+              tone="warn"
+              onCancel={() => setPidiendoClone(false)}
+              onConfirm={() => {
+                setPidiendoClone(false);
+                clonar(url.trim(), user.trim(), tok);
+                setTok("");
+                emitToast(t.toast_clone_started, "ok");
+              }}
+            />
+          )}
         </>
       )}
     </div>

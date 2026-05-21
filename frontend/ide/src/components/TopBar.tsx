@@ -72,6 +72,12 @@ export function TopBar({
   const clase =
     s.conn === "conectado" ? "status ok"
     : s.conn === "conectando" ? "status" : "status bad";
+  // Texto descriptivo para lectores de pantalla. La pista visual es un
+  // LED que cambia de color; el aria-label hace el cambio audible.
+  const connAriaLabel =
+    s.conn === "conectado" ? t.tb_aria_connected
+    : s.conn === "conectando" ? t.tb_aria_connecting
+    : t.tb_aria_offline;
 
   const otros = Object.values(s.peers).filter(
     (p) => !s.yo || p.client_id !== s.yo.client_id,
@@ -152,6 +158,8 @@ export function TopBar({
               <span
                 className="av mas"
                 title={otros.slice(visibles.length).map((p) => p.name).join(", ")}
+                aria-label={t.tb_more_peers(extra) + " · " +
+                  otros.slice(visibles.length).map((p) => p.name).join(", ")}
               >+{extra}</span>
             )}
           </span>
@@ -192,7 +200,12 @@ export function TopBar({
             <UserPlus size={12} /> {t.tb_invite}
           </button>
         )}
-        <span className={clase}>{ETIQUETA[s.conn] ?? ETIQUETA.conectando}</span>
+        <span
+          className={clase}
+          role="status"
+          aria-live="polite"
+          aria-label={connAriaLabel}
+        >{ETIQUETA[s.conn] ?? ETIQUETA.conectando}</span>
       </div>
 
       <span className="tb-div" />

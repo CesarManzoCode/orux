@@ -1,4 +1,4 @@
-import { KeyRound, Radio, Waypoints, Pencil, GitPullRequest } from "lucide-react";
+import { KeyRound, Radio, Waypoints, Pencil, GitPullRequest, Send } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   reclamar, nombreDe, impactosQueAfectan, severidadMax, presentesEn,
@@ -16,6 +16,11 @@ export function ContextBar() {
   const esMio = s.yo && due === s.yo.client_id;
   const riesgo = severidadMax(impactosQueAfectan(path));
   const proponiendo = !!due && !esMio;
+  // ✱ Borrador: el usuario escribió en un archivo de OTRO dueño y aún
+  // no pulsó Ctrl+S. Lo que escribió vive SOLO en su navegador —
+  // hacer esto visible en la ContextBar elimina la pregunta "¿se está
+  // viendo lo que escribo?" del testing real (capa 28).
+  const tieneDraft = !!s.drafts[path];
 
   return (
     <div className="ctxbar">
@@ -34,6 +39,16 @@ export function ContextBar() {
       {proponiendo && (
         <span className="ctx-nota">
           {t.ctx_prop_note(nombreDe(due!))}
+        </span>
+      )}
+
+      {tieneDraft && (
+        <span
+          className="ctx-draft"
+          title={t.ctx_draft_title}
+        >
+          <Send size={11} />
+          {t.ctx_draft_label}
         </span>
       )}
 

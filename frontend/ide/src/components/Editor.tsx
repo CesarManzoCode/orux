@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
-import { Radio } from "lucide-react";
+import { Radio, FilePlus2, Sparkles } from "lucide-react";
 import { useStore } from "../useStore";
 import { editar, guardar, presence, setCaret } from "../store";
 import { resaltar, guiasIndent } from "../lang";
 import { proyectar, vistaAFull, fullAVista, cabeceras } from "../plegado";
 import { useI18n } from "../i18n";
+import { NuevoArchivoModal } from "./NuevoArchivoModal";
 
 // Mismo mecanismo que el cliente vanilla: textarea REAL transparente
 // encima, capas sincronizadas detrás/encima por scroll. El textarea
@@ -54,6 +55,11 @@ export function Editor() {
   // archivo (no se persiste entre sesiones, decisión del usuario).
   const [folds, setFolds] = useState<Set<number>>(new Set());
   useEffect(() => { setFolds(new Set()); }, [path]);
+  // Modal "nuevo archivo" — el editor lo abre desde su empty state para
+  // que el usuario no tenga que cazar el botón en el sidebar. Mismo
+  // componente, mismo flujo.
+  const [nuevoOpen, setNuevoOpen] = useState(false);
+  const wsVacio = Object.keys(s.files).length === 0;
 
   // Proyección: única fuente de geometría. La recalculan `valor`
   // (cambios locales/remotos) y `folds` (clicks en las flechas).
@@ -347,6 +353,62 @@ export function Editor() {
 
   return (
     <div className={"editorwrap" + (path ? "" : " off")}>
+      {/* Empty-state real (React, no CSS::after) — diferencia los dos casos
+          de vacío para que el usuario sepa exactamente qué hacer:
+            · workspace SIN archivos → primario "Crear primer archivo" + 4
+              líneas de onboarding (ejemplos típicos para Python/JS/Go);
+            · workspace con archivos → invitación a elegir uno + atajo de
+              Ctrl+S como pista del flujo del producto.
+          La capa CSS de fondo (blueprint + viñeta) sigue intacta. */}
+      {!path && (
+        <div className="ed-empty" role="status" aria-live="polite">
+          <div className="ed-empty-card">
+            <div className="ed-empty-ic" aria-hidden>
+              {wsVacio ? <FilePlus2 size={22} /> : <Sparkles size={22} />}
+            </div>
+            <h2 className="ed-empty-tit">
+              {wsVacio ? t.ed_empty_ws_title : t.ed_empty_nofile_title}
+            </h2>
+            <p className="ed-empty-sub">
+              {wsVacio ? t.ed_empty_ws_sub : t.ed_empty_nofile_sub}
+            </p>
+            {wsVacio ? (
+              <>
+                <button
+                  type="button"
+                  className="ed-empty-cta"
+                  onClick={() => setNuevoOpen(true)}
+                  autoFocus
+                >
+                  <FilePlus2 size={14} /> {t.ed_empty_ws_cta}
+                </button>
+                <ul className="ed-empty-ex">
+                  <li><code>README.md</code></li>
+                  <li><code>src/main.py</code></li>
+                  <li><code>app/index.ts</code></li>
+                  <li><code>docs/notas.md</code></li>
+                </ul>
+              </>
+            ) : (
+              <ul className="ed-empty-tips">
+                <li>
+                  <kbd>Ctrl</kbd> + <kbd>S</kbd>
+                  <span>{t.ed_empty_tip_save}</span>
+                </li>
+                <li>
+                  <kbd>Alt</kbd> + <kbd>A</kbd> / <kbd>R</kbd>
+                  <span>{t.ed_empty_tip_review}</span>
+                </li>
+                <li>
+                  <kbd>?</kbd>
+                  <span>{t.ed_empty_tip_help}</span>
+                </li>
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+      {nuevoOpen && <NuevoArchivoModal onClose={() => setNuevoOpen(false)} />}
       <div className="ed-active" ref={activaRef} style={{ display: path ? "block" : "none" }} />
       <pre className="ed-hl" aria-hidden="true"><code ref={codeRef} /></pre>
       {path && (
@@ -399,7 +461,7 @@ export function Editor() {
         ref={taRef}
         spellCheck={false}
         disabled={!path}
-        placeholder="seleccioná un archivo o creá uno nuevo"
+        placeholder={t.ed_empty_nofile_title}
         value={proj.vista}
         onChange={onChange}
         onKeyDown={onKeyDown}

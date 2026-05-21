@@ -346,6 +346,13 @@ export function App() {
               </a>
               <a className="btn ghost lg" href="#como">{t.hero_cta_secondary}</a>
             </motion.div>
+            {/* Pill de tiempo-a-valor justo bajo el CTA: empuja la sensación
+                "es rapidísimo entrar" sin gritar — el usuario ya leyó el
+                pitch, ahora le decimos cuánto cuesta probarlo. */}
+            <motion.div className="hero-time" variants={fadeUp} aria-hidden>
+              <span className="hero-time-dot" />
+              <span>{t.hero_time}</span>
+            </motion.div>
             <motion.p className="hero-micro" variants={fadeUp}>{t.hero_micro}</motion.p>
             <motion.div className="signals" variants={fadeUp}>
               <span className="sig">{t.hero_sig1} <b>{t.hero_sig1_b}</b></span>

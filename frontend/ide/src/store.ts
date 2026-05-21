@@ -113,6 +113,28 @@ export function subscribe(l: () => void) {
 }
 export function getState() { return state; }
 
+// ── Toast emitter (cliente puro, fuera del estado React) ────────────────
+// Pequeño bus pub/sub para que acciones del store (guardar, clonar, borrar)
+// puedan pedir feedback visual sin acoplarse a React. `App.tsx` se suscribe
+// una sola vez y renderiza la última notificación. Tres tonos:
+//   ok    → confirmación de acción exitosa (Ctrl+S, propuesta enviada)
+//   warn  → advertencia neutra (no hay drafts para guardar)
+//   bad   → falló algo (error de copia, push rechazado, etc.)
+// El emisor mantiene la i18n FUERA del store: el caller pasa el texto ya
+// traducido. Eso es a propósito — el store no debe conocer idiomas.
+export type ToastTone = "ok" | "warn" | "bad";
+export interface Toast { id: number; text: string; tone: ToastTone; ts: number }
+let toastSeq = 0;
+const toastListeners = new Set<(t: Toast) => void>();
+export function subscribeToasts(cb: (t: Toast) => void): () => void {
+  toastListeners.add(cb);
+  return () => { toastListeners.delete(cb); };
+}
+export function emitToast(text: string, tone: ToastTone = "ok"): void {
+  const t: Toast = { id: ++toastSeq, text, tone, ts: Date.now() };
+  toastListeners.forEach((l) => l(t));
+}
+
 // --- Capa 26: bitácora de coordinación (cliente puro) ---
 let actSeq = 0;
 const ACT_CAP = 80;          // techo: es un feed, no un historial

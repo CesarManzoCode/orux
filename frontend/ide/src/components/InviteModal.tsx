@@ -6,7 +6,7 @@
 // — sólo lo presentamos.
 import { useEffect, useRef, useState } from "react";
 import { Copy, Check, RefreshCw, X } from "lucide-react";
-import { crearInvite } from "../store";
+import { crearInvite, emitToast } from "../store";
 import { copiarTexto } from "../validate";
 import { useI18n } from "../i18n";
 import { ModalPortal } from "./ModalPortal";
@@ -44,6 +44,14 @@ export function InviteModal({
   const onCopiar = async () => {
     const ok = await copiarTexto(code);
     setEstado(ok ? "ok" : "failed");
+    // Doble feedback: el botón cambia a "copiado" (afordancia local que
+    // el ojo ya estaba mirando) Y un toast confirma a quien no apuntaba
+    // al botón (accesibilidad lector de pantalla incluida vía role=status
+    // en App.tsx).
+    emitToast(
+      ok ? t.toast_invite_copied : t.toast_invite_failed,
+      ok ? "ok" : "bad",
+    );
     if (ok) setTimeout(() => setEstado("idle"), 1500);
   };
 

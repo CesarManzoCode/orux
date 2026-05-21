@@ -4,7 +4,15 @@
 // validación de nombre (rechaza HTML/control/exceso ANTES de molestar al
 // server), estados busy/feedback en los CTAs, y limpia el input tras error
 // para que el segundo intento sea limpio.
+//
+// Pasada 2026-05-20: badges de rol con icono (Shield/Users) — la palabra
+// "admin"/"member" sola era texto plano sin jerarquía. El botón "Abrir"
+// pasa de "abrir →" en miniatura a una afordancia visible (icono pill
+// que se anima al hover): el testing real mostró que usuarios nuevos no
+// pulsaban la tarjeta por miedo a no saber qué hacía. Navegación por
+// teclado: la tarjeta ya es `<button>`; Enter/Space abren.
 import { useEffect, useRef, useState } from "react";
+import { Shield, Users, ChevronRight, ArrowRight, ArrowLeft } from "lucide-react";
 import { useStore } from "../useStore";
 import { crearEquipo, redimirInvite, seleccionarEquipo, salir } from "../store";
 import { validarNombreEquipo, normalizarNombreEquipo } from "../validate";
@@ -136,8 +144,10 @@ export function Hub() {
               className="hub-back"
               onClick={() => seleccionarEquipo(equipoAnterior.id)}
               title={t.hub_back_team}
+              aria-label={t.hub_back_team + ": " + equipoAnterior.nombre}
             >
-              ← {equipoAnterior.nombre}
+              <ArrowLeft size={12} aria-hidden />
+              <span>{equipoAnterior.nombre}</span>
             </button>
           )}
           <span
@@ -177,32 +187,66 @@ export function Hub() {
           </header>
 
           {s.equipos.length > 0 ? (
-            <div className="hub-teams">
-              {s.equipos.map((e) => (
-                <button
-                  key={e.id}
-                  className="hub-team"
-                  onClick={() => seleccionarEquipo(e.id)}
-                >
-                  <span
-                    className="ht-ava"
-                    style={{ background: colorEquipo(e.id) }}
-                    aria-hidden
-                  >
-                    {(e.nombre || "?").trim().charAt(0).toUpperCase() || "?"}
-                  </span>
-                  <span className="ht-meta">
-                    <span className="ht-name">{e.nombre}</span>
-                    <span className="ht-rol">{e.rol}</span>
-                  </span>
-                  <span className="ht-go" aria-hidden>{t.hub_open}</span>
-                </button>
-              ))}
-            </div>
+            <ul className="hub-teams" role="list">
+              {s.equipos.map((e) => {
+                const esAdmin = e.rol === "admin";
+                // Texto del badge ya viene del i18n; el icono añade jerarquía
+                // visual y redundancia no-cromática (a11y daltonismo).
+                const rolLabel = esAdmin ? t.hub_role_admin_label : t.hub_role_member_label;
+                const rolTitle = esAdmin ? t.hub_role_admin_title : t.hub_role_member_title;
+                const ariaLabel = t.hub_open_aria(e.nombre, rolLabel);
+                return (
+                  <li key={e.id}>
+                    <button
+                      className="hub-team"
+                      onClick={() => seleccionarEquipo(e.id)}
+                      title={t.hub_open_title}
+                      aria-label={ariaLabel}
+                    >
+                      <span
+                        className="ht-ava"
+                        style={{ background: colorEquipo(e.id) }}
+                        aria-hidden
+                      >
+                        {(e.nombre || "?").trim().charAt(0).toUpperCase() || "?"}
+                      </span>
+                      <span className="ht-meta">
+                        <span className="ht-name">{e.nombre}</span>
+                        <span
+                          className={"ht-rol r-" + (esAdmin ? "admin" : "member")}
+                          title={rolTitle}
+                        >
+                          {esAdmin
+                            ? <Shield size={10} strokeWidth={2.3} aria-hidden />
+                            : <Users size={10} strokeWidth={2.3} aria-hidden />}
+                          {rolLabel}
+                        </span>
+                      </span>
+                      <span className="ht-go" aria-hidden>
+                        <span className="ht-go-tx">{t.hub_open_short}</span>
+                        <ChevronRight size={14} strokeWidth={2.4} />
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <div className="hub-empty">
-              <b>{t.hub_empty_title}</b>
-              <span>{t.hub_empty_desc}</span>
+              <div className="hub-empty-ic" aria-hidden>
+                <Users size={20} />
+              </div>
+              <div className="hub-empty-tx">
+                <b>{t.hub_empty_title}</b>
+                <span>{t.hub_empty_desc}</span>
+              </div>
+              {/* Pista visual hacia el formulario "crear o unirme". El usuario
+                  nuevo a veces no ve la columna derecha — esta flecha es
+                  redundancia útil. Pure decoration: aria-hidden. */}
+              <div className="hub-empty-arrow" aria-hidden>
+                <ArrowRight size={18} />
+                <span>{t.hub_empty_arrow}</span>
+              </div>
             </div>
           )}
         </section>

@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../useStore";
 import { autenticar } from "../store";
+import { validarUsuarioNuevo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
 import { LegalModal, type LegalDoc } from "./LegalModal";
 
@@ -70,13 +71,26 @@ export function Login() {
   const passCorto = modo === "register" && p.length > 0 && p.length < 6;
   const passDistinto =
     modo === "register" && p2.length > 0 && p !== p2;
+  // Validación de usuario EN VIVO al registrar — mismas reglas que el
+  // backend (identity/store.py). Devuelve el código de error o null si OK;
+  // lo mapeamos a i18n con la tabla MSG_USR. Para login NO validamos: cuentas
+  // viejas pudieron registrarse con reglas distintas.
+  const usuarioErr = modo === "register" && u.length > 0
+    ? validarUsuarioNuevo(u) : null;
+  const MSG_USR: Record<string, string> = {
+    muy_corto: t.login_user_short,
+    muy_largo: t.login_user_long,
+    empieza_mal: t.login_user_starts,
+    charset: t.login_user_charset,
+    reservado: t.login_user_reserved,
+  };
 
   const noPuede =
     busy ||
     usuarioVacio ||
     passVacio ||
     (modo === "register" && (
-      !aceptado || p.length < 6 || p !== p2
+      !aceptado || p.length < 6 || p !== p2 || !!usuarioErr
     ));
 
   const enviar = () => {
@@ -199,9 +213,23 @@ export function Login() {
               autoCapitalize="off" autoCorrect="off"
               spellCheck={false} maxLength={32}
               value={u} disabled={busy}
+              aria-invalid={!!usuarioErr}
+              aria-describedby={usuarioErr ? "lg-u-err" : "lg-u-hint"}
               onChange={(e) => setU(e.target.value)}
               onKeyDown={onEnter}
             />
+            {/* En register: si lo que escribió rompe una regla, lo decimos
+                EN VIVO; si todavía no escribió nada, mostramos la pista
+                con el charset permitido (autodescriptivo, evita el "?". */}
+            {modo === "register" && usuarioErr ? (
+              <div id="lg-u-err" className="fg-hint err">
+                {MSG_USR[usuarioErr] ?? t.login_user_charset}
+              </div>
+            ) : modo === "register" ? (
+              <div id="lg-u-hint" className="fg-hint">
+                {t.reg_user_hint}
+              </div>
+            ) : null}
           </div>
           <div className="fg">
             <label htmlFor="lg-p">
