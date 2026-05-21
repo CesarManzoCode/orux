@@ -2191,11 +2191,23 @@ button:active { transform: translateY(1px); }
 .insev.s-baja { background: var(--surface-2); color: var(--faint); }
 .insev.s-media { background: var(--warn-bg); color: var(--warn); }
 .insev.s-alta { background: var(--bad-bg); color: var(--bad); }
+.inimp-tx { flex: 1; min-width: 0; }
 .inimp-tx b { color: var(--text); }
 .inimp-tx code, .inpath {
   font-family: var(--font-mono); font-size: 11px; color: var(--accent);
 }
 .inpath { color: var(--muted); }
+/* Botón "visto" para descartar un aviso de impacto. Discreto: el aviso es el
+   contenido; la X solo se cosecha cuando el dueño decide. Hover sube
+   contraste para invitar el click sin gritar. */
+.inimp-x {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; border-radius: var(--r-sm);
+  background: transparent; color: var(--faint); cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.inimp-x:hover { background: var(--surface-2); color: var(--text); }
+.inimp-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .infeed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .infeed-i {
   display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.32rem 0;

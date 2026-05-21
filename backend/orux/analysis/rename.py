@@ -61,19 +61,61 @@ def _pelar(miembro: str) -> tuple[str, bool]:
     return miembro, False
 
 
+def _pelar_atrs(s: set[str]) -> set[tuple[str, bool]]:
+    """Convierte un set de miembros (mezcla `"foo()"` y `"bar"`) en pares
+    (nombre_pelado, es_método). Útil para comparar quitados↔agregados con
+    el mismo formato del que viene `atrs_instancia` (siempre atributos,
+    sin `()`)."""
+    return {_pelar(m) for m in s}
+
+
+def _init_consistente_con_rename(
+    a_init: str, d_init: str, viejo: str, nuevo: str
+) -> bool:
+    """¿El cambio del __init__ es SOLO el rename `viejo`→`nuevo`?
+
+    Capa 26b: cuando el rename detectado es un `self.X = X` que también
+    cambia su parámetro homónimo en `__init__` (lo más común al renombrar
+    un atributo en Python), el __init__ inevitablemente cambia su firma.
+    Antes la guardia descartaba ESE caso (el más típico). Ahora aceptamos
+    siempre que el cambio sea EXACTAMENTE renombrar `viejo`→`nuevo` y
+    nada más (sin agregar/quitar otros params: eso es un cambio mayor y
+    se mantiene fuera del codemod automático).
+
+    Equivale a: reemplazar el identificador `viejo` por `nuevo` en
+    `a_init` y comparar con `d_init`. Si coinciden, el __init__ cambió
+    SOLO en el rename. Cualquier otra diferencia (params agregados,
+    quitados, reordenados) → False.
+    """
+    if a_init == d_init:
+        return True  # no cambió: trivialmente consistente
+    patron = re.compile(r"\b" + re.escape(viejo) + r"\b")
+    return patron.sub(nuevo, a_init) == d_init
+
+
 def detectar_rename(
     antes: dict[str, Simbolo], despues: dict[str, Simbolo]
 ) -> Rename | None:
     """¿El cambio es un rename de miembro CONFIABLE? Si sí, cuál; si hay la
     más mínima duda, None (el sistema se comporta como hoy, no reescribe).
 
-    Confianza = inequívoco: una clase presente antes y después, su
-    constructor intacto, y su superficie cambió en EXACTAMENTE un miembro
-    quitado + un miembro agregado, del mismo tipo (ambos método o ambos
-    atributo). Eso casa 1:1 viejo->nuevo sin adivinar. Cualquier otra cosa
-    (2 cambios, cambió el __init__, no es clase, no parsea => dict vacío)
-    cae a None. Devuelve el PRIMer rename así (un save enfocado renombra una
-    cosa; multi-rename simultáneo es raro y queda para una capa futura).
+    Confianza = inequívoco: una clase presente antes y después; su
+    superficie + atributos de instancia cambiaron en EXACTAMENTE un
+    miembro quitado + un miembro agregado, del mismo tipo (ambos método
+    o ambos atributo); y si el `__init__` cambió, su cambio es EXACTO el
+    rename detectado (no se mezcló con otros cambios). Cualquier otra
+    cosa (2 cambios, no es clase, no parsea => dict vacío, __init__ con
+    cambios extra) cae a None. Devuelve el PRIMer rename así (un save
+    enfocado renombra una cosa; multi-rename simultáneo es raro y queda
+    para una capa futura).
+
+    Capa 26b (fix 2026-05-20, caso real del usuario): incluye atributos
+    de instancia (`self.X = Y`). Antes el detector solo miraba
+    `superficie` (cuerpo top-level de la clase), por lo que renombrar
+    `self.edad`→`self.asd` NUNCA podía ser detectado, aunque sea el caso
+    más común de "rename de miembro" en Python. Disciplina mantenida: la
+    detección sigue siendo conservadora (1↔1, mismo tipo, __init__
+    consistente), no se propone codemod sobre cambios mezclados.
     """
     for nombre, a in antes.items():
         d = despues.get(nombre)
@@ -84,19 +126,26 @@ def detectar_rename(
         # se arriesga un rename sobre un heurístico ciego.
         if a.tipo != "clase" or d.tipo != "clase":
             continue
-        # Si además cambió cómo se construye, NO es un rename limpio de
-        # miembro: es un cambio mayor -> que lo vea el impacto normal.
-        if a.init != d.init:
-            continue
-        quitados = a.superficie - d.superficie
-        agregados = d.superficie - a.superficie
+        # Unión: top-level (con `()` para métodos) + atributos de instancia
+        # (sin `()`). El `_pelar_atrs` los normaliza a (nombre, es_método)
+        # para que comparar quitados/agregados case el mismo "shape".
+        sup_a = _pelar_atrs(a.superficie) | {(x, False) for x in a.atrs_instancia}
+        sup_d = _pelar_atrs(d.superficie) | {(x, False) for x in d.atrs_instancia}
+        quitados = sup_a - sup_d
+        agregados = sup_d - sup_a
         if len(quitados) != 1 or len(agregados) != 1:
             continue
-        viejo, viejo_m = _pelar(next(iter(quitados)))
-        nuevo, nuevo_m = _pelar(next(iter(agregados)))
+        (viejo, viejo_m) = next(iter(quitados))
+        (nuevo, nuevo_m) = next(iter(agregados))
         if viejo_m != nuevo_m:
             continue  # método<->atributo: no es el mismo miembro renombrado
         if not viejo or not nuevo or viejo == nuevo:
+            continue
+        # Guardarraíl crítico: si el __init__ cambió, el cambio debe ser
+        # EXACTO el rename detectado (no params agregados/quitados que
+        # mezclan otra cosa). Sin esto el codemod se aplicaría sobre
+        # cambios mayores y reescribiría mal el código del consumidor.
+        if not _init_consistente_con_rename(a.init, d.init, viejo, nuevo):
             continue
         return Rename(clase=nombre, viejo=viejo, nuevo=nuevo)
     return None

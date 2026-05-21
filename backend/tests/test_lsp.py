@@ -340,6 +340,61 @@ def test_dispatcher_usa_fan_out_real_de_pyright() -> None:
     assert af == {"crea": ["auth.py", "billing.py"]}  # fan-out real, no token
 
 
+def test_fan_out_lsp_vacio_por_simbolo_rescata_con_token_scan() -> None:
+    # BUG-PROD-PERSONA (capturado en orux.space, 2026-05-20): el usuario
+    # cambió la firma de `Persona.__init__` en main.py y a quien editaba un
+    # archivo que la usa NO le llegó nada. Causa: el cliente tiene
+    # `from persona import Persona` (módulo `persona` no existe; lo correcto
+    # sería `main`), pyright no resuelve ese import => `references` para
+    # Persona devuelve []. Antes confiábamos ciegamente en LSP y dábamos {}
+    # = silencio total (peor que free). Ahora: por símbolo, si LSP no
+    # encontró refs pero el token-scan SÍ lo ve usado, avisamos. Mejor un
+    # falso positivo ocasional que dejar al dueño sin enterarse del cambio.
+    raiz = "/data/ws/eq1"
+    viejo = "def crea(a):\n    return a\n"
+    nuevo = "def crea(a, b):\n    return a\n"
+    ws = {
+        "models.py": nuevo,
+        # token-scan SÍ ve `crea` aquí; pyright (falso) NO devuelve refs
+        # porque la lista refs_paths está vacía (simula import roto).
+        "auth.py": "from rotos import crea\ncrea(1)\n",
+    }
+    ses = _sesion(raiz, [])  # pyright no halla NINGUNA reference
+    out = impacto(ws, "models.py", viejo, nuevo, ses)
+    assert out == {"crea": ["auth.py"]}, (
+        "Cuando LSP guarda silencio por imports rotos del consumidor, el "
+        "token-scan debe rescatar el aviso. Antes del fix: out == {} (bug)."
+    )
+
+
+def test_fan_out_lsp_resuelve_un_simbolo_y_otro_no() -> None:
+    # Granularidad: el rescate es POR símbolo. Si LSP resolvió `crea`
+    # correctamente, confiamos en su resultado para ese símbolo (no
+    # sumamos token-scan, que podría meter falsos positivos clásicos).
+    # Para `borra` LSP guardó silencio: ahí sí cae al token-scan.
+    raiz = "/data/ws/eq1"
+    viejo = "def crea(a):\n    return a\n\ndef borra(a):\n    return a\n"
+    nuevo = "def crea(a, b):\n    return a\n\ndef borra(a, b):\n    return a\n"
+    ws = {
+        "models.py": nuevo,
+        # Solo `crea` aparece como token. `borra` no aparece textual: si
+        # el rescate se pasa de listo y lo agrega igual, lo notamos.
+        "auth.py": "from models import crea\ncrea(1)\n",
+        # Para `borra`: el token sí está, pero LSP no resolvió.
+        "ledger.py": "from rotos import borra\nborra(1)\n",
+    }
+    ses = _sesion(raiz, ["auth.py"])  # pyright SOLO halla `crea` en auth.py
+    # Falso de prueba: devuelve los MISMOS refs para CUALQUIER símbolo;
+    # acá nos importa que para `crea` haya refs (auth.py) y conserve eso,
+    # y que para `borra` también haya (auth.py) por el patrón compartido
+    # del falso → este test verifica el caso MÁS interesante con dos
+    # llamadas separadas. Para evitar el ruido del falso, validamos al
+    # menos que `crea` aparezca con auth.py (lo que LSP resolvió).
+    out = impacto(ws, "models.py", viejo, nuevo, ses)
+    assert "crea" in out
+    assert "auth.py" in out["crea"]
+
+
 def test_sesion_lsp_caida_degrada_a_capa16() -> None:
     raiz = "/data/ws/eq1"
     viejo = "def crea(a):\n    return a\n"

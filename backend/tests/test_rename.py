@@ -42,8 +42,78 @@ def test_detecta_rename_de_metodo_y_pela_los_parentesis() -> None:
 def test_no_detecta_si_cambio_el_constructor() -> None:
     # __init__ distinto = cambio mayor, NO un rename limpio: que lo vea el
     # impacto normal, no se arriesga un codemod.
+    # Capa 26b: la guardia se relajó SOLO para cambios CONSISTENTES con el
+    # rename. Acá el __init__ agrega un param `x` que no tiene que ver con
+    # el rename `variable→name`: sigue siendo None (correcto).
     a = {"C": _clase("C", {"variable"}, init="(self)")}
     d = {"C": _clase("C", {"name"}, init="(self, x)")}
+    assert detectar_rename(a, d) is None
+
+
+def test_detecta_rename_de_atributo_de_instancia() -> None:
+    # Capa 26b (caso real usuario, 2026-05-20): el rename más común en
+    # Python es `self.edad = edad` -> `self.asd = asd`. Antes nunca se
+    # detectaba porque `superficie` solo miraba el cuerpo top-level. Ahora
+    # `atrs_instancia` lo aísla y `detectar_rename` lo cubre.
+    from orux.analysis import tiers
+    t = tiers.tier_para("main.py")
+    a = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, valor):\n"
+        "        self.edad = valor\n"
+    )
+    d = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, valor):\n"
+        "        self.asd = valor\n"
+    )
+    r = detectar_rename(a, d)
+    assert r is not None
+    assert (r.clase, r.viejo, r.nuevo) == ("Persona", "edad", "asd")
+
+
+def test_detecta_rename_con_init_consistente() -> None:
+    # El caso típico: renombrar el atributo Y su parámetro homónimo a la
+    # vez. El __init__ cambia, pero el cambio es EXACTAMENTE el rename.
+    # Ahora se detecta (antes era el False-negativo silencioso).
+    from orux.analysis import tiers
+    t = tiers.tier_para("main.py")
+    a = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, nombre, edad):\n"
+        "        self.nombre = nombre\n"
+        "        self.edad = edad\n"
+    )
+    d = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, nombre, asd):\n"
+        "        self.nombre = nombre\n"
+        "        self.asd = asd\n"
+    )
+    r = detectar_rename(a, d)
+    assert r is not None
+    assert (r.viejo, r.nuevo) == ("edad", "asd")
+
+
+def test_no_detecta_si_init_mezcla_otros_cambios() -> None:
+    # Caso real del usuario (cambio mezclado): renombra `edad`→`asd` PERO
+    # también quita `variablenueva`. Es cambio mayor, NO codemod automático.
+    # Solo el aviso ALTA normal de impacto debe llegar (lo verifica
+    # test_sync.py end-to-end).
+    from orux.analysis import tiers
+    t = tiers.tier_para("main.py")
+    a = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, nombre, edad, agenueva, variablenueva):\n"
+        "        self.nombre = nombre\n"
+        "        self.edad = edad\n"
+    )
+    d = t.simbolos(
+        "class Persona:\n"
+        "    def __init__(self, nombre, asd, agenueva):\n"
+        "        self.nombre = nombre\n"
+        "        self.asd = asd\n"
+    )
     assert detectar_rename(a, d) is None
 
 

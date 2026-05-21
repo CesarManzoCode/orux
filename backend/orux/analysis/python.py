@@ -135,6 +135,52 @@ def _firma(nodo: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return "(" + ", ".join(partes) + ")"
 
 
+def _atributos_instancia(nodo: ast.ClassDef) -> frozenset[str]:
+    """Nombres PÚBLICOS asignados a `self.X` dentro de `__init__`.
+
+    Capa 26b (fix 2026-05-20): la superficie de una clase incluye más que
+    sus métodos y atributos top-level — quien usa la clase hace
+    `obj.<X>`, sea X un método o un atributo de instancia inicializado en
+    `__init__`. Antes esto NO se aislaba y `detectar_rename` no podía
+    detectar el caso clásico (`self.edad`→`self.asd`).
+
+    Solo se mira el cuerpo de `__init__` (no de otros métodos): es una
+    convención fuerte de Python; los atributos de instancia "oficiales" se
+    declaran ahí. Mirar todos los métodos daría ruido (un método podría
+    asignar `self.tmp` y no es parte estable de la API).
+    """
+    out: set[str] = set()
+    for hijo in nodo.body:
+        if not isinstance(
+            hijo, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ) or hijo.name != "__init__":
+            continue
+        for n in ast.walk(hijo):
+            # `self.X = ...` o `self.X: T = ...`
+            tgt = None
+            if isinstance(n, ast.Assign):
+                for t in n.targets:
+                    if (
+                        isinstance(t, ast.Attribute)
+                        and isinstance(t.value, ast.Name)
+                        and t.value.id == "self"
+                    ):
+                        tgt = t.attr
+                        if tgt and not tgt.startswith("_"):
+                            out.add(tgt)
+            elif isinstance(n, ast.AnnAssign):
+                t = n.target
+                if (
+                    isinstance(t, ast.Attribute)
+                    and isinstance(t.value, ast.Name)
+                    and t.value.id == "self"
+                ):
+                    tgt = t.attr
+                    if tgt and not tgt.startswith("_"):
+                        out.add(tgt)
+    return frozenset(out)
+
+
 def _superficie_clase(nodo: ast.ClassDef) -> tuple[str, frozenset[str]]:
     """Lo que una clase EXPONE: cómo se construye + sus miembros públicos.
 

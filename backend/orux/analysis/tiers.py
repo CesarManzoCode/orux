@@ -74,10 +74,11 @@ class _PythonAst:
             deps = python._deps_interfaz(nodo)  # capa 24b: tipos en interfaz
             if isinstance(nodo, python.ast.ClassDef):
                 init, superficie = python._superficie_clase(nodo)
+                atrs = python._atributos_instancia(nodo)
                 out[nombre] = Simbolo(
                     nombre=nombre, tipo="clase", fuente=fuente,
                     init=init, superficie=superficie, detallado=True,
-                    deps=deps,
+                    deps=deps, atrs_instancia=atrs,
                 )
             else:  # FunctionDef | AsyncFunctionDef
                 out[nombre] = Simbolo(
@@ -231,28 +232,54 @@ def archivos_afectados(
 
     Con sesión LSP viva: fan-out REAL (pyright resolvió imports — quién usa
     de verdad el símbolo, no quién tiene el token). Ése es el salto que mata
-    los falsos positivos. Si falla, o sin sesión: el token-scan de capa 16,
-    byte-idéntico (este es el punto que conserva su comportamiento).
+    los falsos positivos. Si LSP falló entera, o sin sesión: token-scan de
+    capa 16, byte-idéntico.
+
+    Falso-negativo (BUG-PROD-PERSONA): cuando LSP devuelve set() para UN
+    símbolo porque el cliente tiene imports rotos / archivo huérfano / el
+    índice aún no sincronizó ese path, antes nos quedábamos MUDOS (peor que
+    free). El fix: por-símbolo, si LSP no encontró refs PERO el símbolo SÍ
+    aparece como identificador en otros archivos, caemos al token-scan para
+    ese símbolo. Es la regla "LSP suma, no resta": cuando LSP afirma usos los
+    confiamos (sigue matando los falsos positivos clásicos del token-scan);
+    cuando guarda silencio Y token-scan ve algo, preferimos avisar (un falso
+    positivo ocasional << un dueño no enterado de que rompiste su archivo).
     """
+    def _scan(sym: str) -> list[str]:
+        return sorted(
+            o for o, c in workspace.items()
+            if o != path and lenguaje_de(o) == lang
+            and sym in tier.referencias(c)
+        )
+
     if _usar_lsp(sesion, path):
         real = sesion.fan_out(workspace, path, nuevo, syms)
         if real is not None:
-            return {
-                s: sorted(real[s]) for s in syms if real.get(s)
-            }
-        # fan-out LSP falló -> degradar al token-scan
-    out: dict[str, list[str]] = {}
+            out: dict[str, list[str]] = {}
+            for s in syms:
+                af_lsp = real.get(s) or set()
+                if af_lsp:
+                    out[s] = sorted(af_lsp)
+                    continue
+                # LSP guardó silencio sobre este símbolo: respaldo token-scan.
+                # Si token-scan tampoco ve nada, no hay aviso (correcto:
+                # nadie lo usa). Si SÍ ve, probablemente el import del
+                # consumidor está roto / pyright no lo indexó: avisamos.
+                af_tok = _scan(s)
+                if af_tok:
+                    out[s] = af_tok
+                    _log.info(
+                        "fan-out LSP vacío para %r en %s; rescate token-scan: %s",
+                        s, path, af_tok,
+                    )
+            return out
+        # fan-out LSP falló ENTERO (excepción) -> degradar al token-scan
+    out2: dict[str, list[str]] = {}
     for s in syms:
-        af = sorted(
-            o
-            for o, c in workspace.items()
-            if o != path
-            and lenguaje_de(o) == lang
-            and s in tier.referencias(c)
-        )
+        af = _scan(s)
         if af:
-            out[s] = af
-    return out
+            out2[s] = af
+    return out2
 
 
 def tier_para(path: str) -> Tier | None:

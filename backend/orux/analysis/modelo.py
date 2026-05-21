@@ -51,6 +51,14 @@ class Simbolo:
       para propagar por dependencia de tipos. ADITIVO y aparte de `firma`
       a propósito: `cambios_que_importan_modelo` (capas 6/19) NO lo mira,
       así que esos avisos quedan byte-idénticos.
+    - `atrs_instancia`: nombres públicos de atributos asignados a `self.X`
+      dentro de `__init__`. Capa 26b (fix 2026-05-20): los `self.X = Y` SON
+      parte de la API pública (quien usa la clase hace `obj.X`), pero no
+      vivían en `superficie` (que solo mira el cuerpo top-level de la
+      clase). Sin esto el rename automático nunca podía detectar un
+      `self.edad`→`self.asd` (caso real del usuario). ADITIVO y aparte de
+      `superficie` a propósito: `cambios_que_importan_modelo` lo IGNORA
+      (sus mensajes quedan byte-idénticos); solo `detectar_rename` lo lee.
     """
 
     nombre: str
@@ -61,6 +69,7 @@ class Simbolo:
     superficie: frozenset[str] = frozenset()
     detallado: bool = False
     deps: frozenset[str] = frozenset()
+    atrs_instancia: frozenset[str] = frozenset()
 
 
 def cambios_que_importan_modelo(

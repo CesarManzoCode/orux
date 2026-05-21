@@ -3,12 +3,12 @@ import {
   Radio, KeyRound, Waypoints, GitPullRequest, Activity,
   LogIn, LogOut, GitBranch, Trash2, FolderSync, AlertTriangle,
   PanelRightClose, ChevronDown, Send, Undo2, ShieldCheck, Sparkles,
-  Bell, Hand,
+  Bell, Hand, X,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   reclamar, seleccionar, resolver, nombreDe, guardar, descartarDraft,
-  impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
+  descartarImpacto, impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
   type ActItem, type Impact, type Proposal,
 } from "../store";
 import { chipDe, diffLineas, inicial } from "../lang";
@@ -79,6 +79,11 @@ function Sec(props: {
 function ImpactoMini({ im }: { im: Impact }) {
   const { t } = useI18n();
   const sev = severidadMax([im]) || "media";
+  // Botón "visto" — el dueño revisó el aviso y lo descarta para que no se
+  // quede ahí permanente. Solo borra de su estado local: si el cambio vuelve
+  // a llegar (porque otro Ctrl+S), reaparece. Sin eso la lista crece sin
+  // forma de limpiarla.
+  const key = im.source_path + "::" + im.affected_path;
   return (
     <div className="inimp">
       <span className={"insev s-" + sev}>{t.tr_sev[sev] ?? sev}</span>
@@ -89,6 +94,15 @@ function ImpactoMini({ im }: { im: Impact }) {
         ))}{" "}
         en <span className="inpath">{im.source_path}</span>
       </span>
+      <button
+        type="button"
+        className="inimp-x"
+        title={t.ins_impact_dismiss}
+        aria-label={t.ins_impact_dismiss}
+        onClick={() => descartarImpacto(key)}
+      >
+        <X size={12} />
+      </button>
     </div>
   );
 }
