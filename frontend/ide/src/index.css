@@ -3722,3 +3722,52 @@ button:active { transform: translateY(1px); }
     0 0 0 2px var(--bg-deep),
     0 0 0 3.5px var(--accent-soft);
 }
+
+/* ═══ STRIPE / PLANES — capa 30 ══════════════════════════════════════════
+   Aditivo: badge de plan en la tarjeta de equipo del Hub + botón de
+   upgrade. No toca :root ni el bloque sagrado del editor. El foco de
+   .ht-upgrade lo cubre el `button:focus-visible` global (anillo unificado
+   del pulido senior) — por eso no lleva regla de foco propia. */
+
+/* Badge de plan — mismo lenguaje de pill que .ht-rol. Free queda sobrio
+   (es el estado base, no un error); Premium destaca en acento con ★. */
+.ht-plan {
+  display: inline-flex; align-items: center; flex: none;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+}
+.ht-plan.p-free { color: var(--faint); background: var(--bg); }
+.ht-plan.p-premium {
+  color: var(--accent); background: var(--accent-weak);
+  border-color: var(--accent-soft);
+}
+.ht-plan.p-premium::before {
+  content: "★"; font-size: 8px; margin-right: 4px;
+}
+
+/* Botón "Mejorar a Premium" — debajo de la tarjeta del equipo. Acción
+   secundaria: acento tenue, no compite con la tarjeta (que es el botón
+   primario "abrir"). */
+.ht-upgrade {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; width: 100%; margin-top: 6px;
+  padding: 0.5rem 0.7rem; border-radius: var(--r);
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+  letter-spacing: -0.005em; cursor: pointer;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+  transition: background var(--tr), border-color var(--tr),
+    color var(--tr), transform var(--tr), filter var(--tr);
+}
+.ht-upgrade:hover {
+  background: var(--accent-soft); border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+.ht-upgrade:active { transform: translateY(0); }
+.ht-upgrade:disabled {
+  opacity: 0.6; cursor: progress; transform: none; filter: saturate(0.7);
+}
+.ht-upgrade svg { display: block; flex: none; }

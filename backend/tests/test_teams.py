@@ -110,7 +110,7 @@ async def test_equipos_de_y_miembros() -> None:
     await s.redimir(code, "beto")
     assert [e["nombre"] for e in await s.equipos_de("ana")] == ["Alpha", "Beta"]
     assert await s.equipos_de("beto") == [
-        {"id": a["id"], "nombre": "Alpha", "rol": "member"}
+        {"id": a["id"], "nombre": "Alpha", "rol": "member", "plan": "free"}
     ]
     assert await s.miembros(a["id"]) == [
         {"usuario": "ana", "rol": "admin"},

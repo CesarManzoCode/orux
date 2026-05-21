@@ -13,9 +13,14 @@ Convención de errores (la cáscara HTTP las mapea):
 
 from __future__ import annotations
 
+import logging
+
+from ..billing import cambio_de_plan
 from ..identity.store import normalizar
 from ..identity.tokens import crear_token, usuario_de_token
 from ..plans import PLANES
+
+logger = logging.getLogger(__name__)
 
 
 # --- Auth del operador por CUENTA (no por token estático) ----------------
@@ -105,3 +110,40 @@ async def cambiar_plan(teams, team_id: str, plan: str) -> dict | None:
         return None
     await teams.set_plan(team_id, plan)
     return await detalle_team(teams, team_id)
+
+
+# --- Stripe: aplicar un evento de webhook al plan del equipo --------------
+#
+# `cambiar_plan` (arriba) es el cobro MANUAL del operador. Esto es su
+# gemelo AUTOMÁTICO: lo dispara el webhook de Stripe cuando un equipo
+# paga o cancela. La decisión "qué plan" la toma `billing.cambio_de_plan`
+# (pura); acá solo se persiste. Igual de testeable en sandbox con
+# `MemTeamStore`.
+
+
+async def aplicar_evento_stripe(teams, evento: dict) -> dict | None:
+    """Aplica un evento de Stripe YA verificado al plan de un equipo.
+
+    Devuelve `{team_id, plan}` si cambió algo; `None` si el evento se
+    ignora (tipo no relevante, sin `team_id`, o equipo que no existe en
+    esta plataforma). Idempotente: `set_plan` fija un valor, así que
+    reaplicar el mismo evento no hace daño — Stripe puede reentregar un
+    webhook y eso debe ser inofensivo.
+    """
+    cambio = cambio_de_plan(evento)
+    if cambio is None:
+        return None
+    team_id, plan = cambio
+    if await teams.equipo(team_id) is None:
+        # Webhook para un equipo que no existe acá: lo más probable es un
+        # evento de otra plataforma/entorno apuntando a este endpoint, o
+        # un equipo borrado. Se loguea y se ignora (no es un error que
+        # deba hacer reintentar a Stripe).
+        logger.warning(
+            "Stripe: evento %r para un equipo inexistente (%r); ignorado",
+            evento.get("type"), team_id,
+        )
+        return None
+    await teams.set_plan(team_id, plan)
+    logger.info("Stripe: equipo %s -> plan %s", team_id, plan)
+    return {"team_id": team_id, "plan": plan}

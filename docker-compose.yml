@@ -55,6 +55,17 @@ services:
       - ORUX_GITHUB_CLIENT_SECRET=${ORUX_GITHUB_CLIENT_SECRET:-}
       - ORUX_OAUTH_REDIRECT=${ORUX_OAUTH_REDIRECT:-}
       - ORUX_APP_URL=${ORUX_APP_URL:-/app/}
+      # Stripe (cobro de la suscripción Premium). Cerrado por defecto: si
+      # falta cualquiera de las 3 primeras, /api/v1/billing/* da 503 y el
+      # botón de upgrade no hace nada. Ver .env.example para de dónde sale
+      # cada credencial. STRIPE_PRICE_* tienen default de prueba (10 MXN).
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - ORUX_PUBLIC_URL=${ORUX_PUBLIC_URL:-}
+      - STRIPE_PRICE_AMOUNT=${STRIPE_PRICE_AMOUNT:-1000}
+      - STRIPE_PRICE_CURRENCY=${STRIPE_PRICE_CURRENCY:-mxn}
+      - STRIPE_PRICE_INTERVAL=${STRIPE_PRICE_INTERVAL:-month}
+      - STRIPE_PRICE_NAME=${STRIPE_PRICE_NAME:-Orux Premium}
     # /api/v1/health no requiere token (capa 23): healthcheck honesto.
     # `curl` ya está en la imagen (capa 20). Unhealthy -> Docker reinicia.
     healthcheck:

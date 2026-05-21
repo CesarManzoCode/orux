@@ -77,7 +77,11 @@ export interface State {
   // Capa 15: gate de equipo. "auth" = sin loguear; "lobby" = logueado pero
   // sin equipo (elegir/crear/unirse); "team" = dentro de un equipo (IDE).
   fase: "auth" | "lobby" | "team";
-  equipos: { id: string; nombre: string; rol: string }[];
+  // Capa 30: `plan` ('free' | 'premium') viaja en cada equipo del lobby
+  // (lo agrega `equipos_de` en el server). El Hub lo usa para el badge de
+  // plan y para mostrar el botón "Mejorar a Premium". Opcional por
+  // compat: un server viejo no lo manda y el Hub asume 'free'.
+  equipos: { id: string; nombre: string; rol: string; plan?: string }[];
   equipoError: string;
   equipo: { id: string; nombre: string; rol: string } | null;
   inviteCode: string;  // último código emitido por el admin (para compartir)
@@ -505,6 +509,48 @@ export function seleccionarEquipo(team_id: string) {
 }
 export function crearInvite() {
   send({ type: "create_invite" });
+}
+// Capa 30: arranca el pago de la suscripción Premium de un equipo. NO va
+// por WebSocket — habla con la API HTTP (otro contenedor; Caddy la proxya
+// en /api). Le manda el token de sesión (el server verifica que somos
+// admin del equipo), recibe la URL de la página de pago hosteada de
+// Stripe y redirige el navegador ahí. Devuelve null si todo bien (estamos
+// redirigiendo) o un texto de error para mostrar. En dev (sin Caddy) /api
+// no resuelve: es una función de deploy, igual que el webhook necesita
+// una URL pública con HTTPS.
+export async function iniciarCheckout(teamId: string): Promise<string | null> {
+  const sess = localStorage.getItem("orux_session");
+  if (!sess) return "sesión no encontrada";
+  try {
+    const r = await fetch("/api/v1/billing/checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + sess,
+      },
+      body: JSON.stringify({ team_id: teamId }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return data.error || "HTTP " + r.status;
+    if (typeof data.url === "string" && data.url) {
+      window.location.href = data.url;  // a la página de pago de Stripe
+      return null;
+    }
+    return "respuesta inesperada del servidor";
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+// Capa 30: vuelve a pedir el lobby (lista de equipos con su plan) sin un
+// reload duro. Tras volver de Stripe, el webhook puede tardar un par de
+// segundos en marcar el equipo como premium; reconectar el WS dispara
+// session->lobby con la lista fresca. Mismo patrón close+connect que
+// `salirEquipo` (no inventa protocolo nuevo).
+export function refrescarEquipos() {
+  try { ws?.close(); } catch { /* ya cerrado, da igual */ }
+  ws = null;
+  lastPresence = { path: "", line: 0 };
+  connect();
 }
 export function seleccionar(path: string) {
   set({ currentPath: path });

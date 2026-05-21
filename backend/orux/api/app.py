@@ -39,6 +39,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
+from .. import billing
 from ..db.pool import Database
 from ..db.stores import PgUserStore
 from ..identity import (
@@ -46,6 +47,7 @@ from ..identity import (
     firmar_state,
     identidad_github,
     url_autorizacion,
+    usuario_de_token,
     validar_state,
 )
 from ..identity.oauth import URL_PERFIL, URL_TOKEN
@@ -131,6 +133,12 @@ _MAX_BODY_BYTES = 64 * 1024
 
 class _LimiteBody(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
+        # El webhook de Stripe se exime del tope chico: su cuerpo puede
+        # traer eventos algo más grandes que un login, y además debe
+        # llegar EXACTO (byte a byte) para verificar la firma HMAC. Su
+        # tamaño real lo acota Stripe del otro lado.
+        if request.url.path == "/api/v1/billing/webhook":
+            return await call_next(request)
         cl = request.headers.get("content-length")
         if cl is not None:
             try:
@@ -167,6 +175,84 @@ def _oauth_ok() -> bool:
         _GH_CLIENT_ID and _GH_CLIENT_SECRET
         and _GH_REDIRECT and _SESSION_SECRET
     )
+
+
+# --- Stripe (cobro de la suscripción Premium) ----------------------------
+#
+# Cerrado por defecto, igual que OAuth y la consola de operador: si falta
+# cualquier pieza, /api/v1/billing/* responde 503 y el botón de upgrade
+# del Hub no hace nada. No rompe nada dejarlo sin configurar.
+#
+# - STRIPE_SECRET_KEY (`sk_test_...` / `sk_live_...`): autentica NUESTRAS
+#   llamadas a la API de Stripe (crear la sesión de Checkout). Secreto:
+#   nunca sale del server.
+# - STRIPE_WEBHOOK_SECRET (`whsec_...`): el secreto con el que Stripe
+#   firma cada webhook; con él verificamos que un POST a /billing/webhook
+#   lo mandó Stripe de verdad (sin esto, cualquiera haría premium gratis).
+# - ORUX_PUBLIC_URL: el origen público (https://tu-dominio). Arma las URLs
+#   de retorno de Stripe (success/cancel). Explícito a propósito: derivarlo
+#   del header Host sería manipulable, igual que con ORUX_OAUTH_REDIRECT.
+_STRIPE_SECRET = os.environ.get("STRIPE_SECRET_KEY", "")
+_STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+_PUBLIC_URL = os.environ.get("ORUX_PUBLIC_URL", "").rstrip("/")
+# Precio de la suscripción. Se define INLINE en cada sesión de Checkout
+# (no es un Price del dashboard de Stripe): así no hace falta crear nada
+# en Stripe para probar. El default 1000 = 10.00 MXN es un precio de
+# PRUEBA; el real se pone después subiendo STRIPE_PRICE_AMOUNT.
+_STRIPE_CURRENCY = os.environ.get("STRIPE_PRICE_CURRENCY", "mxn")
+_STRIPE_INTERVAL = os.environ.get("STRIPE_PRICE_INTERVAL", "month")
+_STRIPE_PRODUCTO = os.environ.get("STRIPE_PRICE_NAME", "Orux Premium")
+
+
+def _stripe_amount() -> int:
+    """Monto de la suscripción en centavos. Default 1000 (= 10.00 MXN),
+    precio de prueba. Robusto ante un env mal puesto -> cae al default."""
+    try:
+        v = int(os.environ.get("STRIPE_PRICE_AMOUNT", "1000"))
+    except (TypeError, ValueError):
+        v = 1000
+    return max(1, v)
+
+
+def _billing_ok() -> bool:
+    """Billing configurado = las tres piezas presentes. Fail-closed: si
+    falta una, /api/v1/billing/* da 503 (nunca a medias). En la práctica
+    se configuran juntas (ver .env.example)."""
+    return bool(_STRIPE_SECRET and _STRIPE_WEBHOOK_SECRET and _PUBLIC_URL)
+
+
+def _crear_sesion_checkout(team_id: str, team_nombre: str) -> str:
+    """Llama a la API de Stripe y devuelve la URL de la página de pago
+    hosteada. Bloqueante (urllib, stdlib); el caller la corre en el
+    threadpool. Se ejercita en el VPS (el sandbox no tiene internet) —
+    mismo patrón que `_intercambiar` del OAuth. Timeout corto: un Stripe
+    colgado no debe colgar al worker."""
+    success = f"{_PUBLIC_URL}{_APP_URL}?stripe=success"
+    cancel = f"{_PUBLIC_URL}{_APP_URL}?stripe=cancel"
+    params = billing.params_checkout(
+        team_id,
+        f"{_STRIPE_PRODUCTO} · {team_nombre}",
+        success,
+        cancel,
+        currency=_STRIPE_CURRENCY,
+        unit_amount=_stripe_amount(),
+        interval=_STRIPE_INTERVAL,
+    )
+    datos = urllib.parse.urlencode(params).encode("ascii")
+    req = urllib.request.Request(
+        billing.URL_CHECKOUT,
+        data=datos,
+        headers={
+            "Authorization": f"Bearer {_STRIPE_SECRET}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        cuerpo = json.loads(resp.read())
+    url = cuerpo.get("url")
+    if not url:
+        raise ValueError("Stripe no devolvió una URL de Checkout")
+    return url
 
 
 def _volver(error: str = "", token: str = ""):
@@ -420,6 +506,98 @@ async def _plan(req: Request) -> JSONResponse:
     return JSONResponse(d)
 
 
+# --- Stripe: checkout (inicia el pago) + webhook (confirma) ---------------
+
+
+async def _billing_checkout(req: Request) -> JSONResponse:
+    """POST {team_id} -> {url}. El Hub redirige el navegador a esa `url`
+    (la página de pago hosteada de Stripe).
+
+    Auth: el token de SESIÓN del usuario — el MISMO `orux_session` que usa
+    el IDE, firmado con ORUX_SESSION_SECRET (este contenedor lo comparte
+    con el server WS). No es la auth de operador: es un usuario normal.
+    Solo el ADMIN del equipo puede iniciar el upgrade — gestionar el plan
+    es gestión del equipo, igual que invitar."""
+    if not _billing_ok():
+        return JSONResponse({"error": "pagos no configurados"},
+                            status_code=503)
+    cab = (req.headers.get("authorization", "") or "").strip()
+    tok = cab[7:].strip() if cab[:7].lower() == "bearer " else ""
+    usuario = usuario_de_token(tok, _SESSION_SECRET) if _SESSION_SECRET else None
+    if usuario is None:
+        return JSONResponse({"error": "no autenticado"}, status_code=401)
+    try:
+        body = await req.json()
+    except Exception:  # noqa: BLE001 - body no-JSON
+        return JSONResponse({"error": "body JSON inválido"}, status_code=400)
+    team_id = str(body.get("team_id", ""))
+    if not team_id:
+        return JSONResponse({"error": "falta team_id"}, status_code=400)
+    teams = req.app.state.teams
+    if await teams.rol(team_id, usuario) != "admin":
+        # No es admin de ese equipo (o ni siquiera es miembro). Mismo
+        # criterio que invitar: solo el admin gestiona el equipo.
+        return JSONResponse(
+            {"error": "solo el admin del equipo puede gestionar el plan"},
+            status_code=403,
+        )
+    equipo = await teams.equipo(team_id)
+    if equipo is None:
+        return JSONResponse({"error": "equipo inexistente"}, status_code=404)
+    if equipo.get("plan") == "premium":
+        # Ya es premium: evita crear una segunda suscripción por error.
+        return JSONResponse({"error": "el equipo ya es premium"},
+                            status_code=400)
+    from starlette.concurrency import run_in_threadpool
+
+    try:
+        url = await run_in_threadpool(
+            _crear_sesion_checkout, team_id, equipo["nombre"],
+        )
+    except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as e:
+        logger.warning("Stripe checkout falló: %r", e)
+        return JSONResponse({"error": "no se pudo iniciar el pago"},
+                            status_code=502)
+    return JSONResponse({"url": url})
+
+
+async def _billing_webhook(req: Request) -> JSONResponse:
+    """Stripe -> acá. Verifica la firma, interpreta el evento y mueve el
+    plan del equipo. SIN auth de operador: Stripe no manda un Bearer, la
+    firma HMAC del cuerpo ES la autenticación.
+
+    Códigos de respuesta pensados para el reintentador de Stripe:
+    - firma inválida / payload roto -> 400 (reintentar no sirve);
+    - evento aplicado o ignorado    -> 200 (un 4xx/5xx haría reintentar a
+      Stripe por días — y un evento que ignoramos no es un fallo);
+    - error nuestro al persistir    -> 500 a propósito: ahí el reintento
+      de Stripe SÍ sirve (p. ej. Postgres caído un momento)."""
+    if not _billing_ok():
+        return JSONResponse({"error": "pagos no configurados"},
+                            status_code=503)
+    payload = await req.body()
+    firma = req.headers.get("stripe-signature", "")
+    if not billing.verificar_firma_webhook(
+        payload, firma, _STRIPE_WEBHOOK_SECRET,
+    ):
+        logger.warning("webhook de Stripe con firma inválida")
+        return JSONResponse({"error": "firma inválida"}, status_code=400)
+    try:
+        evento = billing.evento_de_payload(payload)
+    except ValueError:
+        return JSONResponse({"error": "payload inválido"}, status_code=400)
+    try:
+        res = await service.aplicar_evento_stripe(req.app.state.teams, evento)
+    except Exception:  # noqa: BLE001
+        # Falló persistir el cambio (DB caída, etc.). Devolvemos 500 a
+        # propósito: Stripe reintenta el webhook con backoff y el upgrade
+        # se aplica cuando la DB vuelva. El evento es reproducible desde
+        # el dashboard de Stripe si hiciera falta.
+        logger.exception("error aplicando evento de Stripe; Stripe reintentará")
+        return JSONResponse({"error": "error interno"}, status_code=500)
+    return JSONResponse({"recibido": True, "aplicado": res is not None})
+
+
 _RUTAS = [
     Route("/api/v1/health", _health),
     Route("/api/v1/login", _login, methods=["POST"]),
@@ -427,6 +605,11 @@ _RUTAS = [
     Route("/api/v1/teams", _teams),
     Route("/api/v1/teams/{tid}", _detalle),
     Route("/api/v1/teams/{tid}/plan", _plan, methods=["POST"]),
+    # Stripe: cobro de la suscripción Premium. Superficie distinta de la
+    # de operador (sin `_gate`): /checkout lo autentica el token de
+    # sesión del usuario; /webhook lo autentica la firma HMAC de Stripe.
+    Route("/api/v1/billing/checkout", _billing_checkout, methods=["POST"]),
+    Route("/api/v1/billing/webhook", _billing_webhook, methods=["POST"]),
     # GitHub OAuth: superficie PÚBLICA (sin _gate; no es la API de
     # operador). Caddy proxya /oauth/* a este contenedor.
     Route("/oauth/github/login", _gh_login),

@@ -157,13 +157,22 @@ class MemTeamStore:
         return out
 
     async def equipos_de(self, usuario: str) -> list[dict]:
-        """Equipos del usuario, con su rol. Vacío = todavía no ve nada."""
+        """Equipos del usuario, con su rol y su plan. Vacío = todavía no ve
+        nada.
+
+        Incluye `plan` (capa 30): el Hub muestra el plan de cada equipo y
+        el botón de upgrade junto a la lista, así que el `LobbyMessage`
+        —que se arma con esto— ya lo trae. Es un dato barato de adjuntar
+        y evita un round-trip extra del cliente solo para saberlo."""
         u = normalizar(usuario)
         out = []
         for tid, miembros in self._miembros.items():
             if u in miembros:
                 e = self._equipos[tid]
-                out.append({"id": tid, "nombre": e["nombre"], "rol": miembros[u]})
+                out.append({
+                    "id": tid, "nombre": e["nombre"], "rol": miembros[u],
+                    "plan": e["plan"],
+                })
         out.sort(key=lambda x: x["nombre"])
         return out
 

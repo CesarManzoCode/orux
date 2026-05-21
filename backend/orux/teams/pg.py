@@ -82,13 +82,19 @@ class PgTeamStore:
         ]
 
     async def equipos_de(self, usuario: str) -> list[dict]:
+        # Incluye `t.plan` (capa 30): el Hub lo usa para el badge de plan
+        # y el botón de upgrade. Misma forma que MemTeamStore.equipos_de.
         rows = await self._db.fetch(
-            "SELECT t.id, t.nombre, m.rol FROM team_members m "
+            "SELECT t.id, t.nombre, t.plan, m.rol FROM team_members m "
             "JOIN teams t ON t.id = m.team_id "
             "WHERE m.username=$1 ORDER BY t.nombre",
             normalizar(usuario),
         )
-        return [{"id": r["id"], "nombre": r["nombre"], "rol": r["rol"]} for r in rows]
+        return [
+            {"id": r["id"], "nombre": r["nombre"], "rol": r["rol"],
+             "plan": r["plan"]}
+            for r in rows
+        ]
 
     async def es_miembro(self, team_id: str, usuario: str) -> bool:
         return bool(await self._db.fetchval(

@@ -12,9 +12,14 @@
 // pulsaban la tarjeta por miedo a no saber qué hacía. Navegación por
 // teclado: la tarjeta ya es `<button>`; Enter/Space abren.
 import { useEffect, useRef, useState } from "react";
-import { Shield, Users, ChevronRight, ArrowRight, ArrowLeft } from "lucide-react";
+import {
+  Shield, Users, ChevronRight, ArrowRight, ArrowLeft, ArrowUpCircle,
+} from "lucide-react";
 import { useStore } from "../useStore";
-import { crearEquipo, redimirInvite, seleccionarEquipo, salir } from "../store";
+import {
+  crearEquipo, redimirInvite, seleccionarEquipo, salir,
+  iniciarCheckout, refrescarEquipos, emitToast,
+} from "../store";
 import { validarNombreEquipo, normalizarNombreEquipo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
 import { Logomark } from "./Logomark";
@@ -35,6 +40,9 @@ export function Hub() {
   // (vía useEffect) o cuando llega un `lobby` con error (vía equipoError).
   const [creando, setCreando] = useState(false);
   const [uniendo, setUniendo] = useState(false);
+  // Capa 30: id del equipo cuyo upgrade a Premium está en curso (esperando
+  // a que la API devuelva la URL de Stripe). Bloquea el doble-click.
+  const [upgrading, setUpgrading] = useState<string>("");
   // Error de validación CLIENT-side (HTML/control/exceso). Se muestra al
   // intentar submit con un nombre inválido. Distinto a equipoError, que es
   // el del server. Limpio en cada onChange.
@@ -115,6 +123,20 @@ export function Hub() {
     redimirInvite(c);
   }
 
+  // Capa 30: arranca el pago de Premium. `iniciarCheckout` pide a la API
+  // la URL de Stripe y, si todo va bien, redirige el navegador ahí mismo
+  // (devuelve null y dejamos el botón en "Abriendo…" hasta que la página
+  // cambie). Si devuelve un texto, es un error: lo mostramos y soltamos
+  // el busy.
+  async function onUpgrade(teamId: string) {
+    setUpgrading(teamId);
+    const err = await iniciarCheckout(teamId);
+    if (err) {
+      setUpgrading("");
+      emitToast(t.hub_upgrade_err + err, "bad");
+    }
+  }
+
   // Si llega un equipoError tras `uniendo`, el código de error es
   // tipográfico — limpiamos el input para que el segundo intento parta de
   // cero (UX clásica de "código inválido").
@@ -123,6 +145,26 @@ export function Hub() {
       setCode("");
     }
   }, [s.equipoError, uniendo]);
+
+  // Capa 30: retorno desde Stripe. Tras pagar (o cancelar), Stripe
+  // devuelve el navegador a /app/?stripe=success|cancel. Acá lo
+  // detectamos, mostramos un toast y limpiamos el query param (un reload
+  // no debe repetir el aviso). En `success` el plan lo sube el WEBHOOK
+  // (server↔Stripe), que puede tardar un par de segundos: reintentamos
+  // refrescar la lista de equipos para que el badge pase a Premium solo.
+  // Efecto de montaje (el param se consume una vez); por eso deps [].
+  useEffect(() => {
+    const st = new URLSearchParams(window.location.search).get("stripe");
+    if (!st) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (st === "success") {
+      emitToast(t.hub_pay_ok, "ok");
+      const a = window.setTimeout(refrescarEquipos, 3000);
+      const b = window.setTimeout(refrescarEquipos, 9000);
+      return () => { window.clearTimeout(a); window.clearTimeout(b); };
+    }
+    if (st === "cancel") emitToast(t.hub_pay_cancel, "warn");
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="hub">
@@ -192,6 +234,10 @@ export function Hub() {
             <ul className="hub-teams" role="list">
               {s.equipos.map((e) => {
                 const esAdmin = e.rol === "admin";
+                // Capa 30: plan del equipo (default 'free' si un server
+                // viejo no lo manda). Decide el badge y si se ofrece el
+                // upgrade.
+                const esPremium = e.plan === "premium";
                 // Texto del badge ya viene del i18n; el icono añade jerarquía
                 // visual y redundancia no-cromática (a11y daltonismo).
                 const rolLabel = esAdmin ? t.hub_role_admin_label : t.hub_role_member_label;
@@ -223,12 +269,35 @@ export function Hub() {
                             : <Users size={10} strokeWidth={2.3} aria-hidden />}
                           {rolLabel}
                         </span>
+                        {/* Badge de plan: Premium destaca en acento,
+                            Free queda sobrio (no es un error, es el
+                            estado base). */}
+                        <span
+                          className={"ht-plan p-" + (esPremium ? "premium" : "free")}
+                          title={esPremium ? t.hub_plan_premium_title : t.hub_plan_free_title}
+                        >
+                          {esPremium ? t.hub_plan_premium : t.hub_plan_free}
+                        </span>
                       </span>
                       <span className="ht-go" aria-hidden>
                         <span className="ht-go-tx">{t.hub_open_short}</span>
                         <ChevronRight size={14} strokeWidth={2.4} />
                       </span>
                     </button>
+                    {/* Upgrade: solo el admin de un equipo free. Va FUERA
+                        del botón-tarjeta (un <button> no puede anidar
+                        otro): es hermano dentro del <li>, así su click no
+                        abre el equipo. */}
+                    {esAdmin && !esPremium && (
+                      <button
+                        className="ht-upgrade"
+                        onClick={() => onUpgrade(e.id)}
+                        disabled={upgrading === e.id}
+                      >
+                        <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
+                        {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}
+                      </button>
+                    )}
                   </li>
                 );
               })}
