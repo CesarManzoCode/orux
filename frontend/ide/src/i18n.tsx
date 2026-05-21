@@ -263,6 +263,8 @@ export const T = {
     leave_discard: "descartar y salir",
 
     // Rail
+    rail_nav_label: "navegación principal",
+    rail_views_label: "vistas del panel lateral",
     rail_files_title: "explorador de archivos",
     rail_git_title: "control de versiones",
     rail_admin_title: "administración · ownership",
@@ -492,6 +494,8 @@ export const T = {
     am_assign: (n: number) => "asignar a " + n,
     am_remove: (n: number) => "quitar dueño a " + n,
     am_no_files: "no hay archivos en el workspace.",
+    am_dir_expand: "expandir",
+    am_dir_collapse: "colapsar",
     am_hint_empty: "selecciona archivos o carpetas; elige un dueño; aplica al lote.",
     am_hint_assign: (user: string, n: number) =>
       `"asignar" pondrá a «${user}» como dueño de ${n} archivo(s). "quitar" los deja sin dueño.`,
@@ -547,6 +551,10 @@ export const T = {
     confirm_clone_msg:
       "Esto reemplaza TODO el workspace con el remoto indicado. Los drafts, propuestas y ownership del equipo se reinician. Solo el admin debería hacerlo.",
     confirm_clone_ok: "clonar y reemplazar",
+    confirm_discard_title: "descartar borrador",
+    confirm_discard_msg:
+      "Vas a descartar tu borrador local. Lo que escribiste no se enviará a la dueña del archivo y se pierde. Esta acción no se puede deshacer.",
+    confirm_discard_ok: "descartar",
   },
 
   en: {
@@ -798,6 +806,8 @@ export const T = {
     leave_discard: "discard and leave",
 
     // Rail
+    rail_nav_label: "main navigation",
+    rail_views_label: "sidebar panel views",
     rail_files_title: "file explorer",
     rail_git_title: "version control",
     rail_admin_title: "administration · ownership",
@@ -1027,6 +1037,8 @@ export const T = {
     am_assign: (n: number) => "assign to " + n,
     am_remove: (n: number) => "remove owner from " + n,
     am_no_files: "no files in the workspace.",
+    am_dir_expand: "expand",
+    am_dir_collapse: "collapse",
     am_hint_empty: "select files or folders; choose an owner; apply to batch.",
     am_hint_assign: (user: string, n: number) =>
       `"assign" will set «${user}» as owner of ${n} file(s). "remove" leaves them without owner.`,
@@ -1075,6 +1087,10 @@ export const T = {
     confirm_clone_msg:
       "This replaces the ENTIRE workspace with the given remote. Drafts, proposals and ownership reset. Only the admin should do this.",
     confirm_clone_ok: "clone and replace",
+    confirm_discard_title: "discard draft",
+    confirm_discard_msg:
+      "You're about to discard your local draft. What you wrote won't be sent to the file's owner and will be lost. This can't be undone.",
+    confirm_discard_ok: "discard",
   },
 } as const;
 

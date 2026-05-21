@@ -13,6 +13,7 @@ import {
 } from "../store";
 import { chipDe, diffLineas, inicial } from "../lang";
 import { useI18n } from "../i18n";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 // ── Helpers de tiempo: la presencia se siente VIVA si "hace cuánto" se
 // lee de un vistazo. "ahora" para <5s; segundos, minutos, horas en
@@ -246,6 +247,12 @@ export function Inspector({
   const c = path ? chipDe(path) : null;
 
   const [colapsadas, setColapsadas] = useState<Set<string>>(leerColapso);
+  // Confirmación de "descartar borrador" — antes era window.confirm(): roto
+  // visualmente vs el resto del IDE (gramática única ConfirmDialog), no
+  // estilable, sin foco gestionado. Tono danger: descartar borra trabajo
+  // local no enviado al servidor (irreversible salvo Ctrl+Z del editor en
+  // sesión vigente, y aún ahí incierto).
+  const [confirmDescartar, setConfirmDescartar] = useState<string | null>(null);
   const toggle = useCallback((k: string) => {
     setColapsadas((prev) => {
       const n = new Set(prev);
@@ -263,11 +270,21 @@ export function Inspector({
 
   // Capa 29 UX: tick interno que refresca los "hace X" cada 15s. Sin esto
   // las propuestas se quedan congeladas en "recién" durante toda la sesión.
+  // Solo programamos el interval si hay algo que ENVEJECE: propuestas o
+  // actividad. Sin ellas, el timer disparaba re-renders del Inspector
+  // entero cada 15s para no pintar nada nuevo (el panel ya solo dice
+  // "todo en orden"). El gating se evalúa al entrar al efecto y el
+  // efecto se re-crea al cambiar el booleano: el comportamiento
+  // observable es idéntico, sin trabajo en el caso común "workspace
+  // tranquilo".
   const [, setTick] = useState(0);
+  const tieneTimestamps =
+    Object.keys(s.proposals).length > 0 || s.actividad.length > 0;
   useEffect(() => {
+    if (!tieneTimestamps) return;
     const id = setInterval(() => setTick((x) => x + 1), 15000);
     return () => clearInterval(id);
-  }, []);
+  }, [tieneTimestamps]);
 
   const aqui = path ? presentesEn(path) : [];
   const due = path ? s.owners[path] : undefined;
@@ -331,8 +348,7 @@ export function Inspector({
 
   function descartar() {
     if (!path) return;
-    if (!confirm(t.ins_discard_confirm)) return;
-    descartarDraft(path);
+    setConfirmDescartar(path);
   }
 
   // ── HERO: la fila superior del inspector. Antes era "chip + nombre + flags";
@@ -745,6 +761,21 @@ export function Inspector({
           </div>
         )}
       </div>
+      {confirmDescartar && (
+        <ConfirmDialog
+          title={t.confirm_discard_title}
+          message={t.confirm_discard_msg}
+          okLabel={t.confirm_discard_ok}
+          cancelLabel={t.confirm_default_cancel}
+          tone="danger"
+          onCancel={() => setConfirmDescartar(null)}
+          onConfirm={() => {
+            const p = confirmDescartar;
+            setConfirmDescartar(null);
+            descartarDraft(p);
+          }}
+        />
+      )}
     </aside>
   );
 }

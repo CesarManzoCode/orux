@@ -15,6 +15,7 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n";
+import { ModalPortal } from "./ModalPortal";
 
 export type LegalDoc = "terms" | "privacy";
 
@@ -76,45 +77,52 @@ export function LegalModal({
           ],
         };
 
+  // Importante: este modal se monta dentro de .landing (Login.tsx), que es
+  // un contenedor full-screen con framer-motion en otros descendientes; eso
+  // hace que cualquier `transform` ancestral capture el position:fixed del
+  // backdrop. ModalPortal saca el árbol a <body> y evita el recorte (es la
+  // razón explícita por la que ese componente existe).
   return (
-    <div
-      className="modalbg"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="legal-h"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="modal legal-modal">
-        <header className="modal-head">
-          <h2 id="legal-h" className="modal-h">{meta.title}</h2>
-          <button
-            className="modal-x"
-            aria-label={t.legal_close}
-            onClick={onClose}
-          >
-            <X size={16} />
-          </button>
-        </header>
+    <ModalPortal>
+      <div
+        className="modalbg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="legal-h"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div className="modal legal-modal">
+          <header className="modal-head">
+            <h2 id="legal-h" className="modal-h">{meta.title}</h2>
+            <button
+              className="modal-x"
+              aria-label={t.legal_close}
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
+          </header>
 
-        <div className="legal-body">
-          <p className="legal-updated">
-            {t.legal_updated_prefix} {t.legal_updated_date}
-          </p>
-          <p className="legal-intro">{meta.intro}</p>
-          {meta.secs.map(([h, p], i) => (
-            <section key={i} className="legal-sec">
-              <h3 className="legal-h">{h}</h3>
-              <p className="legal-p">{p}</p>
-            </section>
-          ))}
+          <div className="legal-body">
+            <p className="legal-updated">
+              {t.legal_updated_prefix} {t.legal_updated_date}
+            </p>
+            <p className="legal-intro">{meta.intro}</p>
+            {meta.secs.map(([h, p], i) => (
+              <section key={i} className="legal-sec">
+                <h3 className="legal-h">{h}</h3>
+                <p className="legal-p">{p}</p>
+              </section>
+            ))}
+          </div>
+
+          <footer className="modal-foot">
+            <button className="primario" onClick={onClose} autoFocus>
+              {t.legal_accept}
+            </button>
+          </footer>
         </div>
-
-        <footer className="modal-foot">
-          <button className="primario" onClick={onClose} autoFocus>
-            {t.legal_accept}
-          </button>
-        </footer>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

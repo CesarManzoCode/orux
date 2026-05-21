@@ -48,8 +48,8 @@ function PanelGit() {
     <div className="gitp">
       <div className="cab">
         <span>{t.sg_title}</span>
-        <button onClick={gitRefresh} title={t.sg_refresh_title}>
-          <RefreshCw size={11} style={{ verticalAlign: "-1px" }} /> {t.sg_refresh}
+        <button onClick={gitRefresh} title={t.sg_refresh_title} aria-label={t.sg_refresh_title}>
+          <RefreshCw size={11} /> {t.sg_refresh}
         </button>
       </div>
       {!g || !g.available ? (
@@ -62,7 +62,7 @@ function PanelGit() {
         <>
           <div className="estado">
             <span className="rama">
-              <GitBranch size={12} style={{ verticalAlign: "-2px" }} /> <b>{g.branch}</b>
+              <GitBranch size={12} /> <b>{g.branch}</b>
             </span>
             <span className={"cambios" + (g.changes === 0 ? " limpio" : "")}>
               {g.changes === 0
@@ -76,14 +76,18 @@ function PanelGit() {
           <div className="commitbox">
             <input
               placeholder={t.sg_commit_placeholder}
+              aria-label={t.sg_commit_placeholder}
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && msg.trim()) { commitear(msg.trim()); setMsg(""); }
               }}
             />
-            <button onClick={() => { if (msg.trim()) { commitear(msg.trim()); setMsg(""); } }}>
-              <GitCommitHorizontal size={13} style={{ verticalAlign: "-2px" }} /> {t.sg_commit_btn}
+            <button
+              onClick={() => { if (msg.trim()) { commitear(msg.trim()); setMsg(""); } }}
+              aria-label={t.sg_commit_btn}
+            >
+              <GitCommitHorizontal size={13} /> {t.sg_commit_btn}
             </button>
           </div>
           {s.gitResult && (
@@ -101,25 +105,50 @@ function PanelGit() {
               )}
             </div>
           )}
-          <div className="remoto">
-            <div className="remtit">{t.sg_remote_label}</div>
-            <input placeholder={t.sg_url_placeholder} value={url} onChange={(e) => setUrl(e.target.value)} />
-            <input placeholder={t.sg_user_placeholder} value={user} onChange={(e) => setUser(e.target.value)} />
-            <input type="password" placeholder={t.sg_token_placeholder} value={tok} onChange={(e) => setTok(e.target.value)} />
+          <div className="remoto" role="group" aria-label={t.sg_remote_label}>
+            <div className="remtit" id="git-remote-h">{t.sg_remote_label}</div>
+            <input
+              placeholder={t.sg_url_placeholder}
+              aria-label={t.sg_url_placeholder}
+              autoComplete="off" spellCheck={false}
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <input
+              placeholder={t.sg_user_placeholder}
+              aria-label={t.sg_user_placeholder}
+              autoComplete="username" spellCheck={false}
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder={t.sg_token_placeholder}
+              aria-label={t.sg_token_placeholder}
+              autoComplete="off"
+              value={tok}
+              onChange={(e) => setTok(e.target.value)}
+            />
             <input
               placeholder={t.sg_branch_placeholder}
+              aria-label={t.sg_branch_placeholder}
+              autoComplete="off" spellCheck={false}
               value={rama}
               onChange={(e) => setRama(e.target.value)}
             />
             <div className="remacc">
-              <button className="no" onClick={() => {
-                if (!url.trim()) return;
-                setPidiendoClone(true);
-              }}>
-                <DownloadCloud size={12} style={{ verticalAlign: "-2px" }} /> {t.sg_clone_btn}
+              <button
+                className="no"
+                onClick={() => { if (!url.trim()) return; setPidiendoClone(true); }}
+                aria-label={t.sg_clone_btn}
+              >
+                <DownloadCloud size={12} /> {t.sg_clone_btn}
               </button>
-              <button onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}>
-                <UploadCloud size={12} style={{ verticalAlign: "-2px" }} /> {t.sg_push_btn}
+              <button
+                onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}
+                aria-label={t.sg_push_btn}
+              >
+                <UploadCloud size={12} /> {t.sg_push_btn}
               </button>
             </div>
           </div>

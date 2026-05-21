@@ -141,6 +141,20 @@ export function App() {
       seleccionar(paths[nextIdx]);
     }
 
+    // Si HAY un modal abierto (AdminModal, InviteModal, KbdHelp,
+    // ConfirmDialog, NuevoArchivo, LegalModal…), los aceleradores del
+    // workspace no deben dispararse: Alt+A/R aprobaba propuestas "fantasma"
+    // mientras el usuario tenía abierto otro flujo, y «?» re-abría
+    // KbdHelp encima de otro modal. El `.modalbg` siempre está presente
+    // en el DOM cuando algún modal del IDE está abierto — ModalPortal lo
+    // monta en <body>, por eso un querySelector global lo detecta sin
+    // tener que cablear flags por todos lados. Ctrl+S sigue funcionando
+    // (no es un acelerador del workspace; el navegador lo necesita
+    // bloqueado siempre, y el toast informa "nada que guardar" si aplica).
+    function hayModalAbierto(): boolean {
+      return document.querySelector(".modalbg") != null;
+    }
+
     function onKey(e: KeyboardEvent) {
       // Ctrl/Cmd+S — capa 19, ahora con feedback. El usuario teclea el
       // atajo sin "ver" si pasó algo: el toast confirma qué hizo el sistema.
@@ -179,6 +193,7 @@ export function App() {
       // (que no usan Alt) siguen funcionando dentro del textarea.
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         if (esCampoEditable(e.target)) return;
+        if (hayModalAbierto()) return;
         const k = e.key.toLowerCase();
         if (k === "a" || k === "r") {
           const ps = propuestasParaMi();
@@ -208,9 +223,12 @@ export function App() {
       // «?» abre la hoja de atajos. En el layout US es Shift+/, así que
       // chequeamos por `key` directamente (es independiente del layout).
       // Lo ignoramos si el foco está editando texto (no querés que abrir
-      // ayuda interrumpa una búsqueda).
+      // ayuda interrumpa una búsqueda). También si ya hay un modal abierto:
+      // KbdHelp encima de AdminModal/InviteModal/Confirm era apilamiento
+      // ciego con doble Esc para volver — preferimos "cierra el otro antes".
       if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (esCampoEditable(e.target)) return;
+        if (hayModalAbierto()) return;
         e.preventDefault();
         setKbdOpen((v) => !v);
       }

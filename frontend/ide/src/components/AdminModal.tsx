@@ -12,13 +12,24 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [user, setUser] = useState("");
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set());
-  const paths = Object.keys(s.files);
-  const raiz = useMemo(() => arbol(paths), [paths.join("\0")]);
+  // `paths` se recalcula en cada render pero su identidad NO es estable
+  // — el dep anterior `[paths.join("\0")]` se evaluaba en cada render
+  // igualmente y el memo no servía. Atamos el memo a `s.files` (referencia
+  // estable mientras el store no cambia esa porción): la rama derecha
+  // recalcula `paths` dentro del memo, una sola vez.
+  const { paths, raiz } = useMemo(() => {
+    const ps = Object.keys(s.files);
+    return { paths: ps, raiz: arbol(ps) };
+  }, [s.files]);
 
   useEffect(() => {
+    // window (no document) — homogéneo con el resto de modales del IDE
+    // (ConfirmDialog, LegalModal, InviteModal, NuevoArchivoModal): un solo
+    // patrón de listener evita sorpresas si en el futuro alguien añade un
+    // capturer global.
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
   useEffect(() => {
@@ -60,17 +71,26 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
       filas.push(
         <div className="amrow dir" key={"d:" + rd} style={{ paddingLeft: depth * 16 + 8 }}>
           <input type="checkbox"
+            aria-label={nombre}
             ref={(el) => { if (el) el.indeterminate = dentro > 0 && dentro < archivos.length; }}
             checked={archivos.length > 0 && dentro === archivos.length}
             onChange={(e) => toggleDir(archivos, e.target.checked)} />
-          <span className="amtw" style={{ cursor: "pointer" }}
+          {/* Antes era <span onClick>: sin rol, sin teclado, chevron como
+              texto. Ahora es <button> con aria-expanded — patrón coherente
+              con el resto del IDE (Inspector Sec, FileTree dirs). */}
+          <button
+            type="button"
+            className="amtw"
+            aria-expanded={!cerrada}
+            aria-label={(cerrada ? t.am_dir_expand : t.am_dir_collapse) + " " + nombre}
             onClick={() => setColapsadas((c) => {
               const n = new Set(c);
               n.has(rd) ? n.delete(rd) : n.add(rd);
               return n;
-            })}>
-            {cerrada ? "▸" : "▾"}
-          </span>
+            })}
+          >
+            <span aria-hidden>{cerrada ? "▸" : "▾"}</span>
+          </button>
           <span className="amname">{nombre}/</span>
           <span className="ammeta">{archivos.length}</span>
         </div>
@@ -82,7 +102,7 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
       const c = chipDe(f.path);
       filas.push(
         <div className="amrow file" key={"f:" + f.path} style={{ paddingLeft: depth * 16 + 26 }}>
-          <input type="checkbox" checked={sel.has(f.path)}
+          <input type="checkbox" aria-label={f.path} checked={sel.has(f.path)}
             onChange={(e) => toggleFile(f.path, e.target.checked)} />
           <span className={"chip" + (c.cls ? " " + c.cls : "")}>{c.txt}</span>
           <span className="amname">{f.nombre}</span>

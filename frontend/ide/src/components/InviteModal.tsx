@@ -101,9 +101,8 @@ export function InviteModal({
           <button
             className={"inv-btn " + (estado === "ok" ? "ok" : "")}
             onClick={onCopiar}
-            aria-live="polite"
           >
-            {estado === "ok" ? <Check size={14} /> : <Copy size={14} />}
+            {estado === "ok" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
             {estado === "ok" ? t.inv_copied : t.inv_copy}
           </button>
         </div>
