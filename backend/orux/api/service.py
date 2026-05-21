@@ -37,21 +37,27 @@ from ..plans import PLANES
 
 
 async def login_operador(
-    users, admin_user: str, secret: str, username: str, password: str
+    users, admin_user: str, secret: str, username: str, password: str,
+    *, ttl_seg: int = 8 * 3600,
 ) -> str | None:
     """Login del operador. Devuelve un token de sesión firmado, o None si:
     no está configurado (sin admin_user/secret), el usuario no ES el
     operador designado, o la contraseña no verifica (PBKDF2 vía el store —
     `await` como el WS de capa 7). Falla SIEMPRE hacia "no autorizado":
     no dice si falló el usuario o la contraseña (no filtra qué cuenta es
-    el operador)."""
+    el operador).
+
+    `ttl_seg`: vida del token de operador. Default 8h — turno de oficina; un
+    token de operador es la cuenta más privilegiada de la plataforma, no
+    debería vivir indefinidamente (BACKEND-AUDIT-0020). 0 = sin caducar
+    (opt-out explícito; no se debe usar)."""
     if not admin_user or not secret:
         return None
     if normalizar(username) != normalizar(admin_user):
         return None
     if not await users.verificar(username, password):
         return None
-    return crear_token(normalizar(username), secret)
+    return crear_token(normalizar(username), secret, ttl_seg=ttl_seg)
 
 
 def operador_de_token(

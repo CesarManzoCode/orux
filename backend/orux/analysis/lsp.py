@@ -208,8 +208,10 @@ class ClienteLSP:
     def cerrar(self) -> None:
         if not self._vivo:
             return
+        # BACKEND-AUDIT-0130: `shutdown` puede colgar hasta el timeout si el
+        # server LSP está colgado. Hacemos solo `exit` notify y matamos —el
+        # eviction de capa 17 debe ser barata, no 15s × N lenguajes.
         try:
-            self.pedir("shutdown", {})
             self.notificar("exit", {})
         except ErrorLSP:
             pass  # ya estaba muerto: no es error que importe
@@ -242,15 +244,26 @@ _K_VARIABLE = 13
 def path_a_uri(raiz: str, path: str) -> str:
     """`models.py` -> `file:///<raiz>/models.py`. Esquema único y estable
     para que `references` (que vuelve en URIs) se mapee de vuelta a paths
-    del workspace."""
-    return "file://" + raiz.rstrip("/") + "/" + path.lstrip("/")
+    del workspace. BACKEND-AUDIT-0111: percent-encode los caracteres
+    especiales del path (espacios, %, #, ?) para no romper la URI."""
+    from urllib.parse import quote
+    seguro = quote(path.lstrip("/"), safe="/")
+    return "file://" + raiz.rstrip("/") + "/" + seguro
 
 
 def uri_a_path(raiz: str, uri: str) -> str | None:
     """Inverso. None si el URI cae fuera del workspace (dependencia de libs,
-    stdlib: no es un archivo de equipo, no se avisa de él)."""
+    stdlib: no es un archivo de equipo, no se avisa de él). BACKEND-AUDIT-0111:
+    rechaza paths con `..` para evitar resolver fuera del workspace después."""
+    from urllib.parse import unquote
     pref = "file://" + raiz.rstrip("/") + "/"
-    return uri[len(pref):] if uri.startswith(pref) else None
+    if not uri.startswith(pref):
+        return None
+    rel = unquote(uri[len(pref):])
+    # Anti-traversal: ningún componente puede ser `..` ni vacío.
+    if not rel or any(seg in ("", "..") for seg in rel.split("/")):
+        return None
+    return rel
 
 
 def _rebanar(texto: str, rango: dict) -> str:
@@ -468,10 +481,32 @@ class _TransporteProceso:
         return os.read(self._of, n)
 
     def cerrar(self) -> None:
+        # Cerramos stdin para que el server vea EOF (algunos terminan limpios).
+        try:
+            if self._p.stdin is not None:
+                self._p.stdin.close()
+        except OSError:
+            pass
         try:
             self._p.kill()
         except Exception:  # noqa: BLE001 - ya estaba muerto
             pass
+        # `wait(timeout)` cosecha el zombie (BACKEND-AUDIT-0107): sin esto
+        # cada LSP que matamos deja una entrada zombie en Linux hasta el cosecha
+        # global del padre. 2s es generoso (kill ya disparó).
+        try:
+            self._p.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            pass
+        except Exception:  # noqa: BLE001
+            pass
+        # Cerrar stdout/stderr/stdin para no fugar FDs.
+        for h in (self._p.stdout, self._p.stderr, self._p.stdin):
+            try:
+                if h is not None:
+                    h.close()
+            except OSError:
+                pass
 
 
 # Servidor LSP por clave de lenguaje (la misma que usa `tiers`): lista de
@@ -479,6 +514,19 @@ class _TransporteProceso:
 # `pyright-langserver` y a veces `pyright-python-langserver`. tsserver es
 # `typescript-language-server --stdio` (npm). El cliente es UNIVERSAL: sumar
 # un lenguaje es agregar una fila acá + su languageId abajo. Nada más.
+def _scrubear_stderr(texto: str) -> str:
+    """Remueve patrones tipo ORUX_GIT_TOKEN=... y otros valores que parezcan
+    secrets antes de loguear (BACKEND-AUDIT-0243). Best-effort; el patrón es
+    `<VAR>=<valor>` para vars con prefijo ORUX_ o que contengan TOKEN/SECRET/
+    PASSWORD/KEY."""
+    import re as _re
+    pat = _re.compile(
+        r"(ORUX_\w+|[A-Z_]*(?:TOKEN|SECRET|PASSWORD|KEY|DSN))=\S+",
+        _re.IGNORECASE,
+    )
+    return pat.sub(r"\1=***", texto)
+
+
 _SERVIDORES: dict[str, tuple[list[str], ...]] = {
     "py": (
         ["pyright-langserver", "--stdio"],
@@ -537,9 +585,16 @@ def arrancar_lsp(
     for cmd in cmds:
         err = tempfile.TemporaryFile()
         try:
+            # `start_new_session=True` aísla el LSP en su propio process
+            # group (BACKEND-AUDIT-0145): si el padre cae con SIGKILL, el
+            # session leader puede ser SIGTERM-eado en bloque al matar el
+            # process group, sin dejar huerfanos. `subprocess.DEVNULL` para
+            # stderr era una opción para evitar el crecimiento del temp,
+            # pero perdemos los logs de error que sí queremos; el barrido
+            # de `cerrar()` cierra el FD a tiempo.
             proc = subprocess.Popen(
                 cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=err, bufsize=0,
+                stderr=err, bufsize=0, start_new_session=True,
             )
         except (FileNotFoundError, OSError) as e:
             ultimo = f"{cmd[0]}: no se pudo ejecutar ({e})"
@@ -560,6 +615,9 @@ def arrancar_lsp(
             try:
                 err.seek(0)
                 cola = err.read()[-800:].decode("utf-8", "replace").strip()
+                # BACKEND-AUDIT-0243: scrubear posibles secrets ORUX_GIT_TOKEN
+                # u otros si el LSP dumpea su env por error.
+                cola = _scrubear_stderr(cola)
             except Exception:  # noqa: BLE001
                 cola = ""
             ultimo = (

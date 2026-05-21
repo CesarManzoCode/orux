@@ -48,7 +48,7 @@ def test_identidad_oauth_no_colisiona_con_cuenta_de_password() -> None:
     # El riesgo descartado: una cuenta de contraseña "torvalds" y el GitHub
     # "torvalds" DEBEN ser identidades distintas.
     store = UserStore()
-    store.registrar("torvalds", "secreto")
+    store.registrar("torvalds", "secreto123")
     assert identidad_github({"login": "torvalds"}) == "gh:torvalds"
     assert store.existe("torvalds") is True
     assert store.existe("gh:torvalds") is False  # espacios disjuntos

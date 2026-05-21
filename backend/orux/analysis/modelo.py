@@ -102,10 +102,12 @@ def cambios_que_importan_modelo(
 
         # Tier sin parser (heurístico): no puede separar firma de cuerpo.
         # Honesto sobre su límite, igual que el viejo javascript.py.
+        # BACKEND-AUDIT-0122: el mensaje no menciona TS específicamente
+        # (Go/Rust/JS también cae al heurístico cuando falta el grammar).
         if not (a.detallado and d.detallado):
             motivos[nombre] = (
-                f"«{nombre}» cambió — sin parser de TS no puedo separar "
-                f"firma de cuerpo; revisá si tu uso sigue válido"
+                f"«{nombre}» cambió — sin parser fino para este lenguaje "
+                f"no puedo separar firma de cuerpo; revisá si tu uso sigue válido"
             )
             continue
 

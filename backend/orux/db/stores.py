@@ -11,7 +11,7 @@ from ..identity.passwords import (
     hash_password,
     verificar_password,
 )
-from ..identity.store import normalizar
+from ..identity.store import normalizar, validar_nuevo_usuario
 
 
 class PgUserStore:
@@ -35,16 +35,37 @@ class PgUserStore:
         return [r["username"] for r in rows]
 
     async def registrar(self, username: str, password: str) -> str:
-        u = normalizar(username)
-        if not u:
-            raise ValueError("usuario inválido")
-        if await self.existe(u):
-            raise ValueError("ese usuario ya existe")
-        await self._db.execute(
-            "INSERT INTO users (username, password_hash) VALUES ($1,$2)",
-            u, hash_password(password),  # valida password vacía
+        # `validar_nuevo_usuario` aplica las reglas de formato.
+        u = validar_nuevo_usuario(username)
+        # BACKEND-AUDIT-0178: `INSERT ... ON CONFLICT DO NOTHING` evita la
+        # carrera entre dos requests con mismo username (ambos pasaban
+        # `existe()`, el segundo violaba PK con UniqueViolationError sin
+        # try/except). Con `RETURNING username` distinguimos "inserté" de
+        # "ya existía" — y NO levantamos UniqueViolation porque no sale del DB.
+        res = await self._db.fetchval(
+            "INSERT INTO users (username, password_hash) VALUES ($1,$2) "
+            "ON CONFLICT (username) DO NOTHING RETURNING username",
+            u, hash_password(password),  # valida password vacía / corta / larga
         )
+        if res is None:
+            raise ValueError("ese usuario ya existe")
         return u
+
+    async def epoch(self, username: str) -> int:
+        """Contador de sesiones del usuario (BACKEND-AUDIT-0002). 0 para
+        usuarios pre-fix (la columna tiene default 0)."""
+        v = await self._db.fetchval(
+            "SELECT epoch FROM users WHERE username=$1",
+            normalizar(username),
+        )
+        return int(v) if v is not None else 0
+
+    async def revocar_sesiones(self, username: str) -> None:
+        """Incrementa el epoch (BACKEND-AUDIT-0002)."""
+        await self._db.execute(
+            "UPDATE users SET epoch = epoch + 1 WHERE username=$1",
+            normalizar(username),
+        )
 
     async def asegurar_externo(self, username: str) -> str:
         """Idem `UserStore.asegurar_externo` pero en Postgres. Idempotente
@@ -88,15 +109,31 @@ class PgOwnershipStore:
         return {r["path"]: r["owner"] for r in rows}
 
     async def guardar(self, team_id: str, owners: dict[str, str]) -> None:
-        # Reemplazo completo del set del equipo: el mapa en memoria es la
-        # verdad; lo volcamos entero (es chico — 2-50 personas, un repo).
+        """Reemplazo del set del equipo. El mapa en memoria es la verdad; lo
+        volcamos. Implementación con diff sobre el estado existente para
+        evitar la write amplification de DELETE+INSERT completo
+        (BACKEND-AUDIT-0177): si el cambio es 1 path de 5000, hacemos 1 UPSERT,
+        no 5000 INSERTs. Para sets pequeños el costo de leer + comparar es
+        despreciable; para grandes el ahorro es 100x."""
         async with self._db.tx() as con:
-            await con.execute(
-                "DELETE FROM ownership WHERE team_id=$1", team_id
+            rows = await con.fetch(
+                "SELECT path, owner FROM ownership WHERE team_id=$1", team_id
             )
-            if owners:
+            previos = {r["path"]: r["owner"] for r in rows}
+            a_borrar = [p for p in previos if p not in owners]
+            a_upsert = [
+                (team_id, p, o) for p, o in owners.items()
+                if previos.get(p) != o
+            ]
+            if a_borrar:
+                await con.executemany(
+                    "DELETE FROM ownership WHERE team_id=$1 AND path=$2",
+                    [(team_id, p) for p in a_borrar],
+                )
+            if a_upsert:
                 await con.executemany(
                     "INSERT INTO ownership (team_id, path, owner) "
-                    "VALUES ($1,$2,$3)",
-                    [(team_id, p, o) for p, o in owners.items()],
+                    "VALUES ($1,$2,$3) ON CONFLICT (team_id, path) "
+                    "DO UPDATE SET owner = EXCLUDED.owner",
+                    a_upsert,
                 )

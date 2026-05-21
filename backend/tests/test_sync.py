@@ -13,6 +13,13 @@ Capa 2: al conectar, el servidor manda DOS mensajes de handshake: primero el
 `init` (workspace, contrato de capa 1 intacto) y enseguida el `welcome`
 (identidad de presencia + roster). El helper `handshake` consume ambos y
 devuelve el welcome, para que cada test no tenga que repetir esa coreografía.
+
+Los helpers comunes (`autenticar`, `handshake`, `entrar_equipo`,
+`recv_tipo`, fixture `server_port`/`servidor`) viven en `conftest.py`
+desde el fix BACKEND-AUDIT-0297. Aquí se re-exportan al namespace de este
+módulo para que los tests existentes no cambien (`_user_seq`, `_coord` y
+`_coord_limpio` siguen como variables locales por compatibilidad con tests
+que los referencian; el coordinador real del conftest es independiente).
 """
 
 import asyncio
@@ -28,157 +35,19 @@ from orux.git import GitRepo
 from orux.server.sync import SyncServer, TeamRuntime
 from orux.state import DiskStorage
 
-# Capa 7: la app está cerrada. Cada test necesita usuarios; este contador da
-# nombres únicos para que dos clientes de un test sean identidades distintas.
-# Cada test tiene su server (UserStore en memoria), así que repetir entre
-# tests es inocuo.
+# Re-exportamos los helpers compartidos para que los tests existentes en
+# este archivo (y los nuevos) los importen del namespace del módulo.
+from .conftest import (  # noqa: F401  (usados por los tests del archivo)
+    autenticar,
+    entrar_equipo,
+    handshake,
+    recv_tipo,
+)
+
+# Capa 7: contador de usuarios local (los nuevos tests usan
+# `conftest.usuario_nuevo()`; los viejos siguen escribiendo "user{n}" a mano
+# en tests específicos).
 _user_seq = itertools.count(1)
-
-
-@pytest_asyncio.fixture
-async def server_port():
-    """Levanta un SyncServer en un puerto libre, lo cede al test y lo cierra al final."""
-    sync_server = SyncServer()
-    # Puerto 0 significa "asígname uno libre". Nos lo devuelve el sistema.
-    ws_server = await serve(sync_server.handle, "localhost", 0)
-    port = ws_server.sockets[0].getsockname()[1]
-    try:
-        yield port
-    finally:
-        ws_server.close()
-        await ws_server.wait_closed()
-
-
-@pytest_asyncio.fixture
-async def servidor():
-    """Como `server_port` pero cede (SyncServer, puerto).
-
-    Útil cuando el test necesita pre-sembrar el workspace: un archivo con
-    contenido y SIN dueño. Ese estado es real, no artificial: es exactamente
-    lo que hay tras hidratar de disco al arrancar (capa 3), porque el
-    ownership es efímero y no se persiste.
-    """
-    sync_server = SyncServer()
-    ws_server = await serve(sync_server.handle, "localhost", 0)
-    port = ws_server.sockets[0].getsockname()[1]
-    try:
-        yield sync_server, port
-    finally:
-        ws_server.close()
-        await ws_server.wait_closed()
-
-
-async def autenticar(ws, *, user=None, password="pw", registrar=True):
-    """Pasa la compuerta de auth (capa 7). Devuelve (usuario, auth_ok dict).
-
-    - `user=None`: registra un usuario único nuevo (caso común: clientes
-      distintos = identidades distintas).
-    - `user` dado + `registrar=True`: lo registra. `registrar=False`: hace
-      login (para tests de reconexión con la MISMA identidad).
-
-    Deja la conexión justo antes del `init`: lo que el server manda después
-    de `auth_ok` es el handshake normal.
-    """
-    if user is None:
-        user = f"user{next(_user_seq)}"
-    tipo = "register" if registrar else "login"
-    await ws.send(
-        json.dumps({"type": tipo, "username": user, "password": password})
-    )
-    authok = json.loads(await ws.recv())
-    assert authok["type"] == "auth_ok", f"auth falló: {authok}"
-    return user, authok
-
-
-# Capa 15: ahora entre auth y el workspace hay un GATE de equipo. Para que
-# los ~130 tests sigan valiendo sin reescribirlos uno por uno, el helper
-# coordina solo: el PRIMER cliente de un server crea el equipo (queda
-# admin); los siguientes se unen al MISMO equipo (el admin genera un código
-# de un solo uso por cada uno). Se coordina por puerto del server (único por
-# test gracias al fixture). Aislamiento real se prueba aparte, con servers
-# distintos.
-_coord: dict = {}
-
-
-@pytest.fixture(autouse=True)
-def _coord_limpio():
-    # Los puertos efímeros pueden reciclarse entre tests: limpiar evita que
-    # un test herede el "equipo" (y la conexión ya cerrada) de otro.
-    _coord.clear()
-    yield
-    _coord.clear()
-
-
-def _puerto(ws):
-    try:
-        return ws.remote_address[1]
-    except Exception:  # pragma: no cover
-        return "default"
-
-
-async def entrar_equipo(ws):
-    """Pasa el gate de equipo (capa 15). Primer cliente del server: crea el
-    equipo. Siguientes: el admin emite un código de un solo uso y este se
-    une. Deja la conexión justo en `team_ready` (lo consume) — lo que sigue
-    (init/welcome/ownership/admin_info[/git_status]) lo lee quien llame."""
-    lobby = json.loads(await ws.recv())
-    assert lobby["type"] == "lobby", f"esperaba lobby, llegó {lobby}"
-    port = _puerto(ws)
-    if lobby["teams"]:
-        # Ya es miembro (reconexión, o segunda pestaña, o multi-equipo):
-        # entra al suyo. NO depende de la conexión del admin (que pudo
-        # cerrarse) — es además el flujo real de un usuario que vuelve.
-        await ws.send(
-            json.dumps({"type": "select_team", "team_id": lobby["teams"][0]["id"]})
-        )
-    else:
-        coord = _coord.get(port)
-        if coord is None:
-            # Primer cliente del server: crea el equipo (queda admin) y
-            # queda como emisor de invitaciones para los que sigan.
-            await ws.send(
-                json.dumps({"type": "create_team", "nombre": f"eq-{port}"})
-            )
-            _coord[port] = {"ws": ws}
-        else:
-            admin_ws = coord["ws"]
-            await admin_ws.send(json.dumps({"type": "create_invite"}))
-            ic = await recv_tipo(admin_ws, "invite_created")
-            await ws.send(
-                json.dumps({"type": "redeem_invite", "code": ic["code"]})
-            )
-    tr = json.loads(await ws.recv())
-    assert tr["type"] == "team_ready", f"esperaba team_ready, llegó {tr}"
-
-
-async def handshake(ws, *, user=None, password="pw", registrar=True) -> dict:
-    """autenticar + gate de equipo + consumir init/welcome/ownership/
-    admin_info. Devuelve el welcome. El git_status (si hay git) viene DESPUÉS
-    y lo leen los tests de git ellos mismos."""
-    await autenticar(ws, user=user, password=password, registrar=registrar)
-    await entrar_equipo(ws)
-    init = json.loads(await ws.recv())
-    assert init["type"] == "init"
-    welcome = json.loads(await ws.recv())
-    assert welcome["type"] == "welcome"
-    ownership = json.loads(await ws.recv())
-    assert ownership["type"] == "ownership"
-    admin_info = json.loads(await ws.recv())
-    assert admin_info["type"] == "admin_info"
-    return welcome
-
-
-async def recv_tipo(ws, tipo: str, timeout: float = 2):
-    """Lee descartando mensajes de otros tipos hasta encontrar `tipo`.
-
-    Capa 4: crear un archivo hace dueño al creador y difunde un `ownership`
-    a todos. Ese mensaje legítimo puede intercalarse con lo que un test de
-    capa 1 espera, así que filtramos por tipo en vez de asumir orden exacto.
-    """
-    while True:
-        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
-        if msg["type"] == tipo:
-            return msg
 
 
 # --- Contratos de capa 1 (siguen vigentes, solo se les sumó el welcome) ---
@@ -593,6 +462,65 @@ async def test_rechazar_propuesta_revierte_al_autor(server_port: int) -> None:
         }
 
 
+async def test_propuesta_se_reentrega_al_dueno_que_se_conecta_tarde(
+    server_port: int,
+) -> None:
+    """Bug reportado por el usuario: B propone cambios a un archivo de A,
+    pero A no está conectado (o se desconecta antes de ver el aviso). Al
+    volver A, debe recibir la propuesta — si no, "un cambio invisible" rompe
+    la tesis de capa 4 (el dueño tiene que enterarse, siempre).
+
+    Setup: A entra y reclama main.py; B entra al mismo equipo (el código de
+    invitación lo emite A, que sigue vivo en este punto). Después A se va y
+    B propone al vacío — el servidor guarda la propuesta pero no tiene a
+    quién dirigirla. Cuando A vuelve, el handshake debe entregársela.
+    """
+    # 1) A reclama, B entra al equipo. Ambos vivos para el setup inicial.
+    async with connect(f"ws://localhost:{server_port}") as a:
+        await handshake(a, user="ana")
+        await a.send(json.dumps({"type": "claim", "path": "main.py"}))
+        await _drenar_ownership(a)
+        async with connect(f"ws://localhost:{server_port}") as b:
+            await handshake(b, user="beto")  # B ve el claim ya en su `ownership` del handshake
+
+    # 2) A se desconectó (al salir del `with a`). B vuelve y propone al
+    # vacío: el aviso original muere, la propuesta queda en estado del
+    # server (es lo que el bug del usuario describe).
+    async with connect(f"ws://localhost:{server_port}") as b:
+        await autenticar(b, user="beto", registrar=False)
+        await entrar_equipo(b)
+        for _ in range(4):  # init/welcome/ownership/admin_info
+            await b.recv()
+        await b.send(
+            json.dumps(
+                {"type": "update", "path": "main.py", "content": "B propone"}
+            )
+        )
+        # Nada vuelve a B (su update fue tentativo). El sleep da margen al
+        # server para que `_aplicar` corra antes de cerrar la conexión.
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(b.recv(), timeout=0.3)
+
+    # 3) A vuelve. El handshake normal sigue intacto, y JUSTO DESPUÉS llega
+    # la propuesta que se había "perdido" antes del fix.
+    async with connect(f"ws://localhost:{server_port}") as a2:
+        await autenticar(a2, user="ana", registrar=False)
+        await entrar_equipo(a2)
+        init = json.loads(await a2.recv())
+        assert init["type"] == "init"
+        # claim NO crea el archivo en workspace y el update de B fue
+        # tentativo (tampoco lo creó); main.py vive solo como ownership +
+        # propuesta. El workspace sigue vacío.
+        assert init["files"] == {}
+        for tipo in ("welcome", "ownership", "admin_info"):
+            assert json.loads(await a2.recv())["type"] == tipo
+        prop = json.loads(await asyncio.wait_for(a2.recv(), timeout=2))
+        assert prop["type"] == "proposal"
+        assert prop["proposal"]["path"] == "main.py"
+        assert prop["proposal"]["content"] == "B propone"
+        assert prop["proposal"]["author_name"] == "beto"
+
+
 async def test_solo_el_dueno_puede_resolver(server_port: int) -> None:
     # Un no-dueño que arma el id determinista de la propuesta y manda resolve
     # no debe poder aplicar nada.
@@ -633,13 +561,13 @@ async def test_app_cerrada_sin_login(server_port: int) -> None:
 
 async def test_login_password_incorrecta(server_port: int) -> None:
     async with connect(f"ws://localhost:{server_port}") as a:
-        await autenticar(a, user="ana", password="buena")  # registra ana
+        await autenticar(a, user="ana", password="buena123")  # registra ana
     async with connect(f"ws://localhost:{server_port}") as b:
-        await b.send(json.dumps({"type": "login", "username": "ana", "password": "mala"}))
+        await b.send(json.dumps({"type": "login", "username": "ana", "password": "malapwd1"}))
         msg = json.loads(await asyncio.wait_for(b.recv(), timeout=2))
         assert msg["type"] == "auth_error"
         # Y se puede reintentar en la MISMA conexión con la buena.
-        await b.send(json.dumps({"type": "login", "username": "ana", "password": "buena"}))
+        await b.send(json.dumps({"type": "login", "username": "ana", "password": "buena123"}))
         assert json.loads(await asyncio.wait_for(b.recv(), timeout=2))["type"] == "auth_ok"
 
 
@@ -647,7 +575,7 @@ async def test_registrar_duplicado_falla(server_port: int) -> None:
     async with connect(f"ws://localhost:{server_port}") as a:
         await autenticar(a, user="ana")
     async with connect(f"ws://localhost:{server_port}") as b:
-        await b.send(json.dumps({"type": "register", "username": "ana", "password": "x"}))
+        await b.send(json.dumps({"type": "register", "username": "ana", "password": "passw0rd"}))
         assert json.loads(await asyncio.wait_for(b.recv(), timeout=2))["type"] == "auth_error"
 
 
@@ -1105,7 +1033,7 @@ async def test_commit_desde_la_web(tmp_path) -> None:
     port = s.sockets[0].getsockname()[1]
     try:
         async with connect(f"ws://localhost:{port}") as c:
-            await handshake(c, user="ana@team.com")
+            await handshake(c, user="ana.team")
             await recv_tipo(c, "git_status")
             await c.send(json.dumps({"type": "update", "path": "main.py", "content": "x = 1"}))
             await asyncio.sleep(0.05)
@@ -1225,7 +1153,7 @@ async def test_push_desde_la_web(tmp_path) -> None:
     port = s.sockets[0].getsockname()[1]
     try:
         async with connect(f"ws://localhost:{port}") as a:
-            await handshake(a, user="ana@team.com"); await recv_tipo(a, "git_status")
+            await handshake(a, user="ana.team"); await recv_tipo(a, "git_status")
             await a.send(json.dumps({
                 "type": "clone", "url": str(remoto),
                 "username": "u", "token": "t"}))
@@ -1271,7 +1199,7 @@ async def test_push_a_main_es_elegible(tmp_path) -> None:
     port = s.sockets[0].getsockname()[1]
     try:
         async with connect(f"ws://localhost:{port}") as a:
-            await handshake(a, user="ana@team.com")
+            await handshake(a, user="ana.team")
             await recv_tipo(a, "git_status")
             await a.send(json.dumps({"type": "clone", "url": str(remoto),
                                      "username": "u", "token": "t"}))

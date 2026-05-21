@@ -23,9 +23,17 @@ class PgTeamStore:
         creador = normalizar(creador)
         async with self._db.tx() as con:
             tid = _id_equipo()
-            # Reintenta ante el caso (improbable) de id repetido.
-            while await con.fetchval("SELECT 1 FROM teams WHERE id=$1", tid):
+            # Reintenta ante el caso (improbable) de id repetido, con tope.
+            # BACKEND-AUDIT-0179: sin tope, un bug en `_id_equipo` (siempre el
+            # mismo) congelaba la transacción.
+            for _ in range(16):
+                if not await con.fetchval(
+                    "SELECT 1 FROM teams WHERE id=$1", tid
+                ):
+                    break
                 tid = _id_equipo()
+            else:
+                raise TeamError("no se pudo generar id de equipo único")
             await con.execute(
                 "INSERT INTO teams (id, nombre, creador) VALUES ($1,$2,$3)",
                 tid, nombre, creador,

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from functools import lru_cache as _lru_cache
 from typing import Callable
 
 from .modelo import Simbolo
@@ -36,6 +37,14 @@ Extraer = Callable[[str], "dict[str, Simbolo] | None"]
 FanOut = Callable[[str, str], "set[str]"]
 # Clave de lenguaje de un path (para no cruzar lenguajes), o None.
 LangDe = Callable[[str], "str | None"]
+
+
+@_lru_cache(maxsize=4096)
+def _patron_menciona(nombre: str) -> "re.Pattern[str]":
+    """Cache de patrones compilados por símbolo (BACKEND-AUDIT-0114): el
+    impacto transitivo llama `_menciona` muchas veces por nombre dentro del
+    mismo análisis; compilar cada vez era el cuello de botella obvio."""
+    return re.compile(r"(?<![\w$])" + re.escape(nombre) + r"(?![\w$])")
 
 
 def _menciona(texto: str, nombre: str) -> bool:
@@ -51,8 +60,7 @@ def _menciona(texto: str, nombre: str) -> bool:
     el transitivo es premium/conservador): aceptable."""
     if not texto:
         return False
-    return re.search(r"(?<![\w$])" + re.escape(nombre) + r"(?![\w$])",
-                     texto) is not None
+    return _patron_menciona(nombre).search(texto) is not None
 
 
 def _en_interfaz(s: Simbolo, nombre: str) -> bool:

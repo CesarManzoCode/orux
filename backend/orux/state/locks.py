@@ -19,6 +19,8 @@ números de línea del contenido viejo desaparecen o cambian".
 
 from __future__ import annotations
 
+from array import array
+
 # Tope del producto n·m de la matriz LCS. Sin esto, un update con un archivo
 # enorme (100k líneas vs 100k) aloca ~10^10 celdas y CONGELA el event loop
 # para TODOS los equipos (esta función es síncrona en el hot path de
@@ -26,7 +28,14 @@ from __future__ import annotations
 # comparación posicional O(n): es CONSERVADORA (nunca reporta de menos), así
 # que la capa 5 sigue protegiendo — solo es más estricta de lo necesario en
 # un archivo gigantesco, caso que no es el de edición humana normal.
-_LCS_MAX_CELDAS = 4_000_000
+#
+# Tope reducido (BACKEND-AUDIT-0082 / -0083): 1M celdas mantiene la latencia
+# aceptable en el event loop (LCS de 1000x1000 son ~3MB de buffer con array
+# de ints, milisegundos). Más allá: fallback posicional. La función ya es
+# pura; el caller (`_aplicar` con `rt._estado_lock`) puede moverla a un
+# `asyncio.to_thread` si quiere paralelizar; cambiarlo aquí rompería el
+# orden de propuestas vs updates (decisión consciente: no se mueve).
+_LCS_MAX_CELDAS = 1_000_000
 
 
 def _tocadas_posicional(a: list[str], b: list[str]) -> set[int]:
@@ -56,15 +65,22 @@ def lineas_tocadas(viejo: str, nuevo: str) -> set[int]:
         # Archivo gigante: la matriz LCS mataría el server. Degradar.
         return _tocadas_posicional(a, b)
 
-    # LCS por programación dinámica: lcs[i][j] = largo de la subsecuencia
-    # común más larga entre a[i:] y b[j:].
-    lcs = [[0] * (m + 1) for _ in range(n + 1)]
+    # LCS por programación dinámica con `array.array('i')` plano: 1 buffer
+    # de (n+1)*(m+1) ints en vez de N+1 listas Python (BACKEND-AUDIT-0083:
+    # ~28 bytes/PyObject vs 4 bytes/int = ~7x menos memoria + cache-friendly).
+    cols = m + 1
+    lcs = array("i", [0] * ((n + 1) * cols))
     for i in range(n - 1, -1, -1):
+        base_i = i * cols
+        base_i1 = (i + 1) * cols
+        ai = a[i]
         for j in range(m - 1, -1, -1):
-            if a[i] == b[j]:
-                lcs[i][j] = lcs[i + 1][j + 1] + 1
+            if ai == b[j]:
+                lcs[base_i + j] = lcs[base_i1 + j + 1] + 1
             else:
-                lcs[i][j] = max(lcs[i + 1][j], lcs[i][j + 1])
+                d = lcs[base_i1 + j]
+                r = lcs[base_i + j + 1]
+                lcs[base_i + j] = d if d >= r else r
 
     tocadas: set[int] = set()
     i = j = 0
@@ -73,7 +89,7 @@ def lineas_tocadas(viejo: str, nuevo: str) -> set[int]:
             # Línea vieja que sobrevive idéntica: NO tocada.
             i += 1
             j += 1
-        elif lcs[i + 1][j] >= lcs[i][j + 1]:
+        elif lcs[(i + 1) * cols + j] >= lcs[i * cols + j + 1]:
             # a[i] no está en la subsecuencia común: se borró/modificó.
             tocadas.add(i + 1)  # 1-indexado, como las líneas de presencia
             i += 1

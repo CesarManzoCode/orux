@@ -75,8 +75,8 @@ class _UsersAuth:
 
 async def test_login_operador_ok_emite_token_valido() -> None:
     users = _UsersAuth()
-    users.registrar("ana", "s3creta")
-    tok = await service.login_operador(users, "ana", "FIRMA", "ana", "s3creta")
+    users.registrar("ana", "s3cretaA1")
+    tok = await service.login_operador(users, "ana", "FIRMA", "ana", "s3cretaA1")
     assert isinstance(tok, str) and tok
     # El token validado devuelve al operador.
     assert service.operador_de_token(tok, "ana", "FIRMA") == "ana"
@@ -84,32 +84,32 @@ async def test_login_operador_ok_emite_token_valido() -> None:
 
 async def test_login_operador_normaliza_el_usuario() -> None:
     users = _UsersAuth()
-    users.registrar("ana", "pw")
+    users.registrar("ana", "passw0rd")
     # admin_user con mayúsculas/espacios y login en minúsculas: misma cuenta.
-    tok = await service.login_operador(users, "  Ana ", "K", "ana", "pw")
+    tok = await service.login_operador(users, "  Ana ", "K", "ana", "passw0rd")
     assert tok is not None
     assert service.operador_de_token(tok, "ANA", "K") == "ana"
 
 
 async def test_login_operador_rechaza_password_mala() -> None:
     users = _UsersAuth()
-    users.registrar("ana", "buena")
-    assert await service.login_operador(users, "ana", "K", "ana", "mala") is None
+    users.registrar("ana", "buenapwd")
+    assert await service.login_operador(users, "ana", "K", "ana", "malapwd1") is None
 
 
 async def test_login_operador_rechaza_a_quien_no_es_el_operador() -> None:
     users = _UsersAuth()
-    users.registrar("ana", "pw")
-    users.registrar("bob", "pw")
+    users.registrar("ana", "passw0rd")
+    users.registrar("bob", "passw0rd")
     # bob existe y la pass es correcta, pero el operador es ana: None.
-    assert await service.login_operador(users, "ana", "K", "bob", "pw") is None
+    assert await service.login_operador(users, "ana", "K", "bob", "passw0rd") is None
 
 
 async def test_login_operador_cerrado_si_no_configurado() -> None:
     users = _UsersAuth()
-    users.registrar("ana", "pw")
-    assert await service.login_operador(users, "", "K", "ana", "pw") is None
-    assert await service.login_operador(users, "ana", "", "ana", "pw") is None
+    users.registrar("ana", "passw0rd")
+    assert await service.login_operador(users, "", "K", "ana", "passw0rd") is None
+    assert await service.login_operador(users, "ana", "", "ana", "passw0rd") is None
 
 
 def test_operador_de_token_rechaza_falsos_y_no_configurado() -> None:

@@ -30,8 +30,8 @@ def test_admin_es_el_primer_registrado(tmp_path):
 def test_admin_sobrevive_a_reiniciar_sin_migracion(tmp_path):
     ruta = tmp_path / "users.json"
     s1 = UserStore(ruta)
-    s1.registrar("Lider", "x")
-    s1.registrar("Otro", "y")
+    s1.registrar("Lider", "passw0rd")
+    s1.registrar("Otro", "passw0rd2")
     # Otro proceso/arranque lee el MISMO json (orden de inserción preservado
     # por json/dict): el admin es estable sin ningún campo nuevo en disco.
     s2 = UserStore(ruta)
@@ -40,8 +40,8 @@ def test_admin_sobrevive_a_reiniciar_sin_migracion(tmp_path):
 
 def test_usuarios_lista_estable_sin_filtrar_password(tmp_path):
     s = UserStore(tmp_path / "users.json")
-    s.registrar("Zoe", "p1")
-    s.registrar("Ana", "p2")
+    s.registrar("Zoe", "passw0rd1")
+    s.registrar("Ana", "passw0rd2")
     listado = s.usuarios()
     assert listado == ["ana", "zoe"]  # ordenado, normalizado
     # Es solo nombres: ningún registro de contraseña se filtra por aquí.

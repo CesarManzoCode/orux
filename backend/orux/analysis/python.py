@@ -107,16 +107,23 @@ def _firma(nodo: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     """
     a = nodo.args
     partes: list[str] = []
-    for arg in a.posonlyargs:
-        partes.append(arg.arg)
+    # BACKEND-AUDIT-0123: los defaults posicionales se distribuyen sobre
+    # `posonlyargs + args` (Python guarda `a.defaults` aplicados de derecha
+    # a izquierda sobre la lista combinada). Sin esto, `def f(a=1, /, b)` se
+    # reportaba con misma firma que `def f(a, /, b)`.
+    pos = a.posonlyargs + a.args
+    n_pos = len(pos)
+    n_def = len(a.defaults)
+    # Map index -> tiene_default (los últimos n_def los tienen)
+    tiene_def = [i >= n_pos - n_def for i in range(n_pos)]
+
+    for i, arg in enumerate(a.posonlyargs):
+        partes.append(arg.arg + ("=" if tiene_def[i] else ""))
     if a.posonlyargs:
         partes.append("/")
-    n_def = len(a.defaults)
-    pos = a.posonlyargs + a.args
-    for i, arg in enumerate(a.args):
-        # ¿este posicional tiene default? (los defaults aplican a los últimos)
-        tiene = i >= len(a.args) - (n_def - len(a.posonlyargs)) if n_def else False
-        partes.append(arg.arg + ("=" if tiene else ""))
+    for j, arg in enumerate(a.args):
+        i = len(a.posonlyargs) + j
+        partes.append(arg.arg + ("=" if tiene_def[i] else ""))
     if a.vararg:
         partes.append("*" + a.vararg.arg)
     elif a.kwonlyargs:

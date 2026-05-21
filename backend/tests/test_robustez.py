@@ -150,10 +150,10 @@ def test_diskstorage_cargar_ignora_tmp_de_crash(tmp_path):
 def test_userstore_guardar_es_atomico_y_relee(tmp_path):
     ruta = tmp_path / "users.json"
     s = UserStore(ruta)
-    s.registrar("Joaquin", "pw")
+    s.registrar("Joaquin", "passw0rd")
     assert not list(tmp_path.glob("*.tmp"))
     # Reabrir desde disco => el usuario está (no se perdió, no truncado).
-    assert UserStore(ruta).verificar("joaquin", "pw") is True
+    assert UserStore(ruta).verificar("joaquin", "passw0rd") is True
 
 
 def test_aplicar_rename_guard_argumento_vacio():
@@ -186,7 +186,7 @@ async def srv(tmp_path):
 async def _entrar(ws, user="dev"):
     """auth + crear equipo + consumir handshake. Un cliente, server fresco."""
     await ws.send(json.dumps(
-        {"type": "register", "username": user, "password": "pw"}))
+        {"type": "register", "username": user, "password": "passw0rd"}))
     assert json.loads(await ws.recv())["type"] == "auth_ok"
     assert json.loads(await ws.recv())["type"] == "lobby"
     await ws.send(json.dumps({"type": "create_team", "nombre": "eq"}))
@@ -230,7 +230,7 @@ async def test_lock_de_estado_no_deadlockea_ni_pierde_convergencia(srv):
         # 2º cliente: se une por invitación del admin (a).
         async with connect(f"ws://localhost:{port}") as b:
             await b.send(json.dumps(
-                {"type": "register", "username": "bb", "password": "pw"}))
+                {"type": "register", "username": "bb", "password": "passw0rd"}))
             assert json.loads(await b.recv())["type"] == "auth_ok"
             assert json.loads(await b.recv())["type"] == "lobby"
             await a.send(json.dumps({"type": "create_invite"}))
@@ -269,19 +269,19 @@ async def test_auth_backoff_no_rompe_el_login_correcto(srv):
     s, port, _ = srv
     async with connect(f"ws://localhost:{port}") as ws:
         await ws.send(json.dumps(
-            {"type": "register", "username": "neo", "password": "pw"}))
+            {"type": "register", "username": "neo", "password": "passw0rd"}))
         assert json.loads(await ws.recv())["type"] == "auth_ok"
     # Nueva conexión: una contraseña mala (recibe auth_error al instante),
     # y el login correcto después sigue funcionando.
     async with connect(f"ws://localhost:{port}") as ws:
         await ws.send(json.dumps(
-            {"type": "login", "username": "neo", "password": "MAL"}))
+            {"type": "login", "username": "neo", "password": "MALpwdXX"}))
         t0 = time.monotonic()
         err = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
         # El error llega rápido (el backoff es DESPUÉS de enviarlo).
         assert err["type"] == "auth_error"
         assert time.monotonic() - t0 < 1.0
         await ws.send(json.dumps(
-            {"type": "login", "username": "neo", "password": "pw"}))
+            {"type": "login", "username": "neo", "password": "passw0rd"}))
         ok = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
         assert ok["type"] == "auth_ok"

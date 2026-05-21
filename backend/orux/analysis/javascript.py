@@ -54,11 +54,59 @@ _KW = frozenset(
 
 # Para no contar identificadores dentro de strings/comentarios: los borramos
 # antes de tokenizar (igual que el `ast` de Python ignora literales).
+#
+# BACKEND-AUDIT-0124 / -0115: el patrón es no-greedy y termina en `*/`/comilla
+# CONOCIDA; si no se cierra, el alternativo siguiente toma el control en vez
+# de devorar todo el archivo. Para template strings, NO borramos `${...}` —
+# eso es código real, queremos contar sus identifiers. Implementamos con
+# split manual del template a ranges literales + ranges de código.
 _RUIDO = re.compile(
-    r"//[^\n]*|/\*[\s\S]*?\*/|`(?:\\.|[^`\\])*`"
-    r"|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'"
+    r"//[^\n]*"                             # comentario //
+    r"|/\*[\s\S]*?\*/"                      # comentario /* */
+    r"|`(?:\\.|\$(?!\{)|[^`\\$])*`"         # template SIN ${...}
+    r"|\"(?:\\.|[^\"\\\n])*\""              # "..."
+    r"|'(?:\\.|[^'\\\n])*'"                  # '...'
 )
+# Para template strings con interpolación: limpiamos solo los segmentos
+# LITERALES, dejando el código dentro de ${...}. Esto preserva referencias
+# reales a identificadores que un atacante de heurístico no podría meter
+# como string.
+_TEMPLATE_INTERP = re.compile(r"`(?:\\.|[^`\\])*`")
 _IDENT = re.compile(r"[A-Za-z_$][\w$]*")
+
+
+def _limpiar_ruido(source: str) -> str:
+    """Borra strings/comentarios pero PRESERVA `${expr}` dentro de templates
+    con interpolación. Sin esto, un identifier real dentro de `${user.id}`
+    se perdía (BACKEND-AUDIT-0115)."""
+    # Primero, reemplaza templates SIN interpolación (el regex `_RUIDO` los
+    # cubre). Para los que SÍ tienen `${...}`, los procesamos manualmente:
+    # reemplazamos solo los segmentos literales con espacios.
+    salida = _RUIDO.sub(" ", source)
+    # Ya no hay templates simples; los con `${}` no fueron tocados.
+    def _proc_template(m):
+        s = m.group(0)
+        # Reemplaza literales por espacios; deja el código en `${...}`.
+        i = 0
+        out: list[str] = []
+        while i < len(s):
+            if s[i:i+2] == "${":
+                # Encuentra el cierre balanceado del `${`.
+                depth = 1
+                j = i + 2
+                while j < len(s) and depth > 0:
+                    if s[j] == "{":
+                        depth += 1
+                    elif s[j] == "}":
+                        depth -= 1
+                    j += 1
+                out.append(s[i:j])  # preserva el `${expr}` entero
+                i = j
+            else:
+                out.append(" ")
+                i += 1
+        return "".join(out)
+    return _TEMPLATE_INTERP.sub(_proc_template, salida)
 
 
 def _tops(source: str) -> list[tuple[str, int]]:
@@ -91,8 +139,11 @@ def referencias(source: str) -> set[str]:
 
     Sobre-aproxima (cuenta también el propio nombre si se autoreferencia,
     etc.): es un hint, no resolución. Mismo criterio que el módulo Python.
+
+    Preserva los identificadores dentro de `${...}` en template strings
+    (BACKEND-AUDIT-0115).
     """
-    limpio = _RUIDO.sub(" ", source)
+    limpio = _limpiar_ruido(source)
     return {t for t in _IDENT.findall(limpio) if t not in _KW}
 
 
@@ -134,8 +185,8 @@ def cambios_que_importan(viejo: str, nuevo: str) -> dict[str, str]:
             continue  # nuevo símbolo: no rompe a nadie que ya existía
         if antes[nombre] != region:
             motivos[nombre] = (
-                f"«{nombre}» cambió — sin parser de TS no puedo separar "
-                f"firma de cuerpo; revisá si tu uso sigue válido"
+                f"«{nombre}» cambió — sin parser fino para este lenguaje "
+                f"no puedo separar firma de cuerpo; revisá si tu uso sigue válido"
             )
     for nombre in antes:
         if nombre not in despues:

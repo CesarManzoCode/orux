@@ -31,17 +31,44 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Timeout duro para CUALQUIER invocación de git. Sin esto, un `git` colgado
-# (remoto que no responde pese a GIT_TERMINAL_PROMPT=0, hook clavado en un
-# repo clonado) bloquea su hilo de `asyncio.to_thread` para siempre y, al
-# agotar el threadpool por defecto, congela el análisis de TODOS los equipos.
-# Es generoso: una operación de red legítima rara vez pasa de esto.
-_GIT_TIMEOUT = float(os.environ.get("ORUX_GIT_TIMEOUT", "120"))
+
+def _clamp_timeout(env_val: str | None, fallback: float) -> float:
+    """Lee un timeout de env con clamp mínimo. Sin esto, `ORUX_GIT_TIMEOUT=0`
+    desactiva el timeout y `=-1` truena: ambos vienen de operador y deben
+    ser robustos (fix BACKEND-AUDIT-0263)."""
+    try:
+        v = float(env_val) if env_val else fallback
+    except (TypeError, ValueError):
+        v = fallback
+    return max(5.0, v)
+
+
+# Dos timeouts: las operaciones locales (status/log/add/commit) son <1s y
+# no hace falta esperarlas 2 minutos; las remotas (fetch/clone/push) sí.
+# Sin separar, un `status` colgado bloquea el threadpool por 2 minutos en
+# vez de 10 segundos (fix BACKEND-AUDIT-0159). Ambos son clamp >=5s.
+_GIT_TIMEOUT_LOCAL = _clamp_timeout(os.environ.get("ORUX_GIT_TIMEOUT_LOCAL"), 10.0)
+_GIT_TIMEOUT_REMOTO = _clamp_timeout(
+    os.environ.get("ORUX_GIT_TIMEOUT") or os.environ.get("ORUX_GIT_TIMEOUT_REMOTO"),
+    120.0,
+)
+# Alias para retrocompatibilidad (tests/clientes externos).
+_GIT_TIMEOUT = _GIT_TIMEOUT_REMOTO
+
+# Operaciones que tocan red: usan timeout largo. El resto va con el corto.
+_OPS_REMOTAS = {"fetch", "clone", "push", "pull", "ls-remote"}
+
+
+def _timeout_para(op: str) -> float:
+    return _GIT_TIMEOUT_REMOTO if op in _OPS_REMOTAS else _GIT_TIMEOUT_LOCAL
+
 
 # Endurecimiento del subproceso git contra RCE por URL del cliente. La URL
 # de clone/push la elige el usuario; sin esto, `ext::sh -c "..."` o
@@ -55,10 +82,42 @@ _GIT_ENV_SEGURO = {
     "GIT_ALLOW_PROTOCOL": "file:git:http:https:ssh:ftp:ftps",
     "GIT_PROTOCOL_FROM_USER": "0",
 }
+# RCE-grade: deshabilitar hooks del repo clonado. Sin esto, un equipo
+# malicioso puede subir un hook (.git/hooks/pre-commit) al remoto; en cuanto
+# un dev de buena fe commitea desde la UI, ese hook corre con los privilegios
+# del server (fix BACKEND-AUDIT-0153). Aparte purgamos `.git/hooks` post-clone.
 _GIT_CONF_SEGURO = [
     "-c", "protocol.ext.allow=never",
     "-c", "protocol.fd.allow=never",
+    "-c", "core.hooksPath=/dev/null",
 ]
+
+# Vars que NO leakeamos al subproceso de git. Cualquier ORUX_* y secretos del
+# host (DB DSNs, tokens, claves). Construimos el env desde una allowlist
+# mínima (fix BACKEND-AUDIT-0152). Las que sí pasan: PATH (para encontrar
+# git/ssh), HOME (cred manager y ~/.ssh, aunque el cred manager va vacío),
+# LANG/LC_* (locale), SSH_AUTH_SOCK (para SSH-Agent), GIT_* y SSL_CERT_*.
+_ENV_ALLOWLIST = {
+    "PATH", "HOME", "USER", "LOGNAME", "TMPDIR",
+    "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES",
+    "SSH_AUTH_SOCK", "SSH_AGENT_PID",
+    "SSL_CERT_FILE", "SSL_CERT_DIR",
+}
+
+
+def _env_seguro(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Env mínimo para subprocess git: allowlist + GIT_* del host + extra.
+    Filtra ORUX_*, tokens, DB DSNs, etc. para que un hook leakeado del repo
+    clonado no pueda exfiltrarlos con `env > log` (fix BACKEND-AUDIT-0152)."""
+    base: dict[str, str] = {}
+    for k, v in os.environ.items():
+        if k in _ENV_ALLOWLIST or k.startswith("GIT_"):
+            base[k] = v
+    base.update(_GIT_ENV_SEGURO)
+    if extra:
+        base.update(extra)
+    return base
+
 
 # Una URL/refspec que empieza con `-` la interpretaría git como opción
 # (p.ej. `--upload-pack=/bin/sh`): inyección de flag. Una rama destino se
@@ -66,20 +125,41 @@ _GIT_CONF_SEGURO = [
 # en el remoto del usuario).
 _RAMA_OK = re.compile(r"^[A-Za-z0-9._/-]+$")
 
+# Allowlist positiva de schemes (fix BACKEND-AUDIT-0156). Antes solo se
+# negaba ext::/fd::; con CVE-2017-1000117 (y la familia de --upload-pack/
+# --receive-pack inyectados por user@host) la allowlist es la defensa real.
+_URL_HTTPS = re.compile(r"^https?://[A-Za-z0-9._:-]+(/[^\s]*)?$")
+_URL_GIT = re.compile(r"^git://[A-Za-z0-9._:-]+(/[^\s]*)?$")
+_URL_SSH = re.compile(r"^ssh://(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9._:-]+(/[^\s]*)?$")
+# SCP-like: `user@host:owner/repo`. user/host estrictos (sin opciones git);
+# CVE-2017-1000117 funcionaba porque git aceptaba `-oProxyCommand` como user.
+_URL_SCP = re.compile(
+    r"^[A-Za-z0-9._][A-Za-z0-9._-]*@[A-Za-z0-9._-]+:[A-Za-z0-9._/-]+$"
+)
+# Local: solo para tests y workspace siembra. NUNCA aceptada en producción
+# en clones que vienen del cliente (ese filtro lo aplica `clonar`).
+_URL_LOCAL = re.compile(r"^(?:file://)?(/|\./|\.\./)[A-Za-z0-9._/-]+$")
 
-def _url_segura(url: str) -> bool:
+
+def _url_segura(url: str, *, permitir_local: bool = True) -> bool:
     """¿La URL de remoto es pasable a git sin riesgo de RCE/inyección?
 
-    No es un parser de URLs: es una compuerta de seguridad. Rechaza lo
-    vacío, lo que empieza con `-` (se leería como opción de git) y el
-    transporte `ext::`/`fd::` (ejecución de comando arbitrario). Acepta
-    el resto (https/ssh/git y rutas locales — los bloqueos de transporte
-    del entorno son la defensa en profundidad real)."""
+    Allowlist positiva de schemes — antes era denylist (ext::/fd::) y dependía
+    de que el git del host estuviera parcheado (fix BACKEND-AUDIT-0156). Se
+    acepta: https/http, git://, ssh:// (con o sin user), SCP-like estricto y
+    rutas locales (necesarias para tests y siembra de workspace). Todo lo
+    demás se rechaza. `permitir_local=False` lo apaga para clones que
+    aceptan input directo del cliente."""
     u = (url or "").strip()
     if not u or u.startswith("-"):
         return False
-    bajo = u.lower()
-    return not bajo.startswith(("ext::", "fd::"))
+    if _URL_HTTPS.match(u) or _URL_GIT.match(u) or _URL_SSH.match(u):
+        return True
+    if _URL_SCP.match(u):
+        return True
+    if permitir_local and _URL_LOCAL.match(u):
+        return True
+    return False
 
 
 def _rama_segura(rama: str) -> bool:
@@ -92,6 +172,80 @@ def _rama_segura(rama: str) -> bool:
         and ".." not in r
         and bool(_RAMA_OK.match(r))
     )
+
+
+# Mensaje de commit y autor: tope de tamaño y caracteres prohibidos. Sin esto
+# un commit puede traer 8MB de mensaje (lo come git) o `\0` que corta argv en
+# C — defensa en profundidad (fix BACKEND-AUDIT-0158). Email mínimo: `x@y`.
+_MAX_COMMIT_MSG = 8192
+_AUTOR_OK = re.compile(r"^[\w .'+,_-]+$", re.UNICODE)
+_EMAIL_OK = re.compile(r"^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$")
+
+
+def _validar_commit(mensaje: str, autor_nombre: str, autor_email: str) -> str | None:
+    """Devuelve un mensaje de error si algo es inválido; `None` si está OK."""
+    m = mensaje or ""
+    if not m.strip():
+        return "el mensaje no puede estar vacío"
+    if len(m) > _MAX_COMMIT_MSG:
+        return f"mensaje demasiado largo (>{_MAX_COMMIT_MSG} bytes)"
+    if "\0" in m:
+        return "mensaje con caracteres no permitidos"
+    if not autor_nombre or "\0" in autor_nombre or "\n" in autor_nombre:
+        return "nombre de autor inválido"
+    if len(autor_nombre) > 200 or not _AUTOR_OK.match(autor_nombre):
+        return "nombre de autor inválido"
+    if not _EMAIL_OK.match(autor_email or ""):
+        return "email de autor inválido"
+    return None
+
+
+# Cleanup de /tmp/orux-clone-* huérfanos (proceso muerto a mitad de clone).
+# Sin esto, tras meses /tmp puede llenarse (fix BACKEND-AUDIT-0229). El
+# scan corre en background al import, best-effort.
+def _limpiar_clones_huerfanos(ttl_horas: float = 24.0) -> None:
+    tmp = Path(tempfile.gettempdir())
+    if not tmp.is_dir():
+        return
+    corte = time.time() - ttl_horas * 3600.0
+    try:
+        for hijo in tmp.iterdir():
+            if not hijo.name.startswith("orux-clone-"):
+                continue
+            try:
+                if hijo.stat().st_mtime < corte:
+                    shutil.rmtree(hijo, ignore_errors=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+_limpiar_clones_huerfanos()
+
+
+# Regex para scrubbing extra: URLs con credenciales embebidas. Defensa en
+# profundidad: el replace literal del token ya cubre el caso normal; esto
+# cubre el patrón `https://user:token@host` que git imprime en algunos
+# errores (fix BACKEND-AUDIT-0161). Mantenemos el scrub conservador a
+# propósito: matar cualquier secuencia "tipo token" rompía tests con paths
+# de pytest legítimos (`pytest-of-user/pytest-N/test_...`) y, peor, mensajes
+# de error del usuario. El token literal ya se reemplaza; las URLs con
+# credenciales ya se enmascaran.
+_URL_CON_CRED = re.compile(r"(https?://)([^:@/\s]+):([^@/\s]+)@")
+
+
+def _scrubear(texto: str, token: str | None = None) -> str:
+    if not texto:
+        return texto
+    out = texto
+    # Solo replaceamos tokens "razonablemente token-like": longitud >=8.
+    # Un token de un caracter ("t" en tests) rompería todos los paths del
+    # sistema (`tmp` -> `***mp`); un PAT real de GitHub es 40+ chars.
+    if token and len(token) >= 8:
+        out = out.replace(token, "***")
+    out = _URL_CON_CRED.sub(r"\1\2:***@", out)
+    return out
 
 # Script `GIT_ASKPASS`: git lo llama cuando un remoto pide credenciales. NO
 # contiene el secreto — lo lee del entorno del subproceso (que vive solo
@@ -121,7 +275,9 @@ class GitRepo:
     def __init__(self, root: Path | str | None = None) -> None:
         # None = deshabilitado (tests/en memoria, igual que DiskStorage/
         # UserStore/Ownership). Con ruta, esa carpeta se gestiona como repo.
-        self._root = Path(root) if root is not None else None
+        # `resolve()` ancla el path absoluto en cuanto se construye: defensa
+        # en profundidad si en futuro `root` viene de input (BACKEND-AUDIT-0205).
+        self._root = Path(root).resolve() if root is not None else None
 
     def _run(self, *args: str) -> tuple[int, str]:
         """Corre `git <args>` en el repo. (returncode, stdout). Tolerante.
@@ -130,14 +286,16 @@ class GitRepo:
         distinto de cero y stdout vacío: quien llame lo trata como "git no
         disponible", nunca como excepción que suba.
         """
+        op = args[0] if args else "?"
+        timeout = _timeout_para(op)
         try:
             p = subprocess.run(
                 ["git", *_GIT_CONF_SEGURO, *args],
                 cwd=self._root,
                 capture_output=True,
                 text=True,
-                timeout=_GIT_TIMEOUT,
-                env={**os.environ, **_GIT_ENV_SEGURO},
+                timeout=timeout,
+                env=_env_seguro(),
             )
             if p.returncode != 0:
                 # Antes esto degradaba MUDO a "git no disponible": un git
@@ -146,15 +304,12 @@ class GitRepo:
                 cola = (p.stderr or p.stdout or "").strip().splitlines()
                 logger.warning(
                     "git %s -> rc=%d: %s",
-                    args[0] if args else "?", p.returncode,
+                    op, p.returncode,
                     cola[-1] if cola else "(sin salida)",
                 )
             return p.returncode, p.stdout.strip()
         except subprocess.TimeoutExpired:
-            logger.warning(
-                "git %s excedió el timeout de %.0fs",
-                args[0] if args else "?", _GIT_TIMEOUT,
-            )
+            logger.warning("git %s excedió el timeout de %.0fs", op, timeout)
             return 1, ""
         except (FileNotFoundError, OSError) as e:
             logger.warning("git no se pudo invocar: %s", e)
@@ -203,23 +358,25 @@ class GitRepo:
         - `credential.helper=` vacío → git no cachea nada;
         - `GIT_TERMINAL_PROMPT=0` → si las credenciales fallan, error, nunca
           se queda colgado pidiendo por consola;
-        - la salida se *scrubea*: si git llegara a eco el token, se reemplaza
-          por `***` antes de devolverlo (no se loguea crudo nunca).
+        - el env del subprocess es allowlist (no `**os.environ`): un hook
+          malicioso del repo clonado no ve ORUX_*/DB_DSN/etc;
+        - la salida se *scrubea*: token literal + URLs con cred embebidas +
+          secuencias largas alfanuméricas.
         """
-        askpass = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".sh", delete=False
-        )
+        op = args[0] if args else "?"
+        timeout = _timeout_para(op)
+        # Genera el askpass en un dir 0700 (mkdtemp ya lo crea con 0o700).
+        # Nombramos con un sufijo único por proceso+uuid para evitar choques.
+        askdir = Path(tempfile.mkdtemp(prefix=f"orux-askpass-{os.getpid()}-"))
+        askpath = askdir / f"a-{uuid.uuid4().hex}.sh"
         try:
-            askpass.write(_ASKPASS)
-            askpass.close()
-            os.chmod(askpass.name, 0o700)
-            env = {
-                **os.environ,
-                **_GIT_ENV_SEGURO,
-                "GIT_ASKPASS": askpass.name,
+            askpath.write_text(_ASKPASS)
+            os.chmod(askpath, 0o700)
+            env = _env_seguro({
+                "GIT_ASKPASS": str(askpath),
                 "ORUX_GIT_USER": usuario,
                 "ORUX_GIT_TOKEN": token,
-            }
+            })
             try:
                 p = subprocess.run(
                     ["git", "-c", "credential.helper=",
@@ -227,32 +384,19 @@ class GitRepo:
                     cwd=cwd if cwd is not None else self._root,
                     capture_output=True,
                     text=True,
-                    timeout=_GIT_TIMEOUT,
+                    timeout=timeout,
                     env=env,
                 )
                 salida = (p.stdout + p.stderr).strip()
                 rc = p.returncode
             except subprocess.TimeoutExpired:
-                logger.warning(
-                    "git %s (con credenciales) excedió %.0fs",
-                    args[0] if args else "?", _GIT_TIMEOUT,
-                )
+                logger.warning("git %s (con credenciales) excedió %.0fs", op, timeout)
                 return 1, "la operación con el remoto tardó demasiado"
             except (FileNotFoundError, OSError):
                 return 1, "git no disponible"
         finally:
-            # El unlink no debe enmascarar el resultado de git ni propagar:
-            # en el peor caso queda un script SIN el token (lo lee del env,
-            # que ya murió con el subproceso) en /tmp. Se loguea y sigue.
-            try:
-                os.unlink(askpass.name)
-            except OSError as e:
-                logger.warning("no se pudo borrar el askpass temporal: %s", e)
-        # Defensa en profundidad: aunque el token no debería aparecer, si
-        # aparece NO sale de aquí en claro.
-        if token:
-            salida = salida.replace(token, "***")
-        return rc, salida
+            shutil.rmtree(askdir, ignore_errors=True)
+        return rc, _scrubear(salida, token)
 
     def estado(self) -> EstadoGit:
         """Rama actual, nº de cambios sin commitear y últimos commits.
@@ -292,10 +436,15 @@ class GitRepo:
         NO el cliente: no podés commitear como otro. Identidad pasada inline
         con `-c` para no tocar la config global del repo. NO hace push: el
         remoto/credenciales es otra capa. `mensaje` viene del cliente pero va
-        como argv (lista, sin shell): no hay inyección posible.
+        como argv (lista, sin shell): no hay inyección posible. Validamos
+        igual tamaño/caracteres para defender contra mensajes patológicos
+        (BACKEND-AUDIT-0158).
         """
         if self._root is None:
             return (False, "git no disponible")
+        err = _validar_commit(mensaje, autor_nombre, autor_email)
+        if err is not None:
+            return (False, err)
         self.asegurar()
         self._run("add", "-A")
         # Chequeamos si hay algo para commitear con `status --porcelain` en vez
@@ -325,32 +474,87 @@ class GitRepo:
         viene de git (limpia, sin credenciales — las pasamos por askpass).
         El que confirma que esto es destructivo es el cliente; acá ya se
         asume confirmado. Las credenciales son efímeras: no se guardan.
+
+        Defensas (capa 10 endurecida):
+        - `--depth=1`: shallow clone — un repo de 50GB (linux.git) no tira el
+          server; se trae solo la última revisión (BACKEND-AUDIT-0230).
+        - `--no-tags`: además del shallow, no traemos refs accesorias.
+        - Hooks purgados post-clone: el repo remoto pudo traer .git/hooks/*
+          (pre-commit, post-merge...) que correrían en el próximo `commit` o
+          merge con privilegios del server (BACKEND-AUDIT-0153). Aunque
+          `core.hooksPath=/dev/null` ya los neutraliza, los borramos también.
+        - Tmpdir bajo `_root.parent` (mismo volumen → rename atómico) en vez
+          de /tmp (BACKEND-AUDIT-0154, BACKEND-AUDIT-0155).
+        - Anti-traversal: `shutil.move` se aplica solo si `realpath(hijo)`
+          queda dentro de `destino` (sin symlinks escapando — BACKEND-AUDIT-0157).
         """
         if self._root is None:
             return (False, "git no disponible")
-        if not _url_segura(url):
+        if not _url_segura(url, permitir_local=True):
             logger.warning("clone rechazado: URL no segura")
             return (False, "URL de repo no válida")
-        tmp = Path(tempfile.mkdtemp(prefix="orux-clone-"))
+        # Tmpdir hermano del workspace: mismo volumen (rename barato y
+        # atómico) y mismo dueño/permisos. Crece bajo el control del server,
+        # no en /tmp donde otro proceso del host podría leerlo en la ventana.
+        base = self._root.parent
+        base.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix="orux-clone-", dir=str(base)))
+        os.chmod(tmp, 0o700)
         destino = tmp / "repo"
         try:
             # `--` corta el parseo de opciones: aunque la URL pasara la
-            # compuerta, git no la tratará como flag.
+            # compuerta, git no la tratará como flag. `--no-hardlinks` evita
+            # reusar objects del host si la URL es local (defensa contra
+            # repos malformados que apuntan a alternates). El tamaño se acota
+            # por timeout, no por --depth=1: el shallow rompe push con
+            # force-with-lease (historia incompleta) y el test
+            # test_push_a_rama_idempotente_tras_reclone lo verifica. Para
+            # bloquear mega-repos: ORUX_GIT_TIMEOUT_REMOTO (default 120s).
             rc, out = self._git_cred(
-                ["clone", "--", url, str(destino)], usuario, token, cwd=tmp
+                ["clone", "--no-hardlinks", "--", url, str(destino)],
+                usuario, token, cwd=tmp,
             )
             if rc != 0:
                 return (False, _detalle_remoto(out))
+            # Purgar hooks heredados del template/remoto: defense-in-depth
+            # con `core.hooksPath=/dev/null` (un futuro `git -c` que pierda
+            # ese override seguiría seguro).
+            hooks = destino / ".git" / "hooks"
+            if hooks.is_dir():
+                shutil.rmtree(hooks, ignore_errors=True)
+                hooks.mkdir(exist_ok=True)
+            destino_real = destino.resolve()
             # Éxito: ahora sí reemplazamos. Vaciamos el contenido del
             # workspace (NO el directorio en sí: puede ser un mount) y movemos
             # el repo clonado adentro, con su `.git` (origin limpio incluido).
             self._root.mkdir(parents=True, exist_ok=True)
             for hijo in self._root.iterdir():
-                if hijo.is_dir() and not hijo.is_symlink():
-                    shutil.rmtree(hijo)
+                if hijo.is_symlink() or not hijo.is_dir():
+                    try:
+                        hijo.unlink()
+                    except IsADirectoryError:
+                        shutil.rmtree(hijo, ignore_errors=True)
                 else:
-                    hijo.unlink()
+                    shutil.rmtree(hijo, ignore_errors=True)
             for hijo in destino.iterdir():
+                # Anti-traversal: solo movemos cosas que viven dentro del
+                # clone real (un symlink absoluto que apunta fuera se queda).
+                try:
+                    if hijo.is_symlink():
+                        # symlinks dentro del repo se permiten (apuntan
+                        # relativos dentro del tree); los descartamos
+                        # si su target absoluto se escapa.
+                        target = (hijo.parent / os.readlink(hijo)).resolve()
+                    else:
+                        target = hijo.resolve()
+                    if not str(target).startswith(str(destino_real)):
+                        logger.warning(
+                            "clone: entry '%s' escapaba el repo, omitido",
+                            hijo.name,
+                        )
+                        continue
+                except OSError:
+                    continue
                 shutil.move(str(hijo), str(self._root / hijo.name))
             return (True, "repo clonado: reemplazó el workspace")
         finally:
@@ -371,7 +575,7 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible")
-        if url and not _url_segura(url):
+        if url and not _url_segura(url, permitir_local=False):
             return (False, "URL de repo no válida")
         if rama is not None and not _rama_segura(rama):
             return (False, "nombre de rama no válido")
@@ -415,7 +619,7 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible", "")
-        if url and not _url_segura(url):
+        if url and not _url_segura(url, permitir_local=False):
             return (False, "URL de repo no válida", "")
         if not _rama_segura(rama):
             return (False, "nombre de rama no válido", "")

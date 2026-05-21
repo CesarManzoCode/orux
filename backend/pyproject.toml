@@ -4,42 +4,45 @@ version = "0.0.1"
 description = "Editor colaborativo en tiempo real sobre Git"
 requires-python = ">=3.11"
 dependencies = [
-    "websockets>=13.0",
+    # Upper-bounds en TODAS las deps (BACKEND-AUDIT-0186 / -0207): un major
+    # nuevo cambia API y romper en producción no debe ser "se actualizó solo
+    # un domingo". Los bounds se suben a mano cuando los probamos.
+    "websockets>=13.0,<17",
     # Capa 15: Postgres (decisión del usuario). Driver async nativo, coherente
     # con el server asyncio. Trae wheels manylinux: en python:3.12-slim entra
     # como wheel (sin compilador). NO se importa salvo que haya DSN: sin
     # `ORUX_DB_DSN` el server sigue en JSON/memoria y los tests no lo tocan.
-    "asyncpg>=0.29",
+    "asyncpg>=0.29,<1",
     # Capa 16: tree-sitter = Tier 2 del análisis (piso universal, parser C
     # real para JS/TS — el heurístico regex no podía aislar firma de cuerpo).
     # Traen wheels manylinux (sin compilador en python:3.12-slim), igual que
     # asyncpg. NO son obligatorias en runtime: si faltan, la jerarquía cae
     # sola al Tier 3 regex (por eso el sandbox sin internet sigue verde). La
     # grammar TSX cubre JS/TS/JSX/TSX. Verificación real del parser: VPS.
-    "tree-sitter>=0.22",
-    "tree-sitter-typescript>=0.23",
+    "tree-sitter>=0.22,<1",
+    "tree-sitter-typescript>=0.23,<1",
     # Capa 25: grammars Go/Rust = misma historia que la de TS (wheels
     # manylinux, sin compilador). Dan DETECCIÓN fina (firma/superficie) a
     # Go/Rust, que en capa 20 sólo tenían fan-out LSP + regex coarse. NO
     # obligatorias: si faltan, `tiers` cae sola a regex Tier 3 (sandbox sin
     # internet sigue verde). Verificación real del parser: VPS.
-    "tree-sitter-go>=0.21",
-    "tree-sitter-rust>=0.21",
+    "tree-sitter-go>=0.21,<1",
+    "tree-sitter-rust>=0.21,<1",
     # Capa 17: pyright = Tier 0 (el análisis más profundo, resolución de
     # tipos cross-módulo real para Python — mata los falsos positivos del
     # heurístico). El paquete pip `pyright` es un wrapper que autoarranca un
     # Node propio en el 1er uso; por eso el Dockerfile lo PRE-CALIENTA en el
     # build (offline en runtime). NO obligatorio: si falta o falla, la
     # jerarquía cae sola a tree-sitter/ast (sandbox sin pyright sigue verde).
-    "pyright>=1.1.350",
+    "pyright>=1.1.350,<2",
     # Capa 23: API interna de operador (servicio HTTP DESACOPLADO, otro
     # contenedor). starlette = ASGI mínimo (routing+JSON), uvicorn = su
     # server. Pure-Python wheels (sin compilador). Solo los importa el
     # contenedor `api` vía uvicorn; el sandbox sin internet NO los importa
     # (se testea `api/service.py`, no la cáscara) — mismo patrón que el
     # resto de I/O verificada en VPS.
-    "starlette>=0.37",
-    "uvicorn>=0.29",
+    "starlette>=0.37,<1",
+    "uvicorn>=0.29,<1",
 ]
 
 [project.optional-dependencies]

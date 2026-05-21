@@ -110,13 +110,22 @@ def firmar_state(secret: str, ahora: float | None = None) -> str:
 def validar_state(
     state: str,
     secret: str,
-    max_edad: float = 600.0,
+    max_edad: float = 120.0,
     ahora: float | None = None,
 ) -> bool:
     """¿`state` lo firmó este server y no está vencido? Comparación en
     tiempo constante. False ante cualquier cosa que no sea un state legítimo
     y fresco (formato roto, firma falsa, vencido): el llamador lo trata como
-    "no autenticado", nunca como excepción."""
+    "no autenticado", nunca como excepción.
+
+    BACKEND-AUDIT-0015: `max_edad` bajado de 600s a 120s. El callback de
+    OAuth normalmente se completa en <10s; 120s deja holgura para usuarios
+    lentos sin abrir una ventana de replay larga. La defensa real contra
+    replay one-time vive en el caller (`api/app.py`): el state que se acaba
+    de validar se marca como "usado" en un set efímero del proceso (el flujo
+    OAuth es un solo proceso/cluster pequeño; replay distribuido entre
+    réplicas no es nuestro modelo actual).
+    """
     try:
         ts_str, firma = state.split(".", 1)
     except (ValueError, AttributeError):

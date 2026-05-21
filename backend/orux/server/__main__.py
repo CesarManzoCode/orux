@@ -6,20 +6,17 @@ mantiene los tests arrancando en memoria y deja la decisión de "dónde se
 guarda" en un único lugar visible.
 
 **Por qué el directorio por defecto está FUERA del repo** (`~/.orux/...`):
-en desarrollo el cliente se sirve con un servidor estático que vigila la
-carpeta del proyecto y recarga el navegador ante cualquier cambio de archivo
-(p. ej. Live Server). Si la persistencia escribiera dentro del repo, cada vez
-que alguien crea un archivo o se aprueba un cambio, el watcher recargaría la
-página, se caería el WebSocket y el cliente volvería con otra identidad —
-perdiendo su ownership. Sacar el estado de ejecución del árbol vigilado mata
-ese ciclo de raíz, sin depender de configurar el editor de cada quien.
+desde capa 14 el frontend es React+Vite (un único contenedor multi-stage,
+no se sirve más con Live Server desde dentro del repo). Mantener el estado
+de runtime FUERA del árbol del repo sigue siendo correcto: evita que
+herramientas locales (linters, formatters, watchers de IDE) crucen con el
+workspace persistido, y la ruta es explícita para ops (`~/.orux/...`).
+La nota histórica sobre Live Server quedó en `CLAUDE.md` (capa 14).
 
-Cuando llegue la integración con Git (capa final) esa capa decidirá su propia
-ubicación dentro del repo del usuario; ese es su problema, no el del runtime.
+Cuando hay integración con Git, esta capa decide su propia ubicación
+dentro del repo del usuario; ese es su problema, no el del runtime.
 
-Se puede sobreescribir con la variable de entorno `ORUX_DATA`. Si la
-apuntas dentro del repo, acuérdate de excluirla del watcher (en `.gitignore`
-ya está `workspace_data/`).
+Se puede sobreescribir con la variable de entorno `ORUX_DATA`.
 """
 
 from __future__ import annotations
@@ -60,9 +57,22 @@ def _secreto(base: Path) -> str:
     borra el archivo, simplemente todos re-loguean una vez.
     """
     env = os.environ.get("ORUX_SESSION_SECRET", "").strip()
+    f = base / "secret"
+    if env and f.exists():
+        try:
+            del_archivo = f.read_text(encoding="utf-8").strip()
+            if del_archivo and del_archivo != env:
+                # BACKEND-AUDIT-0290: la divergencia env vs archivo invalida
+                # TODOS los tokens vivos (cada uno firmó con uno distinto).
+                # Loguear ALTO para que se note en ops.
+                logging.getLogger(__name__).warning(
+                    "ORUX_SESSION_SECRET difiere del archivo %s: los tokens "
+                    "firmados antes de este boot dejaron de valer", f,
+                )
+        except OSError:
+            pass
     if env:
         return env
-    f = base / "secret"
     if f.exists():
         try:
             return f.read_text(encoding="utf-8").strip()
@@ -72,12 +82,23 @@ def _secreto(base: Path) -> str:
             raise SystemExit(
                 f"no se pudo leer el secreto de firma {f}: {e}"
             ) from e
-    base.mkdir(parents=True, exist_ok=True)
+    # Directorio 0700 también (BACKEND-AUDIT-0267): el archivo es 0600 pero
+    # sin dir restrictivo otro usuario puede listarlo y ver QUE existe.
+    base.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(base, 0o700)
+    except OSError:
+        pass
     s = token_hex(32)
     # El secreto firma TODOS los tokens de sesión: quien lo lea forja la
     # sesión de cualquier usuario. Se crea 0600 de forma atómica (no
     # write_text+chmod, que deja una ventana world-readable).
-    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Race con otro proceso que también está arrancando (BACKEND-AUDIT-0287):
+        # leemos lo que el ganador escribió en vez de explotar.
+        return f.read_text(encoding="utf-8").strip()
     try:
         os.write(fd, s.encode("utf-8"))
     finally:

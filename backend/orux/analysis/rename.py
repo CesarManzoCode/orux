@@ -104,12 +104,20 @@ def detectar_rename(
 
 def aplicar_rename(contenido: str, viejo: str, nuevo: str) -> str:
     """Codemod mecánico mínimo: renombra el acceso a miembro `.viejo` ->
-    `.nuevo` (incluye `self.viejo`, `obj.viejo`). Honesto sobre su límite a
-    propósito: no toca strings/comentarios/kwargs/atributos por reflexión.
-    No pretende ser perfecto — el dueño revisa el diff antes de aprobar la
-    propuesta (capa 4 = la red de seguridad). Idempotente y conservador:
-    `\\b` evita pisar `.variableX`; si no hay nada que cambiar, devuelve el
-    mismo texto (el server entonces no propone nada a ese archivo).
+    `.nuevo` (incluye `self.viejo`, `obj.viejo`).
+
+    LÍMITES HONESTOS (BACKEND-AUDIT-0136 — el docstring antes mentía):
+    - el regex `\\.<nombre>\\b` SÍ matchea dentro de strings y comentarios.
+      No pretendemos no hacerlo: el dueño revisa el diff antes de aprobar
+      la propuesta (capa 4 = la red de seguridad) y la mayoría de los
+      strings/comentarios que mencionan `.viejo` quieren ser renombrados
+      al mismo tiempo. Si pisar uno se vuelve un problema real con
+      usuarios, la fix es subir esto a un tier con parser (no aquí).
+    - No toca kwargs (`viejo=` en llamadas), refleciones (`getattr(...,
+      "viejo")`), ni atributos por strings.
+
+    Idempotente y conservador: `\\b` evita pisar `.variableX`; si no hay
+    nada que cambiar, devuelve el mismo texto.
 
     Guard de robustez (B-varios): `viejo`/`nuevo` vacío => no-op. Hoy
     `detectar_rename` ya garantiza ambos no vacíos, pero esta función es

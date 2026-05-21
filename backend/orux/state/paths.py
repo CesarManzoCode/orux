@@ -62,12 +62,16 @@ _PROHIBIDOS = set('<>:"|?*')
 
 # Suplantación visual (zero-width y bidi-override). Un `auth.py` con un
 # `‮` invisible no se ve, pero ES otro archivo: el equipo está
-# "editando" archivos distintos sin saberlo.
+# "editando" archivos distintos sin saberlo. BACKEND-AUDIT-0091 suma los
+# Unicode line/paragraph separators ( / ) y NEL () que
+# rompen JSON parsers viejos de JS y son fuente clásica de eval injection.
 _INVISIBLES = {
     "​", "‌", "‍", "‎", "‏",  # ZWSP/ZWJ/etc.
     "‪", "‫", "‬", "‭", "‮",  # LRE/RLE/PDF/LRO/RLO
     "⁦", "⁧", "⁨", "⁩",            # LRI/RLI/FSI/PDI
     "﻿",                                            # BOM
+    " ", " ",            # LINE/PARAGRAPH SEPARATOR
+    "",                       # NEXT LINE
 }
 
 # Nombres reservados de Windows (case-insensitive, sin importar extensión).
@@ -104,13 +108,11 @@ def path_seguro(path: object) -> bool:
     if "\\" in path:
         return False
     # Absolutos: raíz POSIX o unidad de Windows (`C:`). Un path de workspace
-    # SIEMPRE es relativo a la raíz del equipo. La regla "len>=2 and path[1]==':'"
-    # de antes baneaba `a:b.py` legítimo; reemplazada por "letra + dos puntos"
-    # estricto (drive de Windows: `C:` o `C:/`), que es la forma real del
-    # absoluto Windows y deja pasar dos puntos en posiciones normales.
+    # SIEMPRE es relativo a la raíz del equipo. NOTA (BACKEND-AUDIT-0075):
+    # el chequeo de drive Windows era redundante porque `:` ya está en
+    # `_PROHIBIDOS`. Lo mantenemos como defensa explícita en caso de que un
+    # día `_PROHIBIDOS` se relaje; mientras tanto es un short-circuit barato.
     if path.startswith("/"):
-        return False
-    if len(path) >= 2 and path[1] == ":" and path[0].isascii() and path[0].isalpha():
         return False
     # Segmentos: cada uno tiene reglas propias. Iteramos manual para dar
     # error temprano y barato.

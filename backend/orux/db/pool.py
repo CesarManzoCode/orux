@@ -5,15 +5,35 @@ dominio NO viven acá (viven en los stores). `apply_schema` corre
 `schema.sql` (todo `IF NOT EXISTS`) al conectar: sin Alembic todavía
 —una herramienta de migraciones entra cuando un cambio de esquema real lo
 exija, misma regla de dependencias del proyecto—.
+
+Hardening (auditoría):
+- BACKEND-AUDIT-0174 / -0208: `command_timeout` por query y
+  `max_inactive_connection_lifetime`. Sin esto un query lento agotaba el
+  pool (10 conexiones máx) y el server entero se quedaba sin DB.
+- BACKEND-AUDIT-0176: el esquema se aplica dentro de una transacción
+  (parcial-on-failure pasa a rollback completo; ya es idempotente, así que
+  esto es defensa en profundidad).
+- BACKEND-AUDIT-0194: si `_aplicar_schema` falla, cerramos el pool antes
+  de propagar (sin esto el pool quedaba colgado).
+- BACKEND-AUDIT-0175: tamaños configurables por env.
 """
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
+
+
+def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
+    try:
+        v = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        v = default
+    return max(minimo, min(maximo, v))
 
 
 class Database:
@@ -29,9 +49,22 @@ class Database:
         # (en el sandbox no lo está; los tests no llaman acá).
         import asyncpg  # noqa: PLC0415
 
-        pool = await asyncpg.create_pool(dsn, min_size=1, max_size=10)
+        pool = await asyncpg.create_pool(
+            dsn,
+            min_size=_env_int("ORUX_DB_POOL_MIN", 1, 1, 100),
+            max_size=_env_int("ORUX_DB_POOL_MAX", 10, 1, 200),
+            command_timeout=_env_int("ORUX_DB_CMD_TIMEOUT", 30, 1, 600),
+            max_inactive_connection_lifetime=_env_int(
+                "ORUX_DB_IDLE_SEC", 300, 30, 3600,
+            ),
+        )
         db = cls(pool)
-        await db._aplicar_schema()
+        try:
+            await db._aplicar_schema()
+        except Exception:
+            # Si la migración falla, no dejar el pool huérfano (resource leak).
+            await pool.close()
+            raise
         return db
 
     async def _aplicar_schema(self) -> None:
@@ -39,8 +72,10 @@ class Database:
         async with self._pool.acquire() as con:
             # asyncpg ejecuta múltiples sentencias en una si no hay args
             # (protocolo simple), y schema.sql es idempotente: arrancar dos
-            # veces no rompe nada.
-            await con.execute(sql)
+            # veces no rompe nada. Aun así corremos dentro de transacción
+            # para que un fallo a mitad haga rollback (BACKEND-AUDIT-0176).
+            async with con.transaction():
+                await con.execute(sql)
 
     async def fetch(self, sql: str, *args: Any) -> list[Any]:
         async with self._pool.acquire() as con:
@@ -68,3 +103,13 @@ class Database:
 
     async def cerrar(self) -> None:
         await self._pool.close()
+
+    async def ping(self) -> bool:
+        """Healthcheck real (BACKEND-AUDIT-0285): `SELECT 1` contra el pool.
+        Lo usa el healthcheck del contenedor; sin esto el HC reportaba 200
+        aunque la DB estuviese caída."""
+        try:
+            val = await self.fetchval("SELECT 1")
+            return val == 1
+        except Exception:
+            return False

@@ -108,6 +108,63 @@ from ..teams import MemTeamStore, TeamError
 logger = logging.getLogger(__name__)
 
 
+# Topes y constantes de runtime ajustables por env (con clamp defensivo).
+# Sin esto, un mensaje gigante (BACKEND-AUDIT-0222 / -0272) o un cliente que
+# spamea pueden saturar el equipo entero. Los defaults son holgados.
+def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
+    try:
+        v = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        v = default
+    return max(minimo, min(maximo, v))
+
+
+def _env_float(name: str, default: float, minimo: float, maximo: float) -> float:
+    try:
+        v = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        v = default
+    return max(minimo, min(maximo, v))
+
+
+# Tope HARD del frame WS recibido. websockets.serve() lo aplica antes de
+# entregar el frame al handler — protege ANTES de `decode` (que también
+# valida, defensa en profundidad).
+WS_MAX_SIZE = _env_int("ORUX_WS_MAX_SIZE", 2 * 1024 * 1024, 64 * 1024, 16 * 1024 * 1024)
+# Cola por conexión: cuántos frames sin leer se aceptan antes de cerrar.
+WS_MAX_QUEUE = _env_int("ORUX_WS_MAX_QUEUE", 32, 4, 1024)
+# Rate-limit por conexión: token bucket. Sin esto, un cliente puede saturar al
+# equipo entero con miles de mensajes/s (BACKEND-AUDIT-0272). 50/s sostenido
+# con burst 100 cubre tecleo humano agresivo + ráfagas legítimas (commit,
+# admin_assign_many) y mata el spam.
+RATE_TASA = _env_float("ORUX_RATE_PER_SEC", 50.0, 1.0, 1000.0)
+RATE_BURST = _env_float("ORUX_RATE_BURST", 100.0, 1.0, 10_000.0)
+
+
+class _RateLimiter:
+    """Token bucket simple por conexión. No usa lock: cada conexión vive en
+    una sola corutina, así que el acceso es serial. `permitir()` devuelve
+    True si hay token; False si hay que tirar el mensaje."""
+
+    __slots__ = ("_tokens", "_tasa", "_burst", "_t")
+
+    def __init__(self, tasa: float, burst: float) -> None:
+        self._tokens = float(burst)
+        self._tasa = float(tasa)
+        self._burst = float(burst)
+        self._t = time.monotonic()
+
+    def permitir(self) -> bool:
+        ahora = time.monotonic()
+        elapsed = ahora - self._t
+        self._t = ahora
+        self._tokens = min(self._burst, self._tokens + elapsed * self._tasa)
+        if self._tokens >= 1.0:
+            self._tokens -= 1.0
+            return True
+        return False
+
+
 def _autor_git(usuario: str) -> tuple[str, str]:
     """Identidad de commit a partir del usuario autenticado (capa 7).
 
@@ -138,6 +195,23 @@ class _UsuariosAsync:
 
     async def verificar(self, u: str, p: str) -> bool:
         return self._b.verificar(u, p)
+
+    async def usuarios(self) -> list[str]:
+        """Lista de nombres registrados. Lo usa el cap de registro
+        (BACKEND-AUDIT-0224)."""
+        listar = getattr(self._b, "usuarios", None)
+        return listar() if callable(listar) else []
+
+    async def epoch(self, u: str) -> int:
+        """Contador de sesiones del usuario (BACKEND-AUDIT-0002). 0 si el
+        store no lo soporta (compat con stores legacy)."""
+        ep = getattr(self._b, "epoch", None)
+        if ep is None:
+            return 0
+        try:
+            return int(ep(u))
+        except (TypeError, ValueError):
+            return 0
 
 
 def _wrap_users(users):
@@ -302,24 +376,38 @@ class SyncServer:
         # Robustez (seguridad M1): vida del token de sesión. Default 30 días
         # — cómodo para el dev (no re-loguea cada rato) y a la vez una fuga
         # tiene ventana acotada en vez de ser una llave eterna. `0` = sin
-        # expiración (opt-out del operador; comportamiento legacy).
-        try:
-            self._token_ttl = int(
-                os.environ.get("ORUX_TOKEN_TTL_SEC", str(30 * 24 * 3600))
-            )
-        except ValueError:
-            self._token_ttl = 30 * 24 * 3600
+        # expiración (opt-out del operador; comportamiento legacy). Se
+        # clampea para que un env tipo -1/9999999 no rompa (auditoría).
+        self._token_ttl = _env_int(
+            "ORUX_TOKEN_TTL_SEC", 30 * 24 * 3600, 0, 365 * 24 * 3600,
+        )
         # Capa 15: equipos/membresía/invitaciones (async; None = memoria).
         self.teams = teams if teams is not None else MemTeamStore()
+        # Lock por team_id para evitar carrera al construir el runtime
+        # (BACKEND-AUDIT-0220): dos conexiones simultáneas al MISMO team
+        # podrían invocar `runtime_factory` dos veces, levantar dos LSPs y
+        # dos workspaces del MISMO disco. Granular: el lock de un equipo no
+        # bloquea al de otro.
+        self._rt_locks: dict[str, asyncio.Lock] = {}
 
     async def _runtime_para(self, team_id: str) -> TeamRuntime:
         """Runtime del equipo, creado perezosamente. En deploy lo arma la
         `runtime_factory` (disco en /data/ws/<team_id> + git ahí); en tests
         (sin factory) usa el trío base/None -> cada equipo, estado propio en
         memoria = aislamiento. Si hay `ownership_store` (Postgres), el mapa
-        del equipo se HIDRATA al abrirlo."""
+        del equipo se HIDRATA al abrirlo.
+
+        BACKEND-AUDIT-0220: protegido por un lock por team_id para que dos
+        handshakes simultáneos no construyan el mismo runtime dos veces."""
         rt = self._runtimes.get(team_id)
-        if rt is None:
+        if rt is not None:
+            return rt
+        lock = self._rt_locks.setdefault(team_id, asyncio.Lock())
+        async with lock:
+            # Re-check bajo el lock: otra corutina pudo haberlo creado.
+            rt = self._runtimes.get(team_id)
+            if rt is not None:
+                return rt
             if self._runtime_factory is not None:
                 rt = self._runtime_factory(team_id)
                 if inspect.isawaitable(rt):
@@ -337,7 +425,7 @@ class SyncServer:
                 for path, dueño in guardados.items():
                     rt.ownership.asignar(path, dueño)
             self._runtimes[team_id] = rt
-        return rt
+            return rt
 
     async def _persistir_own(self, rt: TeamRuntime) -> None:
         """Escribe-a-través el ownership del equipo a Postgres (si hay
@@ -357,8 +445,16 @@ class SyncServer:
         excepción sin rastro: un socket muerto (normal) era indistinguible
         de un bug de serialización que expulsaba clientes 'sin razón'. Una
         conexión cerrada es esperable (debug); cualquier otra cosa es un
-        problema que debe dejar rastro (warning)."""
+        problema que debe dejar rastro (warning).
+
+        Limpia también `_ids`/`_conns` del runtime (BACKEND-AUDIT-0240): si
+        no, el mapping queda apuntando a un socket muerto y los siguientes
+        envíos al client_id silenciosamente intentan escribir a un cadáver.
+        """
         rt.clients.discard(client)
+        cid = rt._ids.pop(client, None)
+        if cid is not None and rt._conns.get(cid) is client:
+            rt._conns.pop(cid, None)
         if isinstance(exc, ConnectionClosed):
             logger.debug("cliente caído en equipo %s (envío)", rt.team_id)
         else:
@@ -780,10 +876,41 @@ class SyncServer:
                     return None
                 continue
             if isinstance(msg, RegisterMessage):
+                # Cierre de registro tras N usuarios (BACKEND-AUDIT-0224).
+                # Default 0 = sin tope (modo prototipo). En producción, el
+                # operador setea ORUX_REGISTRO_CERRADO_TRAS=N para fijar el
+                # primer N como cuentas legítimas y a partir de ahí solo se
+                # entra por OAuth o invitación admin. NO mitiga el caso de
+                # un atacante que se registra ANTES del admin real — eso
+                # requiere bootstrap controlado (Day 0); el cierre evita la
+                # segunda fase (atacante crea cuentas en serie post-bootstrap).
+                cap = _env_int("ORUX_REGISTRO_CERRADO_TRAS", 0, 0, 1_000_000)
+                if cap > 0:
+                    listar = getattr(self.users, "usuarios", None)
+                    if listar is not None:
+                        try:
+                            actuales = await listar() if inspect.iscoroutinefunction(listar) else listar()
+                        except Exception:
+                            actuales = []
+                        if len(actuales) >= cap:
+                            if await _fallo("registro cerrado"):
+                                return None
+                            continue
                 try:
                     return await self.users.registrar(msg.username, msg.password)
                 except ValueError as e:
-                    if await _fallo(str(e)):
+                    # BACKEND-AUDIT-0004: 'ese usuario ya existe' filtra
+                    # info de enumeración. Detrás de un registro abierto el
+                    # atacante puede sondear cuentas. Reportamos un mensaje
+                    # genérico EXCEPTO para errores de FORMATO (charset,
+                    # longitud) que no filtran existencia y que el cliente
+                    # legítimo necesita para corregir su input.
+                    motivo_real = str(e)
+                    if "ya existe" in motivo_real.lower():
+                        razon = "no se pudo registrar"
+                    else:
+                        razon = motivo_real
+                    if await _fallo(razon):
                         return None
             elif isinstance(msg, LoginMessage):
                 if await self.users.verificar(msg.username, msg.password):
@@ -791,7 +918,27 @@ class SyncServer:
                 if await _fallo("usuario o contraseña incorrectos"):
                     return None
             elif isinstance(msg, SessionMessage):
-                user = usuario_de_token(msg.token, self._secret)
+                # Epoch del usuario al verificar: tokens emitidos antes de
+                # revocar (cambio de pwd / logout-all) dejan de valer
+                # quirúrgicamente sin tirar todas las sesiones del server
+                # (BACKEND-AUDIT-0002).
+                user = None
+                try:
+                    _ud = usuario_de_token(
+                        msg.token, self._secret,
+                        epoch_de=lambda u: 0,  # placeholder síncrono
+                    )
+                    if _ud is not None:
+                        # Re-verifica el epoch contra el store async real.
+                        epoch_actual = await self.users.epoch(_ud)
+                        # Re-decodifica con un callable que devuelve el epoch
+                        # ya consultado (un solo await; barato).
+                        user = usuario_de_token(
+                            msg.token, self._secret,
+                            epoch_de=lambda u, _e=epoch_actual: _e,
+                        )
+                except Exception as e:
+                    logger.warning("error verificando sesión: %s", e)
                 if user is not None and await self.users.existe(user):
                     return user
                 if await _fallo("sesión inválida, inicia sesión"):
@@ -808,6 +955,10 @@ class SyncServer:
         nada. Le mandamos sus equipos y esperamos que cree uno, redima un
         código, o elija uno suyo. Devuelve el team_id elegido, o None si la
         conexión se cierra sin elegir.
+
+        Throttle (BACKEND-AUDIT-0218): mismo mecanismo que `_autenticar`. Un
+        cliente que manda basura infinita en el lobby no debe consumir CPU/IO
+        del server sin coste. MAX_FALLOS de mensajes inválidos cierra el socket.
         """
         async def _mandar_lobby(error: str = "") -> None:
             equipos = await self.teams.equipos_de(usuario)
@@ -815,38 +966,59 @@ class SyncServer:
                 encode(LobbyMessage(teams=equipos, error=error))
             )
 
+        fallos = 0
+        MAX_FALLOS = 16  # más holgado que auth (lobby tiene UX legítima de retry)
+
+        async def _fallo(reason: str) -> bool:
+            nonlocal fallos
+            fallos += 1
+            await _mandar_lobby(reason)
+            if fallos >= MAX_FALLOS:
+                logger.warning(
+                    "lobby: %d fallos del usuario %s, se corta", fallos, usuario
+                )
+                return True
+            await asyncio.sleep(min(2.0, 0.2 * fallos))
+            return False
+
         await _mandar_lobby()
         async for raw in websocket:
             try:
                 msg = decode(raw)
             except ValueError:
-                await _mandar_lobby("mensaje inválido")
+                if await _fallo("mensaje inválido"):
+                    return None
                 continue
             if isinstance(msg, CreateTeamMessage):
                 try:
                     eq = await self.teams.crear_equipo(msg.nombre, usuario)
                     return eq["id"]
                 except TeamError as e:
-                    await _mandar_lobby(str(e))
+                    if await _fallo(str(e)):
+                        return None
             elif isinstance(msg, RedeemInviteMessage):
                 try:
                     eq = await self.teams.redimir(msg.code, usuario)
                 except TeamError as e:
                     # Capa 22: tope de plan (equipo lleno). Mensaje de
                     # upgrade, NO "código inválido": el código sigue vivo.
-                    await _mandar_lobby(str(e))
+                    if await _fallo(str(e)):
+                        return None
                     continue
                 if eq is not None:
                     return eq["id"]
-                await _mandar_lobby("código inválido o ya usado")
+                if await _fallo("código inválido o ya usado"):
+                    return None
             elif isinstance(msg, SelectTeamMessage):
                 if await self.teams.es_miembro(msg.team_id, usuario):
                     return msg.team_id
-                await _mandar_lobby("no sos miembro de ese equipo")
+                if await _fallo("no sos miembro de ese equipo"):
+                    return None
             else:
                 # Cualquier mensaje de app antes de tener equipo: recordale
                 # que primero hay que elegir/crear uno (la app sigue cerrada).
-                await _mandar_lobby()
+                if await _fallo("hay que crear/elegir equipo primero"):
+                    return None
         return None
 
     async def handle(self, websocket: ServerConnection) -> None:
@@ -857,12 +1029,16 @@ class SyncServer:
         if usuario is None:
             return  # se desconectó sin autenticarse: nunca fue "alguien"
         # auth_ok con token de sesión fresco (auto-login firmado al recargar).
+        # Incluye el `epoch` actual del usuario: si después se revoca la
+        # sesión, este token deja de valer sin tirar las del resto.
+        epoch = await self.users.epoch(usuario)
         await websocket.send(
             encode(
                 AuthOkMessage(
                     username=usuario,
                     token=crear_token(
-                        usuario, self._secret, self._token_ttl
+                        usuario, self._secret, self._token_ttl,
+                        epoch=epoch,
                     ),
                 )
             )
@@ -918,8 +1094,30 @@ class SyncServer:
                 await self._admin_info_encoded(team_id, yo.client_id)
             )
             await self._enviar_git_status(rt, websocket)
+            # Capa 4 (reentrega): si alguien propuso cambios a archivos de
+            # este usuario MIENTRAS NO ESTABA (o el dueño se desconectó sin
+            # resolver), las propuestas siguen en `rt.proposals` pero el aviso
+            # original se mandó al void (`_enviar_a` con conn=None retorna).
+            # Al final del handshake re-emitimos las pendientes que hoy le
+            # tocan a este usuario, así no se entera "demasiado tarde".
+            # Filtra por dueño ACTUAL: si el admin reasignó el archivo, el
+            # aviso le toca al nuevo dueño, no a quien era cuando se creó.
+            for prop in rt.proposals.para(yo.client_id, rt.ownership.owner):
+                await websocket.send(encode(ProposalMessage(proposal=prop)))
 
+            limiter = _RateLimiter(RATE_TASA, RATE_BURST)
             async for raw in websocket:
+                # Rate-limit por conexión (BACKEND-AUDIT-0272): un cliente
+                # que satura no debe ahogar al equipo entero. Excedido =
+                # mensaje descartado en silencio (el cliente sano nunca lo
+                # alcanza; el atacante sí). Si quisiéramos avisarle, otro
+                # mensaje de error solo agrega tráfico.
+                if not limiter.permitir():
+                    logger.warning(
+                        "rate-limit: descarto frame de %s en equipo %s",
+                        yo.client_id, team_id,
+                    )
+                    continue
                 try:
                     message = decode(raw)
                 except (ValueError, KeyError, TypeError) as e:
@@ -1447,14 +1645,27 @@ class SyncServer:
                     )
 
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
-        """Arranca el server WebSocket y lo deja escuchando para siempre."""
+        """Arranca el server WebSocket y lo deja escuchando para siempre.
+
+        `max_size`/`max_queue` aplican el tope HARD del frame antes de
+        despachar al handler (BACKEND-AUDIT-0033 / -0271): un cliente que
+        intenta colocar 50MB en una sola tecla NO consume RAM esperando ser
+        decodificado. El `decode` también valida (defensa en profundidad)
+        pero esto evita que el frame siquiera llegue al worker.
+        """
         # TTL GENEROSO a propósito (default 20 min): tan largo que evictar
         # implica casi seguro que el equipo se fue, no que está pensando.
         # Configurable por si el operador del VPS quiere ajustar RAM vs
         # latencia-de-reentrada. Pagar el reindex ocasional << retener
         # cientos de MB de equipos que ya no están.
-        ttl = float(os.environ.get("ORUX_LSP_IDLE_SEC", "1200"))
-        async with serve(self.handle, host, port):
-            logger.info("servidor escuchando en ws://%s:%d", host, port)
+        ttl = _env_float("ORUX_LSP_IDLE_SEC", 1200.0, 60.0, 24 * 3600.0)
+        async with serve(
+            self.handle, host, port,
+            max_size=WS_MAX_SIZE, max_queue=WS_MAX_QUEUE,
+        ):
+            logger.info(
+                "servidor escuchando en ws://%s:%d (max_size=%d max_queue=%d)",
+                host, port, WS_MAX_SIZE, WS_MAX_QUEUE,
+            )
             asyncio.create_task(self._barrer_lsp_ociosas(ttl))
             await asyncio.Future()

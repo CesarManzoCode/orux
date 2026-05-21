@@ -31,9 +31,19 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Tope por archivo al cargar de disco (BACKEND-AUDIT-0079): un PNG de 5GB
+# en el workspace tirado por error reventaría el server al arrancar. 2MB
+# es holgado para código (un .ts grande es <100KB, un .md grande es <500KB).
+_MAX_BYTES_CARGAR = 2 * 1024 * 1024
+
+# Tmp con pid: `.<digits>.tmp`. Sin esto, archivos legítimos `config.tmp`
+# del repo del usuario se filtraban (BACKEND-AUDIT-0236).
+_TMP_PID = re.compile(r"\.\d+\.tmp$")
 
 
 class DiskStorage:
@@ -42,6 +52,25 @@ class DiskStorage:
         # resuelta (absoluta, sin `..`) porque la usamos como frontera de
         # seguridad: todo lo que escribamos tiene que caer dentro de aquí.
         self.root = Path(root).resolve()
+        # Barrido perezoso de .tmp huérfanos al arrancar (BACKEND-AUDIT-0080):
+        # SIGKILL entre write y replace deja `archivo.<pid>.tmp` sin pareja.
+        # Si su pid no está vivo, lo limpiamos para no acumular basura.
+        self._limpiar_tmps_huerfanos()
+
+    def _limpiar_tmps_huerfanos(self) -> None:
+        if not self.root.exists():
+            return
+        try:
+            iterador = self.root.rglob("*.tmp")
+        except OSError:
+            return
+        for p in iterador:
+            try:
+                if not p.is_file() or not _TMP_PID.search(p.name):
+                    continue
+                p.unlink()
+            except OSError:
+                pass
 
     def _destino(self, path: str) -> Path:
         """Traduce un `path` del protocolo a una ruta real en disco, segura.
@@ -53,7 +82,10 @@ class DiskStorage:
         Rechaza con `ValueError`:
         - paths vacíos o que son el propio directorio raíz (no son un archivo);
         - cualquier path que, una vez resuelto, caiga fuera de `root` (absoluto
-          como `/etc/passwd`, o con `..` que se escapa).
+          como `/etc/passwd`, o con `..` que se escapa);
+        - cualquier path donde un componente intermedio es un symlink que
+          escapa de la raíz (BACKEND-AUDIT-0076: defensa contra symlinks
+          ya plantados dentro del workspace que apuntan afuera).
         """
         if not path or path in (".", "/"):
             raise ValueError(f"path inválido: {path!r}")
@@ -63,6 +95,17 @@ class DiskStorage:
         destino = (self.root / path).resolve()
         if destino == self.root or not destino.is_relative_to(self.root):
             raise ValueError(f"path fuera del workspace: {path!r}")
+        # Anti-symlink intermedio: cualquier componente del path que SEA un
+        # symlink y resuelva fuera de root es un escape (BACKEND-AUDIT-0076).
+        actual = self.root
+        for parte in destino.relative_to(self.root).parts:
+            actual = actual / parte
+            if actual.is_symlink():
+                real = actual.resolve()
+                if not real.is_relative_to(self.root):
+                    raise ValueError(
+                        f"path atraviesa un symlink fuera del workspace: {path!r}"
+                    )
         return destino
 
     def guardar(self, path: str, content: str) -> None:
@@ -113,24 +156,51 @@ class DiskStorage:
         Las claves se devuelven en formato POSIX (`src/auth.py`, con `/`)
         siempre, aunque el sistema use `\\`, porque ese es el formato que viaja
         por el protocolo y con el que el resto del sistema indexa el workspace.
+
+        Hardening (auditoría):
+        - PermissionError/OSError por archivo se loguea y se sigue, no se
+          aborta toda la carga (BACKEND-AUDIT-0078). Un archivo con permisos
+          raros no debe dejar el workspace VACÍO en memoria — el siguiente
+          update lo pisaría todo.
+        - Tope por archivo: 2MB. Un PNG/zip de GB no se carga (BACKEND-AUDIT-0079).
+        - Filtro `.git` case-insensitive (BACKEND-AUDIT-0094): en HFS+/NTFS
+          `.GIT/HEAD` debe filtrarse igual.
+        - Filtro de `.tmp` solo cuando matchea `.<pid>.tmp` (BACKEND-AUDIT-0236):
+          un `config.tmp` legítimo del repo se cargaba antes.
         """
         if not self.root.exists():
             return {}
         archivos: dict[str, str] = {}
-        for p in sorted(self.root.rglob("*")):
-            if not p.is_file():
+        for p in self.root.rglob("*"):
+            try:
+                if not p.is_file():
+                    continue
+            except OSError:
                 continue
             partes = p.relative_to(self.root).parts
             # El workspace puede SER un repo git (capa 8): `.git/` es interno
-            # de git, no archivos del proyecto. Si lo cargáramos, el workspace
-            # se llenaría de basura y, peor, se re-persistiría pisando el repo.
-            if ".git" in partes:
+            # de git, no archivos del proyecto. Comparación case-insensitive
+            # para FS case-insensitive (`.GIT/HEAD` ≡ `.git/HEAD`).
+            if any(parte.lower() == ".git" for parte in partes):
                 continue
             # Temporal de una escritura atómica que un crash duro (corte de
             # luz entre write_text y os.replace) dejó a medias: NO es un
-            # archivo del proyecto. Cargarlo sería resucitar basura
-            # truncada justo lo que la escritura atómica vino a evitar.
-            if p.name.endswith(".tmp"):
+            # archivo del proyecto. Solo filtramos los que matchean `.<pid>.tmp`
+            # para no excluir archivos legítimos del repo del usuario.
+            if _TMP_PID.search(p.name):
+                continue
+            # Tope de tamaño: archivos gigantes no entran a memoria. El
+            # workspace de orux es código de texto, no binarios grandes.
+            try:
+                st = p.stat()
+            except OSError as e:
+                logger.warning("no se pudo statear %s: %s", p, e)
+                continue
+            if st.st_size > _MAX_BYTES_CARGAR:
+                logger.warning(
+                    "archivo demasiado grande, se omite: %s (%d bytes)",
+                    p, st.st_size,
+                )
                 continue
             rel = p.relative_to(self.root).as_posix()
             try:
@@ -139,4 +209,8 @@ class DiskStorage:
                 # Un binario que alguien dejó en la carpeta. No es del workspace
                 # de texto que manejamos hoy; lo saltamos en vez de explotar.
                 logger.warning("archivo no es texto utf-8, se omite: %s", rel)
+            except (PermissionError, OSError) as e:
+                # Permisos raros o IO error: NO aborta la carga entera
+                # (BACKEND-AUDIT-0078). Loguear y seguir.
+                logger.warning("no se pudo leer %s: %s", rel, e)
         return archivos

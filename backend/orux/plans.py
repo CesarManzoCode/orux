@@ -20,7 +20,17 @@ banda (DB/admin/futuro billing); este módulo solo lo interpreta.
 
 from __future__ import annotations
 
-INF = float("inf")
+import logging
+
+logger = logging.getLogger(__name__)
+
+# `INF` representa "sin límite" para campos numéricos. BACKEND-AUDIT-0183:
+# se usa un int gigante (10**9) en vez de `float('inf')` para que
+# `miembros_actuales < INF` se comporte previsiblemente aunque
+# `miembros_actuales` venga como float/NaN raro (NaN < inf es False, y eso
+# bloqueaba premium silenciosamente). Mil millones es práctico para
+# "ilimitado" en el dominio de equipos.
+INF = 10**9
 
 # clave de plan -> límites. free = el target declarado (founders 2-3, OSS
 # que empieza) con TODO funcionando; 5 devs lo decidió el usuario.
@@ -57,7 +67,11 @@ PLAN_DEFECTO = "free"
 
 def limites(plan: str) -> dict:
     """Límites del plan; si el plan es desconocido cae a free (nunca premium
-    por error: fallar hacia el lado seguro/barato)."""
+    por error: fallar hacia el lado seguro/barato). Loguea el desconocido
+    (BACKEND-AUDIT-0184): un equipo premium tratado como free por un typo
+    en la DB no debería ser silencioso."""
+    if plan not in PLANES:
+        logger.warning("plan desconocido %r -> default free", plan)
     return PLANES.get(plan, PLANES["free"])
 
 

@@ -26,7 +26,10 @@ Python no aporta precisión y arriesgaría capa 6 — decisión explícita). JS/
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
+
+_log = logging.getLogger(__name__)
 
 from . import go, javascript, python, rust
 from .modelo import Simbolo, cambios_que_importan_modelo
@@ -131,7 +134,9 @@ _RUST = _Regex(rust)
 def _treesitter_tier(clase: str) -> Tier | None:
     """Tier 2 (tree-sitter) para `clase` ('jsts'|'go'|'rust') si su grammar
     está; si no, None. Import perezoso y ultra-defensivo: el sandbox sin
-    internet no lo tiene y NO debe romper nada (cae a regex como antes)."""
+    internet no lo tiene y NO debe romper nada (cae a regex como antes).
+    BACKEND-AUDIT-0149: loguear la razón para que un grammar incompatible
+    en el VPS deje rastro (antes silencio total, indiagnosticable)."""
     try:
         from . import treesitter
 
@@ -141,8 +146,12 @@ def _treesitter_tier(clase: str) -> Tier | None:
             "rust": treesitter.TreeSitterRust,
         }[clase]
         t = cls()
-        return t if t.disponible() else None
-    except Exception:
+        if not t.disponible():
+            _log.info("tree-sitter %s no disponible (grammar)", clase)
+            return None
+        return t
+    except Exception as e:  # noqa: BLE001
+        _log.info("tree-sitter %s no se pudo cargar: %r", clase, e)
         return None
 
 

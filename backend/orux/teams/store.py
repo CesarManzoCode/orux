@@ -93,11 +93,17 @@ def _codigo() -> str:
 
 class MemTeamStore:
     def __init__(self, backend: object | None = None) -> None:
-        # `backend=None` = en memoria. El adaptador Postgres es otra clase
-        # con la MISMA API async; este NO importa nada de Postgres.
+        # `backend` se mantiene como parámetro inactivo para compat con
+        # callers viejos; el adaptador Postgres es PgTeamStore. Aceptamos
+        # el kwarg sin usarlo y NO almacenamos para no inducir bugs.
+        del backend
         self._equipos: dict[str, dict] = {}            # id -> {id, nombre, creador}
         self._miembros: dict[str, dict[str, str]] = {} # team_id -> {usuario: rol}
         self._invites: dict[str, dict] = {}            # code -> {team_id, creado_por, usado_por}
+        # Lock interno para tramos check-then-set (BACKEND-AUDIT-0237 / -0181).
+        # `asyncio.Lock` porque la API es async; el caller no necesita saber.
+        import asyncio as _asyncio  # noqa: PLC0415
+        self._lock = _asyncio.Lock()
 
     # --- Equipos ---
 
@@ -199,28 +205,35 @@ class MemTeamStore:
     async def redimir(self, code: str, usuario: str) -> dict | None:
         """Une a `usuario` al equipo del código. Devuelve {id, nombre} o None
         si el código no existe o ya se usó. Idempotente si ya era miembro
-        (igual consume el código: un código = una persona)."""
-        inv = self._invites.get(code)
-        if inv is None or inv["usado_por"] is not None:
-            return None
-        u = normalizar(usuario)
-        tid = inv["team_id"]
-        if tid not in self._equipos:  # equipo borrado entre medio
-            return None
-        # Capa 22: tope de devs del plan. Solo bloquea si SUMA un miembro
-        # nuevo (ya-miembro es idempotente). Se valida ANTES de consumir el
-        # código: un equipo lleno no te quema la invitación (reintentás
-        # tras el upgrade). Mensaje claro de plan, no "código inválido".
-        m = self._miembros.get(tid, {})
-        if u not in m and not permite_miembro(
-            self._equipos[tid]["plan"], len(m)
-        ):
-            raise TeamError(
-                f"este equipo llegó al límite del plan free "
-                f"({limites('free')['max_devs']} devs) — premium para "
-                f"sumar más"
-            )
-        inv["usado_por"] = u
-        self._miembros.setdefault(tid, {}).setdefault(u, "member")
-        e = self._equipos[tid]
-        return {"id": tid, "nombre": e["nombre"]}
+        (igual consume el código: un código = una persona).
+
+        Lock interno (BACKEND-AUDIT-0237): el check `inv["usado_por"] is None`
+        seguido del set `inv["usado_por"] = u` debe ser atómico. Sin esto, dos
+        intentos concurrentes con el mismo código podían pasar ambos el
+        check y ambos consumir el código.
+        """
+        async with self._lock:
+            inv = self._invites.get(code)
+            if inv is None or inv["usado_por"] is not None:
+                return None
+            u = normalizar(usuario)
+            tid = inv["team_id"]
+            if tid not in self._equipos:  # equipo borrado entre medio
+                return None
+            # Capa 22: tope de devs del plan. Solo bloquea si SUMA un miembro
+            # nuevo (ya-miembro es idempotente). Se valida ANTES de consumir el
+            # código: un equipo lleno no te quema la invitación (reintentás
+            # tras el upgrade). Mensaje claro de plan, no "código inválido".
+            m = self._miembros.get(tid, {})
+            if u not in m and not permite_miembro(
+                self._equipos[tid]["plan"], len(m)
+            ):
+                raise TeamError(
+                    f"este equipo llegó al límite del plan free "
+                    f"({limites('free')['max_devs']} devs) — premium para "
+                    f"sumar más"
+                )
+            inv["usado_por"] = u
+            self._miembros.setdefault(tid, {}).setdefault(u, "member")
+            e = self._equipos[tid]
+            return {"id": tid, "nombre": e["nombre"]}

@@ -2,23 +2,32 @@
 
 Esto es a la capa 2 lo que `Workspace` es a la capa 1: el estado autoritativo
 que el servidor mantiene y desde el cual decide qué mandarle a cada cliente.
-La diferencia clave es el ciclo de vida. El estado de un archivo (`Document`)
-es persistente: vive mientras viva el workspace. El estado de presencia es
-efímero: existe mientras la persona esté conectada y desaparece cuando se va.
-Por eso vive en su propia clase y no se mete dentro de `Workspace`.
+
+Distinciones que importan (BACKEND-AUDIT-0093):
+- La **IDENTIDAD** del usuario es DETERMINISTA (capa 7): mismo usuario, mismo
+  client_id/nombre/color, siempre. Se deriva del username normalizado, no
+  vive aquí.
+- El **ESTADO DE PRESENCIA** (path + line) es EFÍMERO: existe mientras la
+  persona esté conectada y desaparece cuando se va. Por eso vive en su
+  propia clase y no se mete dentro de `Workspace`.
 
 Decisiones de esta capa:
 
 - **La identidad es el usuario autenticado (capa 7).** Ya no hay anónimos ni
   contadores ni tokens: el server solo llama `asignar(usuario)` después de que
-  el usuario pasó el login, y la identidad (client_id/nombre/color) se deriva
-  determinísticamente de su nombre. El cliente nunca elige su identidad.
+  el usuario pasó el login. El cliente nunca elige su identidad.
 
 - **Estar conectado no es estar presente.** Un cliente recién conectado que
   todavía no abrió ningún archivo tiene `path = None`: está en la sala pero no
   en ninguna parte del código. No se difunde ni aparece en el roster de nadie
   hasta que abre un archivo. Esto mantiene el tráfico y la UI limpios, y es
   semánticamente correcto: presencia es *dónde trabajas*, no *que existes*.
+
+- **Concurrencia**: el server lo accede bajo `rt._estado_lock` para mutación
+  (update/save/etc.); `mover` y `presentes` se llaman desde el hot path de
+  presencia que NO toma ese lock — son operaciones O(1)/O(n) cortas sobre un
+  dict en una sola corutina por equipo. Documentado para que un futuro
+  refactor no asuma sincronización implícita (BACKEND-AUDIT-0073).
 """
 
 from __future__ import annotations
@@ -54,13 +63,20 @@ class Roster:
         self._estados: dict[str, PresenceState] = {}
 
     def asignar(self, username: str) -> PresenceState:
-        """Crea la presencia (sin archivo) para un usuario ya autenticado.
+        """Crea (o re-asegura) la presencia para un usuario ya autenticado.
 
         La identidad se deriva del usuario, no se inventa: mismo usuario =
-        mismo client_id/nombre/color, siempre. La presencia nace limpia
-        (`path=None`): reconectar no te devuelve a donde estabas, eso es
-        estado efímero.
+        mismo client_id/nombre/color, siempre.
+
+        Si el usuario YA tenía un estado (otra pestaña/conexión paralela),
+        PRESERVAMOS su path/line en vez de sobrescribir con None
+        (BACKEND-AUDIT-0072). Pestaña B no debe borrar la presencia de la
+        pestaña A; las dos comparten identidad (es la misma persona). El
+        primer move() de cualquiera la actualiza.
         """
+        previo = self._estados.get(username)
+        if previo is not None:
+            return previo
         estado = PresenceState(
             client_id=username,
             name=username,
@@ -107,10 +123,17 @@ class Roster:
 
         Devuelve `None` si el `client_id` no existe (conexión que ya cayó):
         el servidor entonces no difunde nada.
+
+        `line` se clampa a 0..10M para defender contra valores patológicos
+        (BACKEND-AUDIT-0085): negativos, ints gigantes, etc.
         """
         previo = self._estados.get(client_id)
         if previo is None:
             return None
+        # Clamp defensivo: el frontend a veces envía 0 al inicializar.
+        if not isinstance(line, int) or isinstance(line, bool):
+            line = 1
+        line = max(0, min(10_000_000, line))
         actualizado = PresenceState(
             client_id=previo.client_id,
             name=previo.name,

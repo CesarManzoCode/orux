@@ -31,16 +31,36 @@ def test_hash_no_es_la_password_y_verifica() -> None:
 
 def test_dos_hashes_de_la_misma_password_difieren() -> None:
     # Sal aleatoria por hash: dos registros distintos, ambos válidos.
-    a = hash_password("igual")
-    b = hash_password("igual")
+    a = hash_password("igualpwd")
+    b = hash_password("igualpwd")
     assert a != b
-    assert verificar_password("igual", a)
-    assert verificar_password("igual", b)
+    assert verificar_password("igualpwd", a)
+    assert verificar_password("igualpwd", b)
 
 
 def test_password_vacia_se_rechaza() -> None:
     with pytest.raises(ValueError):
         hash_password("")
+
+
+def test_password_demasiado_corta_se_rechaza() -> None:
+    # Mínimo 8 chars (OWASP) — antes 1 char pasaba (BACKEND-AUDIT-0005).
+    with pytest.raises(ValueError):
+        hash_password("corta")
+
+
+def test_password_demasiado_larga_se_rechaza() -> None:
+    # Tope para evitar DoS por PBKDF2 sobre input gigante.
+    with pytest.raises(ValueError):
+        hash_password("x" * 200)
+
+
+def test_marker_externo_nunca_verifica() -> None:
+    # Defensa en profundidad: si el formato del marker evoluciona, la rama
+    # tolerante del parser podría aceptarlo accidentalmente (BACKEND-AUDIT-0007).
+    from orux.identity.passwords import MARCADOR_EXTERNO
+    assert verificar_password("cualquier-pwd", MARCADOR_EXTERNO) is False
+    assert verificar_password("", MARCADOR_EXTERNO) is False
 
 
 def test_verificar_registro_corrupto_es_false() -> None:
@@ -76,36 +96,36 @@ def test_token_manipulado_no_vale() -> None:
 
 def test_registrar_y_verificar(tmp_path) -> None:
     s = UserStore(tmp_path / "users.json")
-    s.registrar("Joaquin", "clave")
-    assert s.verificar("joaquin", "clave") is True
+    s.registrar("Joaquin", "clave123")
+    assert s.verificar("joaquin", "clave123") is True
     assert s.verificar("joaquin", "mala") is False
     assert s.verificar("nadie", "x") is False
 
 
 def test_usuario_se_normaliza(tmp_path) -> None:
     s = UserStore(tmp_path / "users.json")
-    s.registrar("  Joaquin  ", "clave")
+    s.registrar("  Joaquin  ", "clave123")
     # Mismo dueño aunque cambien espacios/mayúsculas.
     assert s.existe("JOAQUIN")
-    assert s.verificar("joaquin", "clave")
+    assert s.verificar("joaquin", "clave123")
     assert normalizar("  AnA ") == "ana"
 
 
 def test_no_se_puede_registrar_dos_veces(tmp_path) -> None:
     s = UserStore(tmp_path / "users.json")
-    s.registrar("ana", "x")
+    s.registrar("ana", "passw0rd")
     with pytest.raises(ValueError):
-        s.registrar("ana", "y")
+        s.registrar("ana", "passw0rd2")
     with pytest.raises(ValueError):
-        s.registrar("ANA", "z")  # misma forma canónica
+        s.registrar("ANA", "passw0rd3")  # misma forma canónica
 
 
 def test_persiste_entre_instancias(tmp_path) -> None:
     # "Reinicia el server": otra instancia sobre el mismo archivo conserva
     # usuarios. Es lo que hace que la identidad sea de verdad estable.
     ruta = tmp_path / "users.json"
-    UserStore(ruta).registrar("ana", "clave")
-    assert UserStore(ruta).verificar("ana", "clave") is True
+    UserStore(ruta).registrar("ana", "clave123")
+    assert UserStore(ruta).verificar("ana", "clave123") is True
 
 
 def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
@@ -113,8 +133,8 @@ def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
     ruta.write_text("{no es json", encoding="utf-8")
     s = UserStore(ruta)  # no explota
     assert s.existe("quien") is False
-    s.registrar("nuevo", "x")  # y sigue usable
-    assert s.verificar("nuevo", "x")
+    s.registrar("nuevo", "passw0rd")  # y sigue usable
+    assert s.verificar("nuevo", "passw0rd")
 
 
 # Sprint de pulido pre-mercado: reglas de usuario al CREAR cuenta. No afecta
@@ -144,14 +164,14 @@ def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
 def test_registrar_rechaza_usuario_invalido(tmp_path, malo):
     s = UserStore(tmp_path / "users.json")
     with pytest.raises(ValueError):
-        s.registrar(malo, "clave")
+        s.registrar(malo, "clave123")
 
 
 def test_registrar_acepta_usuario_normal(tmp_path) -> None:
     # Charset razonable y rango razonable.
     s = UserStore(tmp_path / "users.json")
-    assert s.registrar("ana", "x") == "ana"
-    assert s.registrar("Ana.Lopez", "x") == "ana.lopez"  # normalizada
-    assert s.registrar("dev_2", "x") == "dev_2"
-    assert s.registrar("a-b-c", "x") == "a-b-c"
-    assert s.registrar("Joaquin99", "x") == "joaquin99"
+    assert s.registrar("ana", "passw0rd") == "ana"
+    assert s.registrar("Ana.Lopez", "passw0rd") == "ana.lopez"  # normalizada
+    assert s.registrar("dev_2", "passw0rd") == "dev_2"
+    assert s.registrar("a-b-c", "passw0rd") == "a-b-c"
+    assert s.registrar("Joaquin99", "passw0rd") == "joaquin99"
