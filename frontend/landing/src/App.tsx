@@ -54,9 +54,13 @@ const stagger: Variants = {
 function Reveal({
   children, delay = 0, className,
 }: { children: ReactNode; delay?: number; className?: string }) {
+  // Con prefers-reduced-motion el contenido se monta directo en su sitio
+  // final: framer-motion anima por JS, así que el `animation: none` del
+  // CSS no lo frena — hay que cortarlo acá, arrancando ya en "show".
+  const reduce = useReducedMotion();
   return (
     <motion.div className={className} variants={fadeUp}
-      initial="hidden" whileInView="show"
+      initial={reduce ? "show" : "hidden"} whileInView="show"
       viewport={{ once: true, amount: 0.4 }} transition={{ delay }}>
       {children}
     </motion.div>

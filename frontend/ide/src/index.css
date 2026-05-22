@@ -327,7 +327,7 @@ button:active { transform: translateY(1px); }
 .peers .av {
   width: 23px; height: 23px; border-radius: 50%; margin-left: -7px;
   display: grid; place-items: center; font-size: 9.5px; font-weight: 750;
-  color: #06120c; border: 2px solid var(--surface);
+  color: var(--av-ink); border: 2px solid var(--surface);
   font-family: var(--font-ui); cursor: default;
   transition: transform var(--tr), box-shadow var(--tr);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -1828,7 +1828,7 @@ button:active { transform: translateY(1px); }
 .lp-feed .lf-row .who {
   width: 19px; height: 19px; border-radius: 50%; flex: none;
   display: grid; place-items: center; font-size: 9.5px; font-weight: 700;
-  color: #06120c;
+  color: var(--av-ink);
 }
 .lp-feed .lf-row em {
   margin-left: auto; font-style: normal; font-size: 10px;
@@ -1855,7 +1855,12 @@ button:active { transform: translateY(1px); }
 .lp-sys b { color: var(--text-2); font-weight: 600; }
 .landing-auth {
   position: relative;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; justify-content: center;
+  /* `safe center` centra cuando hay sitio, pero NO recorta cuando la
+     consola (modo registro, que es alta) supera el viewport: cae a
+     `start` y el panel hace scroll en vez de quedar inalcanzable por
+     arriba. Sin esto, en pantallas anchas pero bajas el card se cortaba. */
+  align-items: safe center; overflow-y: auto;
   padding: clamp(1.5rem, 4vw, 3rem);
   background:
     radial-gradient(120vw 60vh at 70% -10%, rgba(255, 255, 255, 0.016), transparent 60%),
@@ -3253,7 +3258,7 @@ button:active { transform: translateY(1px); }
   width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center;
   font-size: 9.5px; font-weight: 750;
-  color: #06120c; flex-shrink: 0;
+  color: var(--av-ink); flex-shrink: 0;
   font-family: var(--font-ui);
   border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -3354,7 +3359,7 @@ button:active { transform: translateY(1px); }
   width: 18px; height: 18px; border-radius: 50%;
   display: grid; place-items: center;
   font: 750 8.5px/1 var(--font-ui);
-  color: #06120c;
+  color: var(--av-ink);
   box-shadow: 0 0 0 2px var(--surface);
 }
 .inrow-pill {
@@ -3372,7 +3377,7 @@ button:active { transform: translateY(1px); }
    idioma que el del flujo de borrador (claimable, accionable). */
 .in-act.primario {
   display: inline-flex; align-items: center; gap: 0.32rem;
-  background: var(--accent); color: #08160e;
+  background: var(--accent); color: var(--accent-ink);
   border: 1px solid var(--accent);
   font-weight: 700; padding: 0.32rem 0.7rem;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset,
@@ -3427,6 +3432,10 @@ button:active { transform: translateY(1px); }
 .ed-livepill-dot {
   width: 7px; height: 7px; border-radius: 50%;
   box-shadow: 0 0 0 1.5px var(--surface);
+  /* El pill entero es pointer-events:none para no tapar el editor;
+     reactivamos SOLO los puntos para que su tooltip (el nombre del peer)
+     sí se pueda leer al pasar el mouse. */
+  pointer-events: auto;
 }
 .ed-livepill-more {
   font-size: 9px; font-weight: 700; color: var(--muted);
@@ -3477,7 +3486,7 @@ button:active { transform: translateY(1px); }
   min-width: 26px; height: 22px;
   padding: 0 0.4rem;
   font: 600 11px/1 var(--font-mono);
-  color: var(--ink);
+  color: var(--text);
   background: var(--surface-2);
   border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
   border-bottom-width: 2px;
@@ -3490,7 +3499,7 @@ button:active { transform: translateY(1px); }
 }
 .kbd-desc {
   font: 400 12px/1.35 var(--font-base);
-  color: var(--ink);
+  color: var(--text);
 }
 .kbd-hint {
   margin-top: 0.85rem;
@@ -3783,11 +3792,13 @@ button:active { transform: translateY(1px); }
 }
 .gh-sep-line {
   flex: 1; height: 1px;
-  background: var(--accent-soft);
+  /* Un separador estructural va en hairline neutro: en este sistema el
+     color es ESTADO, no decoración — el acero es la marca, no una línea. */
+  background: var(--border);
 }
 .gh-sep-tx {
   font-family: var(--font-ui); font-size: 0.72rem;
-  color: var(--mut, #8b9098);
+  color: var(--muted);
 }
 .gh-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3828,7 +3839,7 @@ button:active { transform: translateY(1px); }
 .ews-sub {
   margin: 0 0 1.4rem;
   font-family: var(--font-ui); font-size: var(--t-sm);
-  color: var(--mut, #8b9098); line-height: 1.5;
+  color: var(--muted); line-height: 1.5;
 }
 .ews-steps { display: flex; flex-direction: column; gap: 0.6rem; }
 .ews-step {
@@ -3852,7 +3863,7 @@ button:active { transform: translateY(1px); }
 }
 .ews-step-tx span {
   font-family: var(--font-ui); font-size: 0.78rem;
-  color: var(--mut, #8b9098); line-height: 1.45;
+  color: var(--muted); line-height: 1.45;
 }
 .ews-primary {
   background: var(--accent-soft); border-color: var(--accent-line);
@@ -3860,5 +3871,5 @@ button:active { transform: translateY(1px); }
 .ews-foot {
   margin: 1.3rem 0 0;
   font-family: var(--font-ui); font-size: 0.78rem;
-  color: var(--mut, #8b9098); line-height: 1.5;
+  color: var(--muted); line-height: 1.5;
 }

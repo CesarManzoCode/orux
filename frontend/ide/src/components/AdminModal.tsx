@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Shield, X } from "lucide-react";
 import { useStore } from "../useStore";
 import { adminAsignarVarios, nombreDe, nombreVisible } from "../store";
@@ -12,6 +12,11 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [user, setUser] = useState("");
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set());
+  // Al abrir, el foco entra al modal (botón de cerrar): el usuario de
+  // teclado no queda con el foco detrás del diálogo. Deps [] = solo al
+  // montar (mismo motivo que en los otros modales).
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { closeRef.current?.focus(); }, []);
   // `paths` se recalcula en cada render pero su identidad NO es estable
   // — el dep anterior `[paths.join("\0")]` se evaluaba en cada render
   // igualmente y el memo no servía. Atamos el memo a `s.files` (referencia
@@ -128,7 +133,7 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
           <h2 id="am-h" className="modal-h">
             <Shield size={15} /> {t.am_title}
           </h2>
-          <button className="modal-x" aria-label={t.am_close} onClick={onClose}>
+          <button ref={closeRef} className="modal-x" aria-label={t.am_close} onClick={onClose}>
             <X size={16} />
           </button>
         </header>

@@ -9,7 +9,7 @@
 // producto (checkpoint, capa 19). Alt deja la mano izquierda como
 // "puente" entre editor y coordinación sin pisar atajos del browser ni
 // del OS comunes.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n";
 import { ModalPortal } from "./ModalPortal";
@@ -35,6 +35,14 @@ function Row({ keys, desc }: { keys: string[]; desc: string }) {
 
 export function KbdHelp({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
+
+  // Al abrir, el foco entra al modal (botón de cerrar): un usuario de
+  // teclado no se queda con el foco atrapado detrás del diálogo. Mismo
+  // gesto que el resto de modales. Deps [] = solo al montar — `onClose`
+  // llega como arrow nueva en cada render del padre, así que un dep
+  // [onClose] re-focaría en cada render y robaría el foco.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { closeRef.current?.focus(); }, []);
 
   // Esc cierra. Mismo patrón que los demás modales (InviteModal,
   // ConfirmarSalida) — no inventamos focus-trap pesado: este modal NO
@@ -66,6 +74,7 @@ export function KbdHelp({ onClose }: { onClose: () => void }) {
           <header className="modal-head">
             <h2 id="kbd-h" className="modal-h">{t.kbd_help_title}</h2>
             <button
+              ref={closeRef}
               className="modal-x"
               aria-label={t.kbd_help_close}
               onClick={onClose}

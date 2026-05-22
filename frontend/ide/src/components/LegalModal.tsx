@@ -12,7 +12,7 @@
 //   2) el cuerpo es scrollable (los legales crecen) sin que el header ni
 //      el footer pierdan posición — eso es lo que hace usable un texto
 //      largo en pantalla pequeña.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { useI18n } from "../i18n";
 import { ModalPortal } from "./ModalPortal";
@@ -27,6 +27,13 @@ export function LegalModal({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+
+  // Al abrir, el foco entra por el botón de cerrar — arriba del documento.
+  // Antes iba (autoFocus) al botón "Aceptar" del pie, debajo de un texto
+  // legal largo: dejaba al usuario de teclado/lector al FINAL del texto.
+  // Deps [] = solo al montar.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { closeRef.current?.focus(); }, []);
 
   // Esc cierra — convención universal. preventDefault para que ningún
   // atajo de OS interfiera mientras el modal tiene el foco lógico.
@@ -95,6 +102,7 @@ export function LegalModal({
           <header className="modal-head">
             <h2 id="legal-h" className="modal-h">{meta.title}</h2>
             <button
+              ref={closeRef}
               className="modal-x"
               aria-label={t.legal_close}
               onClick={onClose}
@@ -117,7 +125,7 @@ export function LegalModal({
           </div>
 
           <footer className="modal-foot">
-            <button className="primario" onClick={onClose} autoFocus>
+            <button className="primario" onClick={onClose}>
               {t.legal_accept}
             </button>
           </footer>

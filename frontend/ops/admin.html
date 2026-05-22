@@ -254,6 +254,11 @@ input::placeholder { color: var(--faint); }
     transform var(--tr), filter var(--tr);
 }
 .btn:active { transform: translateY(1px); }
+/* Estado deshabilitado (botón en carga): plano, sin hover ni active. */
+.btn:disabled {
+  opacity: 0.55; cursor: default;
+  transform: none !important; filter: none !important;
+}
 
 /* Botón primario — gradiente acento del IDE */
 .btn-primary {
@@ -704,6 +709,7 @@ const I18N = {
     pass_label: "Contraseña",
     pass_placeholder: "tu contraseña",
     enter_btn: "Entrar",
+    enter_btn_busy: "Entrando…",
     session_badge: "sesión activa (solo esta pestaña)",
     reload: "↺ Recargar",
     logout: "Salir",
@@ -731,6 +737,7 @@ const I18N = {
     pass_label: "Password",
     pass_placeholder: "your password",
     enter_btn: "Sign in",
+    enter_btn_busy: "Signing in…",
     session_badge: "active session (this tab only)",
     reload: "↺ Reload",
     logout: "Sign out",
@@ -821,6 +828,11 @@ async function entrar() {
   const username = _$("usr").value.trim();
   const password = _$("pwd").value;
   const gm = _$("gmsg");
+  const btn = _$("t-enter-btn");
+  // Estado de carga: deshabilita el botón mientras el login viaja. Evita
+  // el doble-submit (dos POST /login) y da feedback en red lenta — el
+  // mismo gesto que el login del IDE, que ya lo tenía.
+  if (btn) { btn.disabled = true; btn.textContent = tx.enter_btn_busy; }
   try {
     const r = await fetch(API + "/login", {
       method: "POST",
@@ -837,6 +849,10 @@ async function entrar() {
   } catch (e) {
     gm.className = "msg err";
     gm.textContent = tx.err_unauth + e.message;
+  } finally {
+    // En éxito, _abrirPanel() ya ocultó el gate; restaurar el botón es
+    // inofensivo y deja el gate listo por si se vuelve a él (salir()).
+    if (btn) { btn.disabled = false; btn.textContent = tx.enter_btn; }
   }
 }
 
