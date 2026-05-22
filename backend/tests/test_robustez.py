@@ -72,6 +72,53 @@ def test_path_seguro_rechaza_lo_peligroso(malo):
     assert path_seguro(malo) is False
 
 
+# --- Anti-abuso del registro: throttle por IP -----------------------------
+
+
+def test_throttle_registro_corta_la_creacion_masiva(monkeypatch):
+    """Una IP puede registrar hasta el tope; el intento siguiente se rechaza.
+    Sin esto el registro público no tiene techo por IP."""
+    monkeypatch.setenv("ORUX_REGISTRO_MAX_POR_IP", "3")
+    server = SyncServer()
+    assert server._throttle_registro("1.2.3.4") is True
+    assert server._throttle_registro("1.2.3.4") is True
+    assert server._throttle_registro("1.2.3.4") is True
+    assert server._throttle_registro("1.2.3.4") is False  # 4to: superó el tope
+
+
+def test_throttle_registro_es_por_ip(monkeypatch):
+    """El cupo de una IP no afecta a otra — una NAT agotada y un bot en otra
+    IP no comparten límite."""
+    monkeypatch.setenv("ORUX_REGISTRO_MAX_POR_IP", "2")
+    server = SyncServer()
+    assert server._throttle_registro("ip-a") is True
+    assert server._throttle_registro("ip-a") is True
+    assert server._throttle_registro("ip-a") is False  # ip-a agotada
+    assert server._throttle_registro("ip-b") is True   # ip-b: cupo propio
+    assert server._throttle_registro("ip-b") is True
+    assert server._throttle_registro("ip-b") is False
+
+
+def test_ip_cliente_prefiere_x_forwarded_for():
+    """Detrás de Caddy la IP real va en X-Forwarded-For; sin ese header
+    (dev/tests) se cae a remote_address."""
+    from orux.server.sync import _ip_cliente
+
+    class _Req:
+        headers = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
+
+    class _ConProxy:
+        request = _Req()
+        remote_address = ("172.18.0.5", 40000)
+
+    class _SinProxy:
+        request = None
+        remote_address = ("127.0.0.1", 51000)
+
+    assert _ip_cliente(_ConProxy()) == "203.0.113.7"
+    assert _ip_cliente(_SinProxy()) == "127.0.0.1"
+
+
 @pytest.mark.parametrize(
     "bueno",
     ["a.py", "src/auth.py", "a/b/c/d.ts", "Carpeta Con Espacios/x.go",

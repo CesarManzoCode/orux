@@ -342,6 +342,29 @@ class TeamRuntime:
             self._lsp_uso = {}
 
 
+def _ip_cliente(websocket: ServerConnection) -> str:
+    """IP del cliente. En el deploy la conexión TCP llega desde Caddy (mismo
+    host), así que la IP real del usuario va en el header `X-Forwarded-For`
+    que Caddy agrega al hacer de proxy. En dev/tests sin proxy se cae a la
+    dirección del socket. Defensivo: ante cualquier fallo devuelve un
+    placeholder — nunca rompe el flujo de autenticación."""
+    try:
+        req = getattr(websocket, "request", None)
+        if req is not None:
+            xff = req.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
+    except Exception:
+        pass
+    try:
+        addr = websocket.remote_address
+        if addr:
+            return str(addr[0])
+    except Exception:
+        pass
+    return "desconocida"
+
+
 class SyncServer:
     def __init__(
         self,
@@ -389,6 +412,38 @@ class SyncServer:
         # dos workspaces del MISMO disco. Granular: el lock de un equipo no
         # bloquea al de otro.
         self._rt_locks: dict[str, asyncio.Lock] = {}
+        # Anti-abuso del registro (capa nueva): IP -> timestamps de los
+        # registros recientes de esa IP (ventana deslizante). Por-instancia
+        # a propósito: cada server arranca con el registro limpio (tests).
+        self._registro_buckets: dict[str, list[float]] = {}
+
+    def _throttle_registro(self, ip: str) -> bool:
+        """Anti-abuso del registro: tope de registros por IP en una ventana
+        deslizante. True = OK; False = la IP superó el tope.
+
+        Por qué hace falta: el registro es PÚBLICO y el backoff por-conexión
+        de `_autenticar` no lo frena — un bot que hace connect -> register ->
+        disconnect en bucle arranca cada conexión con 0 fallos, y un register
+        exitoso retorna de inmediato. Sin esto una IP crea cuentas sin límite.
+
+        El tope es generoso a propósito (default 20 cada 10 min): un equipo
+        entero registrándose desde la misma oficina (NAT) no debe chocarlo;
+        un bot sí, enseguida. Configurable con `ORUX_REGISTRO_MAX_POR_IP`.
+        Bucket por IP con limpieza perezosa (no crece sin control)."""
+        ventana = 600.0  # 10 minutos
+        tope = _env_int("ORUX_REGISTRO_MAX_POR_IP", 20, 1, 100_000)
+        ahora = time.monotonic()
+        corte = ahora - ventana
+        bucket = self._registro_buckets.setdefault(ip, [])
+        bucket[:] = [t for t in bucket if t > corte]
+        if len(bucket) >= tope:
+            return False
+        bucket.append(ahora)
+        # GC perezoso del dict para no acumular IPs muertas.
+        if len(self._registro_buckets) > 10_000:
+            for k in [k for k, v in self._registro_buckets.items() if not v]:
+                self._registro_buckets.pop(k, None)
+        return True
 
     async def _runtime_para(self, team_id: str) -> TeamRuntime:
         """Runtime del equipo, creado perezosamente. En deploy lo arma la
@@ -876,6 +931,17 @@ class SyncServer:
                     return None
                 continue
             if isinstance(msg, RegisterMessage):
+                # Anti-abuso: tope de registros por IP en ventana deslizante.
+                # El registro es público; el backoff por-conexión no frena un
+                # bot que hace connect -> register en bucle. Ver
+                # `_throttle_registro`.
+                if not self._throttle_registro(_ip_cliente(websocket)):
+                    logger.warning("registro: tope por IP alcanzado")
+                    if await _fallo(
+                        "demasiados registros desde tu red, esperá unos minutos"
+                    ):
+                        return None
+                    continue
                 # Cierre de registro tras N usuarios (BACKEND-AUDIT-0224).
                 # Default 0 = sin tope (modo prototipo). En producción, el
                 # operador setea ORUX_REGISTRO_CERRADO_TRAS=N para fijar el
