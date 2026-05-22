@@ -50,6 +50,7 @@ from ..analysis.rename import (
     texto_sugerencia,
 )
 from ..plans import limites, permite_rename
+from .. import stripe_client
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -417,6 +418,20 @@ class SyncServer:
         # server arranca con el contador limpio (tests).
         self._registro_buckets: dict[str, list[float]] = {}
         self._login_buckets: dict[str, list[float]] = {}
+        # Capa 31 (cobro por asiento): clave secreta de Stripe — la MISMA
+        # que el contenedor `api`. Con ella, cuando entra un miembro a un
+        # equipo premium, el server sube la cantidad de asientos de su
+        # suscripción. Vacía = billing sin configurar -> el ajuste se omite
+        # (no rompe nada; un equipo sin suscripción tampoco se toca).
+        self._stripe_secret = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+        # Tareas de fondo del ajuste de asientos: se guarda la referencia
+        # para que el GC no las recoja a medias; se descartan al terminar.
+        self._tareas_fondo: set[asyncio.Task] = set()
+        # Lock por equipo para el ajuste de asientos: dos miembros que
+        # entran casi a la vez no deben pisarse el conteo (cada tarea lee
+        # los miembros y POSTea a Stripe; serializar garantiza que el POST
+        # use el conteo fresco, no uno viejo).
+        self._asientos_locks: dict[str, asyncio.Lock] = {}
 
     def _throttle(
         self, buckets: dict[str, list[float]], ip: str,
@@ -469,6 +484,57 @@ class SyncServer:
             self._login_buckets, ip,
             _env_int("ORUX_LOGIN_MAX_POR_IP", 40, 1, 100_000), 600.0,
         )
+
+    # --- Capa 31: cobro por asiento -------------------------------------
+    #
+    # El plan premium se cobra POR USUARIO (como ChatGPT Business): la
+    # suscripción de Stripe tiene una cantidad igual al número de miembros
+    # del equipo. Cuando entra un miembro nuevo (`redimir` en el lobby), si
+    # el equipo es premium hay que subir esa cantidad. La llamada a Stripe
+    # vive acá —no en el contenedor `api`— porque el join ocurre en este
+    # server WebSocket; `stripe_client` es stdlib pura, compartible.
+
+    def _ajustar_asientos_bg(self, team_id: str) -> None:
+        """Dispara el ajuste de asientos en SEGUNDO PLANO. Que un miembro
+        entre a un equipo no debe esperar a una llamada de red a Stripe —
+        el lobby sigue de largo. Si billing no está configurado (sin
+        `STRIPE_SECRET_KEY`) ni siquiera crea la tarea."""
+        if not self._stripe_secret:
+            return
+        tarea = asyncio.create_task(self._ajustar_asientos(team_id))
+        self._tareas_fondo.add(tarea)
+        tarea.add_done_callback(self._tareas_fondo.discard)
+
+    async def _ajustar_asientos(self, team_id: str) -> None:
+        """Deja la suscripción de Stripe del equipo en tantos asientos como
+        miembros tenga (cobro por usuario). Best-effort: cualquier fallo se
+        loguea y se traga — el cobro nunca debe afectar la colaboración.
+
+        Solo actúa si el equipo es premium Y tiene una suscripción real de
+        Stripe; un equipo free, o uno premium puesto a mano por el operador
+        (sin suscripción), no se tocan. El lock por equipo serializa dos
+        altas casi simultáneas: la segunda tarea relee el conteo ya
+        actualizado, así el POST a Stripe usa el número correcto."""
+        try:
+            lock = self._asientos_locks.get(team_id)
+            if lock is None:
+                lock = self._asientos_locks[team_id] = asyncio.Lock()
+            async with lock:
+                if await self.teams.plan(team_id) != "premium":
+                    return
+                sub = await self.teams.suscripcion(team_id)
+                if not sub:
+                    return
+                n = await self.teams.contar_miembros(team_id)
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None, stripe_client.actualizar_cantidad,
+                    self._stripe_secret, sub, n,
+                )
+        except Exception:  # noqa: BLE001 - best-effort, nunca propaga
+            logger.exception(
+                "ajuste de asientos falló para el equipo %s", team_id
+            )
 
     async def _runtime_para(self, team_id: str) -> TeamRuntime:
         """Runtime del equipo, creado perezosamente. En deploy lo arma la
@@ -1107,6 +1173,10 @@ class SyncServer:
                         return None
                     continue
                 if eq is not None:
+                    # Capa 31: entró un miembro nuevo. Si el equipo es
+                    # premium, ajustá los asientos de su suscripción de
+                    # Stripe (en segundo plano: no bloquea el lobby).
+                    self._ajustar_asientos_bg(eq["id"])
                     return eq["id"]
                 if await _fallo("código inválido o ya usado"):
                     return None

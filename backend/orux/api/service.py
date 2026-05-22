@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from ..billing import cambio_de_plan
+from ..billing import cambio_de_plan, suscripcion_de_evento
 from ..identity.store import normalizar
 from ..identity.tokens import crear_token, usuario_de_token
 from ..plans import PLANES
@@ -124,11 +124,16 @@ async def cambiar_plan(teams, team_id: str, plan: str) -> dict | None:
 async def aplicar_evento_stripe(teams, evento: dict) -> dict | None:
     """Aplica un evento de Stripe YA verificado al plan de un equipo.
 
-    Devuelve `{team_id, plan}` si cambió algo; `None` si el evento se
-    ignora (tipo no relevante, sin `team_id`, o equipo que no existe en
-    esta plataforma). Idempotente: `set_plan` fija un valor, así que
-    reaplicar el mismo evento no hace daño — Stripe puede reentregar un
-    webhook y eso debe ser inofensivo.
+    Devuelve `{team_id, plan, subscription_id}` si cambió algo; `None` si
+    el evento se ignora (tipo no relevante, sin `team_id`, o equipo que no
+    existe en esta plataforma). Idempotente: `actualizar_suscripcion` fija
+    valores, así que reaplicar el mismo evento no hace daño — Stripe puede
+    reentregar un webhook y eso debe ser inofensivo.
+
+    Capa 31 (cobro por asiento): el alta guarda también el id de la
+    suscripción de Stripe. Ese id es lo que hace falta para ajustar la
+    cantidad de asientos cuando entren miembros nuevos (lo hace el server
+    WebSocket en `redimir`). La baja lo limpia: la suscripción ya no existe.
     """
     cambio = cambio_de_plan(evento)
     if cambio is None:
@@ -144,6 +149,9 @@ async def aplicar_evento_stripe(teams, evento: dict) -> dict | None:
             evento.get("type"), team_id,
         )
         return None
-    await teams.set_plan(team_id, plan)
+    # Solo el alta trae una suscripción que valga la pena guardar; la baja
+    # la borra (se persiste "" -> NULL).
+    sub_id = suscripcion_de_evento(evento) if plan == "premium" else ""
+    await teams.actualizar_suscripcion(team_id, plan, sub_id)
     logger.info("Stripe: equipo %s -> plan %s", team_id, plan)
-    return {"team_id": team_id, "plan": plan}
+    return {"team_id": team_id, "plan": plan, "subscription_id": sub_id}

@@ -109,11 +109,14 @@ def test_params_checkout_es_suscripcion_con_precio_inline() -> None:
         currency="mxn",
         unit_amount=1000,
         interval="month",
+        seats=3,
     )
     assert p["mode"] == "subscription"
     assert p["line_items[0][price_data][currency]"] == "mxn"
     assert p["line_items[0][price_data][unit_amount]"] == "1000"
     assert p["line_items[0][price_data][recurring][interval]"] == "month"
+    # Capa 31: la cantidad del line item = asientos (cobro por usuario).
+    assert p["line_items[0][quantity]"] == "3"
     # El team_id viaja por triplicado: el webhook necesita encontrarlo
     # tanto en la sesión como en la suscripción.
     assert p["metadata[team_id]"] == "t_abc"
@@ -125,6 +128,21 @@ def test_params_checkout_es_suscripcion_con_precio_inline() -> None:
 
     enc = urllib.parse.urlencode(p)
     assert "line_items%5B0%5D" in enc
+
+
+def test_params_checkout_cantidad_de_asientos() -> None:
+    # El cobro es por asiento: la cantidad refleja los miembros del equipo,
+    # con un piso de 1 (un equipo siempre tiene al menos a su creador).
+    def _quantity(seats: int) -> str:
+        return billing.params_checkout(
+            "t", "Orux Premium", "s", "c",
+            currency="mxn", unit_amount=1000, interval="month", seats=seats,
+        )["line_items[0][quantity]"]
+
+    assert _quantity(1) == "1"
+    assert _quantity(8) == "8"
+    assert _quantity(0) == "1"   # piso
+    assert _quantity(-2) == "1"  # piso ante un valor absurdo
 
 
 # --- Parseo del evento ---------------------------------------------------
@@ -184,6 +202,50 @@ def test_cambio_de_plan_sin_team_id_o_forma_rara() -> None:
     assert billing.cambio_de_plan({}) is None
 
 
+# --- Capa 31: cobro por asiento (funciones puras) ------------------------
+
+
+def test_suscripcion_de_evento() -> None:
+    # checkout.session.completed: la suscripción está en `subscription`.
+    ev_alta = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"subscription": "sub_123", "metadata": {}}},
+    }
+    assert billing.suscripcion_de_evento(ev_alta) == "sub_123"
+    # customer.subscription.*: el objeto ES la suscripción.
+    ev_baja = {
+        "type": "customer.subscription.deleted",
+        "data": {"object": {"object": "subscription", "id": "sub_999"}},
+    }
+    assert billing.suscripcion_de_evento(ev_baja) == "sub_999"
+    # Sin suscripción / formas degeneradas -> "", nunca una excepción.
+    assert billing.suscripcion_de_evento(
+        {"type": "checkout.session.completed", "data": {"object": {}}}
+    ) == ""
+    assert billing.suscripcion_de_evento({}) == ""
+
+
+def test_item_id_de_suscripcion() -> None:
+    # De un objeto Subscription, el id de su primer subscription item.
+    sub = {"items": {"data": [{"id": "si_abc"}, {"id": "si_xyz"}]}}
+    assert billing.item_id_de_suscripcion(sub) == "si_abc"
+    # Formas degeneradas -> "", nunca una excepción.
+    assert billing.item_id_de_suscripcion({}) == ""
+    assert billing.item_id_de_suscripcion({"items": {"data": []}}) == ""
+    assert billing.item_id_de_suscripcion({"items": {}}) == ""
+    assert billing.item_id_de_suscripcion("no soy dict") == ""
+
+
+def test_params_actualizar_cantidad() -> None:
+    p = billing.params_actualizar_cantidad(7)
+    assert p["quantity"] == "7"
+    # Prorratea la diferencia sobre la próxima factura, sin cobro inmediato.
+    assert p["proration_behavior"] == "create_prorations"
+    # Piso de 1 asiento aunque llegue 0 o un valor absurdo.
+    assert billing.params_actualizar_cantidad(0)["quantity"] == "1"
+    assert billing.params_actualizar_cantidad(-4)["quantity"] == "1"
+
+
 # --- Aplicación sobre el store de equipos --------------------------------
 
 
@@ -197,8 +259,9 @@ async def test_aplicar_evento_sube_y_baja_el_plan() -> None:
         "type": "checkout.session.completed",
         "data": {"object": {"metadata": {"team_id": tid}}},
     }
+    # Estos eventos no traen `subscription` -> subscription_id queda "".
     assert await aplicar_evento_stripe(s, alta) == {
-        "team_id": tid, "plan": "premium",
+        "team_id": tid, "plan": "premium", "subscription_id": "",
     }
     assert await s.plan(tid) == "premium"
 
@@ -207,7 +270,7 @@ async def test_aplicar_evento_sube_y_baja_el_plan() -> None:
         "data": {"object": {"metadata": {"team_id": tid}}},
     }
     assert await aplicar_evento_stripe(s, baja) == {
-        "team_id": tid, "plan": "free",
+        "team_id": tid, "plan": "free", "subscription_id": "",
     }
     assert await s.plan(tid) == "free"
 
@@ -262,6 +325,38 @@ async def test_webhook_extremo_a_extremo_firma_verifica_aplica() -> None:
     assert billing.verificar_firma_webhook(cuerpo, cab, secret, ahora=ts + 5)
     evento = billing.evento_de_payload(cuerpo)
     assert await aplicar_evento_stripe(s, evento) == {
-        "team_id": t["id"], "plan": "premium",
+        "team_id": t["id"], "plan": "premium", "subscription_id": "",
     }
     assert await s.plan(t["id"]) == "premium"
+
+
+async def test_aplicar_evento_guarda_y_limpia_la_suscripcion() -> None:
+    # Capa 31: el alta guarda el id de la suscripción de Stripe (hace falta
+    # para ajustar los asientos después); la baja lo limpia.
+    s = MemTeamStore()
+    t = await s.crear_equipo("Sub", "ana")
+    tid = t["id"]
+
+    alta = {
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "metadata": {"team_id": tid}, "subscription": "sub_42",
+        }},
+    }
+    assert await aplicar_evento_stripe(s, alta) == {
+        "team_id": tid, "plan": "premium", "subscription_id": "sub_42",
+    }
+    assert await s.suscripcion(tid) == "sub_42"
+
+    baja = {
+        "type": "customer.subscription.deleted",
+        "data": {"object": {
+            "metadata": {"team_id": tid},
+            "object": "subscription", "id": "sub_42",
+        }},
+    }
+    assert await aplicar_evento_stripe(s, baja) == {
+        "team_id": tid, "plan": "free", "subscription_id": "",
+    }
+    # La baja vuelve a free y borra el id (la suscripción dejó de existir).
+    assert await s.suscripcion(tid) == ""

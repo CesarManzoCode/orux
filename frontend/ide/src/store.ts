@@ -81,7 +81,13 @@ export interface State {
   // (lo agrega `equipos_de` en el server). El Hub lo usa para el badge de
   // plan y para mostrar el botón "Mejorar a Premium". Opcional por
   // compat: un server viejo no lo manda y el Hub asume 'free'.
-  equipos: { id: string; nombre: string; rol: string; plan?: string }[];
+  // Capa 31: `miembros` = cantidad de miembros del equipo. El cobro
+  // premium es por asiento (un asiento por miembro), así que el Hub lo
+  // muestra. Opcional por la misma razón de compat.
+  equipos: {
+    id: string; nombre: string; rol: string;
+    plan?: string; miembros?: number;
+  }[];
   equipoError: string;
   equipo: { id: string; nombre: string; rol: string } | null;
   inviteCode: string;  // último código emitido por el admin (para compartir)

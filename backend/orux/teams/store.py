@@ -120,6 +120,9 @@ class MemTeamStore:
         self._equipos[tid] = {
             "id": tid, "nombre": nombre, "creador": creador,
             "plan": PLAN_DEFECTO,  # capa 22: free es la puerta de entrada
+            # capa 31: id de la suscripción de Stripe (cobro por asiento).
+            # "" hasta que el equipo pague; el webhook lo rellena.
+            "stripe_subscription_id": "",
         }
         self._miembros[tid] = {creador: "admin"}
         return {"id": tid, "nombre": nombre}
@@ -143,6 +146,32 @@ class MemTeamStore:
         if team_id in self._equipos:
             self._equipos[team_id]["plan"] = plan
 
+    async def actualizar_suscripcion(
+        self, team_id: str, plan: str, subscription_id: str
+    ) -> None:
+        """Capa 31: setea el plan Y el id de la suscripción de Stripe a la
+        vez. Lo usa el webhook: el alta deja `(premium, "sub_...")`; la
+        baja deja `(free, "")` — el `""` limpia el id porque la suscripción
+        dejó de existir. Distinto de `set_plan` (el cambio MANUAL del
+        operador, que no toca la suscripción)."""
+        e = self._equipos.get(team_id)
+        if e is not None:
+            e["plan"] = plan
+            e["stripe_subscription_id"] = subscription_id or ""
+
+    async def suscripcion(self, team_id: str) -> str:
+        """Capa 31: id de la suscripción de Stripe del equipo. `""` si no
+        tiene (equipo free, o premium puesto a mano por el operador sin
+        suscripción real) — el ajuste de asientos lo omite en ese caso."""
+        e = self._equipos.get(team_id)
+        return (e.get("stripe_subscription_id") or "") if e else ""
+
+    async def contar_miembros(self, team_id: str) -> int:
+        """Capa 31: cuántos miembros tiene el equipo = cuántos asientos se
+        le cobran. Es la cantidad que se le pasa a la suscripción de
+        Stripe."""
+        return len(self._miembros.get(team_id, {}))
+
     async def todos(self) -> list[dict]:
         """Capa 23: TODOS los equipos (consola de operador). Distinto de
         `equipos_de` (por-usuario): el operador ve la plataforma entera."""
@@ -163,7 +192,10 @@ class MemTeamStore:
         Incluye `plan` (capa 30): el Hub muestra el plan de cada equipo y
         el botón de upgrade junto a la lista, así que el `LobbyMessage`
         —que se arma con esto— ya lo trae. Es un dato barato de adjuntar
-        y evita un round-trip extra del cliente solo para saberlo."""
+        y evita un round-trip extra del cliente solo para saberlo.
+
+        Incluye también `miembros` (capa 31): el cobro es por asiento, así
+        que el Hub muestra cuántos asientos tiene/tendría el equipo."""
         u = normalizar(usuario)
         out = []
         for tid, miembros in self._miembros.items():
@@ -171,7 +203,7 @@ class MemTeamStore:
                 e = self._equipos[tid]
                 out.append({
                     "id": tid, "nombre": e["nombre"], "rol": miembros[u],
-                    "plan": e["plan"],
+                    "plan": e["plan"], "miembros": len(miembros),
                 })
         out.sort(key=lambda x: x["nombre"])
         return out

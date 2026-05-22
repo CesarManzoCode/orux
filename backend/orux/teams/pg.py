@@ -67,6 +67,32 @@ class PgTeamStore:
             "UPDATE teams SET plan=$2 WHERE id=$1", team_id, plan
         )
 
+    async def actualizar_suscripcion(
+        self, team_id: str, plan: str, subscription_id: str
+    ) -> None:
+        """Capa 31: plan + id de la suscripción de Stripe en un solo UPDATE
+        (atómico). El webhook lo usa: alta -> (premium, "sub_..."), baja ->
+        (free, ""). `""` se guarda como NULL (la suscripción ya no existe)."""
+        await self._db.execute(
+            "UPDATE teams SET plan=$2, stripe_subscription_id=$3 WHERE id=$1",
+            team_id, plan, subscription_id or None,
+        )
+
+    async def suscripcion(self, team_id: str) -> str:
+        """Capa 31: id de la suscripción de Stripe del equipo; "" si NULL o
+        el equipo no existe (el ajuste de asientos lo omite en ese caso)."""
+        s = await self._db.fetchval(
+            "SELECT stripe_subscription_id FROM teams WHERE id=$1", team_id
+        )
+        return s or ""
+
+    async def contar_miembros(self, team_id: str) -> int:
+        """Capa 31: cantidad de miembros = asientos que se cobran."""
+        n = await self._db.fetchval(
+            "SELECT count(*) FROM team_members WHERE team_id=$1", team_id
+        )
+        return int(n or 0)
+
     async def todos(self) -> list[dict]:
         """Capa 23: TODOS los equipos con su plan y #miembros (operador)."""
         rows = await self._db.fetch(
@@ -82,17 +108,22 @@ class PgTeamStore:
         ]
 
     async def equipos_de(self, usuario: str) -> list[dict]:
-        # Incluye `t.plan` (capa 30): el Hub lo usa para el badge de plan
-        # y el botón de upgrade. Misma forma que MemTeamStore.equipos_de.
+        # Incluye `t.plan` (capa 30) y `miembros` (capa 31, cobro por
+        # asiento): el Hub usa el plan para el badge/upgrade y el conteo
+        # para mostrar los asientos. Misma forma que MemTeamStore.equipos_de.
+        # El conteo es una subconsulta correlacionada: pocos equipos por
+        # usuario, índice idx_members_user — barato.
         rows = await self._db.fetch(
-            "SELECT t.id, t.nombre, t.plan, m.rol FROM team_members m "
-            "JOIN teams t ON t.id = m.team_id "
+            "SELECT t.id, t.nombre, t.plan, m.rol, "
+            "(SELECT count(*) FROM team_members mm WHERE mm.team_id = t.id) "
+            "AS miembros "
+            "FROM team_members m JOIN teams t ON t.id = m.team_id "
             "WHERE m.username=$1 ORDER BY t.nombre",
             normalizar(usuario),
         )
         return [
             {"id": r["id"], "nombre": r["nombre"], "rol": r["rol"],
-             "plan": r["plan"]}
+             "plan": r["plan"], "miembros": int(r["miembros"] or 0)}
             for r in rows
         ]
 

@@ -39,7 +39,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from .. import billing
+from .. import billing, stripe_client
 from ..db.pool import Database
 from ..db.stores import PgUserStore
 from ..identity import (
@@ -200,18 +200,21 @@ def _oauth_ok() -> bool:
 _STRIPE_SECRET = os.environ.get("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 _PUBLIC_URL = os.environ.get("ORUX_PUBLIC_URL", "").rstrip("/")
-# Precio de la suscripción. Se define INLINE en cada sesión de Checkout
-# (no es un Price del dashboard de Stripe): así no hace falta crear nada
-# en Stripe para probar. El default 1000 = 10.00 MXN es un precio de
-# PRUEBA; el real se pone después subiendo STRIPE_PRICE_AMOUNT.
+# Precio POR ASIENTO de la suscripción (capa 31: cobro por usuario). Se
+# define INLINE en cada sesión de Checkout (no es un Price del dashboard
+# de Stripe): así no hace falta crear nada en Stripe para probar. El
+# default 1000 = 10.00 MXN es un precio de PRUEBA por asiento; el real se
+# pone después subiendo STRIPE_PRICE_AMOUNT. La factura mensual del equipo
+# sale STRIPE_PRICE_AMOUNT * (número de miembros).
 _STRIPE_CURRENCY = os.environ.get("STRIPE_PRICE_CURRENCY", "mxn")
 _STRIPE_INTERVAL = os.environ.get("STRIPE_PRICE_INTERVAL", "month")
 _STRIPE_PRODUCTO = os.environ.get("STRIPE_PRICE_NAME", "Orux Premium")
 
 
 def _stripe_amount() -> int:
-    """Monto de la suscripción en centavos. Default 1000 (= 10.00 MXN),
-    precio de prueba. Robusto ante un env mal puesto -> cae al default."""
+    """Monto POR ASIENTO de la suscripción, en centavos. Default 1000
+    (= 10.00 MXN), precio de prueba. Robusto ante un env mal puesto -> cae
+    al default."""
     try:
         v = int(os.environ.get("STRIPE_PRICE_AMOUNT", "1000"))
     except (TypeError, ValueError):
@@ -226,12 +229,17 @@ def _billing_ok() -> bool:
     return bool(_STRIPE_SECRET and _STRIPE_WEBHOOK_SECRET and _PUBLIC_URL)
 
 
-def _crear_sesion_checkout(team_id: str, team_nombre: str) -> str:
-    """Llama a la API de Stripe y devuelve la URL de la página de pago
-    hosteada. Bloqueante (urllib, stdlib); el caller la corre en el
-    threadpool. Se ejercita en el VPS (el sandbox no tiene internet) —
-    mismo patrón que `_intercambiar` del OAuth. Timeout corto: un Stripe
-    colgado no debe colgar al worker."""
+def _crear_sesion_checkout(
+    team_id: str, team_nombre: str, seats: int
+) -> str:
+    """Llama a la API de Stripe (vía `stripe_client`) y devuelve la URL de
+    la página de pago hosteada. Bloqueante (urllib, stdlib); el caller la
+    corre en el threadpool. Se ejercita en el VPS (el sandbox no tiene
+    internet) — mismo patrón que `_intercambiar` del OAuth.
+
+    `seats` (capa 31): cantidad de asientos = miembros del equipo. El cobro
+    es por usuario, así que la suscripción arranca con esa cantidad y la
+    factura mensual sale `precio_por_asiento * seats`."""
     success = f"{_PUBLIC_URL}{_APP_URL}?stripe=success"
     cancel = f"{_PUBLIC_URL}{_APP_URL}?stripe=cancel"
     params = billing.params_checkout(
@@ -242,22 +250,9 @@ def _crear_sesion_checkout(team_id: str, team_nombre: str) -> str:
         currency=_STRIPE_CURRENCY,
         unit_amount=_stripe_amount(),
         interval=_STRIPE_INTERVAL,
+        seats=seats,
     )
-    datos = urllib.parse.urlencode(params).encode("ascii")
-    req = urllib.request.Request(
-        billing.URL_CHECKOUT,
-        data=datos,
-        headers={
-            "Authorization": f"Bearer {_STRIPE_SECRET}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        cuerpo = json.loads(resp.read())
-    url = cuerpo.get("url")
-    if not url:
-        raise ValueError("Stripe no devolvió una URL de Checkout")
-    return url
+    return stripe_client.crear_sesion_checkout(_STRIPE_SECRET, params)
 
 
 def _volver(error: str = "", token: str = ""):
@@ -553,11 +548,15 @@ async def _billing_checkout(req: Request) -> JSONResponse:
         # Ya es premium: evita crear una segunda suscripción por error.
         return JSONResponse({"error": "el equipo ya es premium"},
                             status_code=400)
+    # Capa 31 (cobro por asiento): la suscripción arranca con tantos
+    # asientos como miembros tenga el equipo ahora. Si después entran más,
+    # el server WS sube la cantidad de la suscripción al redimir la invitación.
+    seats = await teams.contar_miembros(team_id)
     from starlette.concurrency import run_in_threadpool
 
     try:
         url = await run_in_threadpool(
-            _crear_sesion_checkout, team_id, equipo["nombre"],
+            _crear_sesion_checkout, team_id, equipo["nombre"], seats,
         )
     except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as e:
         logger.warning("Stripe checkout falló: %r", e)

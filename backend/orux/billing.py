@@ -28,6 +28,14 @@ es premium mientras la suscripción viva — es el modelo natural del tier
 free/premium ("creciste, pagás"). Un pago único sería una variante de
 `params_checkout` (`mode=payment`, sin `recurring`); no se hizo porque no
 genera ingreso recurrente.
+
+Capa 31 — el cobro es POR ASIENTO (por usuario), como ChatGPT Business:
+la suscripción tiene un único precio y una CANTIDAD igual al número de
+miembros del equipo. La factura mensual es `precio_unitario * miembros`.
+Cuando entra un miembro nuevo a un equipo premium, se sube la cantidad de
+la suscripción (`actualizar_cantidad`) y Stripe prorratea la diferencia.
+La cantidad que se fija es siempre ABSOLUTA (= miembros actuales), no un
+incremento: así reaplicarla es idempotente y se autocorrige.
 """
 
 from __future__ import annotations
@@ -44,6 +52,13 @@ from hashlib import sha256
 # simple y segura de integrar pagos (cero PCI scope propio).
 URL_CHECKOUT = "https://api.stripe.com/v1/checkout/sessions"
 
+# Capa 31 (cobro por asiento). Para ajustar la cantidad de asientos hay
+# que: (1) GET la suscripción y leer el id de su único subscription item;
+# (2) POST ese item con la cantidad nueva. Estas dos URLs son para eso.
+# El caller construye `{URL_SUSCRIPCIONES}/{sub_id}` y `{URL_ITEMS}/{si_id}`.
+URL_SUSCRIPCIONES = "https://api.stripe.com/v1/subscriptions"
+URL_ITEMS = "https://api.stripe.com/v1/subscription_items"
+
 
 def params_checkout(
     team_id: str,
@@ -54,6 +69,7 @@ def params_checkout(
     currency: str,
     unit_amount: int,
     interval: str,
+    seats: int,
 ) -> dict[str, str]:
     """Construye el cuerpo (form-urlencoded) para crear una sesión de
     Checkout de SUSCRIPCIÓN. Puro: el caller hace el `urlencode` + POST.
@@ -63,6 +79,12 @@ def params_checkout(
     probar. `unit_amount` va en la unidad mínima de la moneda (centavos):
     1000 = 10.00 MXN. El precio "real" se pone después subiendo la
     variable de entorno del monto.
+
+    `seats` (capa 31) es la CANTIDAD del único line item — el cobro es por
+    asiento: la factura mensual sale `unit_amount * seats`. Acá `seats` es
+    el número de miembros que el equipo tiene al iniciar el upgrade; si
+    luego entran más, la cantidad se sube con `actualizar_cantidad`. Se
+    fuerza un mínimo de 1 (un equipo siempre tiene al menos a su creador).
 
     Las claves anidadas estilo `line_items[0][price_data][...]` son el
     formato EXACTO que la API REST de Stripe espera como form encoding;
@@ -84,7 +106,8 @@ def params_checkout(
         "client_reference_id": team_id,
         "metadata[team_id]": team_id,
         "subscription_data[metadata][team_id]": team_id,
-        "line_items[0][quantity]": "1",
+        # Cobro por asiento: la cantidad = miembros del equipo (mínimo 1).
+        "line_items[0][quantity]": str(max(1, int(seats))),
         "line_items[0][price_data][currency]": currency,
         "line_items[0][price_data][unit_amount]": str(int(unit_amount)),
         "line_items[0][price_data][recurring][interval]": interval,
@@ -195,3 +218,67 @@ def cambio_de_plan(evento: dict) -> tuple[str, str] | None:
     if tipo == "customer.subscription.deleted":
         return (team_id, "free")
     return None
+
+
+def suscripcion_de_evento(evento: dict) -> str:
+    """Saca el id de la suscripción de Stripe (`sub_...`) de un evento de
+    webhook, o `""` si no se encuentra.
+
+    Capa 31: lo necesitamos para guardar QUÉ suscripción es la del equipo
+    y poder ajustarle la cantidad de asientos más tarde. Dónde vive el id
+    según el evento:
+    - `checkout.session.completed`: el objeto es la sesión de Checkout; la
+      suscripción que creó viene en su campo `subscription`.
+    - `customer.subscription.*`: el objeto ES la suscripción; su `id` es
+      lo que buscamos.
+    """
+    obj = (evento.get("data") or {}).get("object") or {}
+    if not isinstance(obj, dict):
+        return ""
+    # Sesión de Checkout: la suscripción está en `subscription`.
+    sub = obj.get("subscription")
+    if isinstance(sub, str) and sub:
+        return sub
+    # El objeto puede SER la suscripción (eventos customer.subscription.*).
+    if obj.get("object") == "subscription" and isinstance(obj.get("id"), str):
+        return obj["id"]
+    return ""
+
+
+def item_id_de_suscripcion(suscripcion: dict) -> str:
+    """De un objeto Subscription de Stripe (lo que devuelve `GET
+    /v1/subscriptions/{id}`), saca el id de su PRIMER subscription item
+    (`si_...`), o `""` si la forma no es la esperada.
+
+    Ese id es lo que la API de Stripe pide para cambiar la cantidad de
+    asientos (`POST /v1/subscription_items/{id}`). La suscripción de un
+    equipo tiene un único item: un solo precio, "Orux Premium".
+    """
+    if not isinstance(suscripcion, dict):
+        return ""
+    items = suscripcion.get("items")
+    data = items.get("data") if isinstance(items, dict) else None
+    if not isinstance(data, list) or not data:
+        return ""
+    primero = data[0]
+    iid = primero.get("id") if isinstance(primero, dict) else None
+    return iid if isinstance(iid, str) else ""
+
+
+def params_actualizar_cantidad(seats: int) -> dict[str, str]:
+    """Cuerpo (form-urlencoded) para `POST /v1/subscription_items/{id}`:
+    deja la suscripción en `seats` asientos. Puro: el caller hace el
+    `urlencode` + POST.
+
+    `proration_behavior=create_prorations`: Stripe prorratea la diferencia
+    de precio por lo que queda del ciclo y la SUMA a la próxima factura
+    (no intenta un cobro inmediato, que podría fallar y habría que
+    gestionar). Es la opción robusta para un sistema que corre desatendido.
+
+    La cantidad es ABSOLUTA (= miembros del equipo), no un incremento:
+    reaplicarla es idempotente. Mínimo 1 por las dudas.
+    """
+    return {
+        "quantity": str(max(1, int(seats))),
+        "proration_behavior": "create_prorations",
+    }

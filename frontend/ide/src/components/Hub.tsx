@@ -238,6 +238,10 @@ export function Hub() {
                 // viejo no lo manda). Decide el badge y si se ofrece el
                 // upgrade.
                 const esPremium = e.plan === "premium";
+                // Capa 31: cobro por asiento. `miembros` = asientos que
+                // se cobran (o se cobrarían al mejorar). Si un server
+                // viejo no lo manda, cae a 0 / 1 y se omite el detalle.
+                const asientos = e.miembros ?? 0;
                 // Texto del badge ya viene del i18n; el icono añade jerarquía
                 // visual y redundancia no-cromática (a11y daltonismo).
                 const rolLabel = esAdmin ? t.hub_role_admin_label : t.hub_role_member_label;
@@ -271,12 +275,18 @@ export function Hub() {
                         </span>
                         {/* Badge de plan: Premium destaca en acento,
                             Free queda sobrio (no es un error, es el
-                            estado base). */}
+                            estado base). Capa 31: si es premium, el badge
+                            muestra los asientos cobrados ("Premium · 4")
+                            — el cobro es por miembro. */}
                         <span
                           className={"ht-plan p-" + (esPremium ? "premium" : "free")}
                           title={esPremium ? t.hub_plan_premium_title : t.hub_plan_free_title}
                         >
-                          {esPremium ? t.hub_plan_premium : t.hub_plan_free}
+                          {esPremium
+                            ? (asientos > 0
+                                ? t.hub_plan_premium_seats(asientos)
+                                : t.hub_plan_premium)
+                            : t.hub_plan_free}
                         </span>
                       </span>
                       <span className="ht-go" aria-hidden>
@@ -293,6 +303,7 @@ export function Hub() {
                         className="ht-upgrade"
                         onClick={() => onUpgrade(e.id)}
                         disabled={upgrading === e.id}
+                        title={t.hub_upgrade_title(asientos || 1)}
                       >
                         <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
                         {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}

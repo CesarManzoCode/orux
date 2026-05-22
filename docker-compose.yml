@@ -26,6 +26,12 @@ services:
       # deshabilitado y el server usa su archivo ~/.orux/secret (igual
       # que siempre). Generá uno fuerte: `openssl rand -hex 32`.
       - ORUX_SESSION_SECRET=${ORUX_SESSION_SECRET:-}
+      # Capa 31 (cobro POR ASIENTO): la MISMA STRIPE_SECRET_KEY que el
+      # contenedor `api`. Con ella, cuando entra un miembro nuevo a un
+      # equipo premium, este server ajusta la cantidad de asientos de la
+      # suscripción en Stripe. Vacía = el ajuste se omite (billing sin
+      # configurar): no rompe nada.
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
     volumes:
       - orux-data:/data
 

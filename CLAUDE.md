@@ -48,7 +48,7 @@ Orux está **desplegado y en uso** en `orux.space`. Construido por capas (~30 ha
 
 **Deploy** — la raíz del repo tiene la orquestación (`docker-compose.yml`, `Dockerfile`, `Dockerfile.web`, `Caddyfile`, `Makefile`, `.env.example`). Cuatro contenedores; sólo Caddy se expone a internet: `orux` (servidor WebSocket), `api` (operador/OAuth/billing), `postgres` y `caddy` (TLS automático + proxy + estático). `Dockerfile` construye la imagen del backend (instala git, Node, pyright, typescript-language-server, rust-analyzer, el SDK de Go y gopls). `Dockerfile.web` es multi-stage: compila el frontend y lo sirve con Caddy.
 
-**Modelo freemium** (`analysis/plans.py`): plan `free` permanente y de verdad usable (5 devs, 2 lenguajes LSP, impacto directo) frente a `premium` (sin tope, impacto transitivo, rename automático). El cobro con Stripe está cerrado por defecto: sin credenciales, `/api/v1/billing/*` responde 503.
+**Modelo freemium** (`plans.py`): plan `free` permanente y de verdad usable (5 devs, 2 lenguajes LSP, impacto directo) frente a `premium` (sin tope, impacto transitivo, rename automático). El cobro con Stripe es **por asiento** (capa 31): un asiento por miembro del equipo, factura `precio × miembros`, la cantidad se ajusta sola cuando entra gente. Está cerrado por defecto: sin credenciales, `/api/v1/billing/*` responde 503.
 
 **Pendiente:** falta el botón de "entrar con GitHub" en el frontend — el backend de OAuth está completo pero no hay UI que lo use.
 
@@ -83,7 +83,7 @@ Orux está **desplegado y en uso** en `orux.space`. Construido por capas (~30 ha
 - **Hay base de datos: Postgres.** La decisión vieja de "sin DB" se revirtió al llegar el multi-equipo (capa 15): los metadatos (usuarios, equipos, miembros, invitaciones, ownership) viven en Postgres; el contenido de los archivos sigue siendo un repositorio git por equipo en disco, así que "un `git clone` basta" se mantiene.
 - **Nombre del producto: Orux** (decidido).
 - **Análisis semántico: empezó en Python y hoy cubre Python, JS/TS, Go y Rust.** Python primero fue deliberado: es el stack del proyecto, `ast` está en la stdlib sin toolchain externo, y permite dogfooding sobre el propio Orux.
-- **Modelo de negocio: freemium.** Plan free permanente y usable (los límites son de escala, nunca de la tesis); premium por escala y profundidad de análisis. Cobro con Stripe, suscripción mensual — el precio actual es de prueba.
+- **Modelo de negocio: freemium.** Plan free permanente y usable (los límites son de escala, nunca de la tesis); premium por escala y profundidad de análisis. Cobro con Stripe, suscripción mensual **por asiento** (capa 31): un asiento por miembro del equipo, como el plan Business de ChatGPT. La factura es `precio_por_asiento × miembros`; la cantidad de la suscripción se ajusta sola cuando entra gente nueva a un equipo premium. El precio actual es de prueba.
 - **Regla de dependencias:** el "cero deps" fue disciplina de prototipo, no permanente. Una dependencia entra cuando hay un cuello de botella concreto que esa dep resuelve — por evidencia, no preventivo. Hoy el backend tiene ~9 dependencias (websockets, asyncpg, tree-sitter, pyright, starlette/uvicorn, …), cada una entró por una necesidad real.
 - CRDT: descartado por defecto. La tesis es prevenir la colisión con coordinación, no fusionarla después. Sólo si un perfilador o el uso real lo justifican.
 

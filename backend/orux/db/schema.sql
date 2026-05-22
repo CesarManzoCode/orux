@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS teams (
     -- para que el DB rechace planes inexistentes (defensa en profundidad
     -- frente a manipulaciones fuera de la app).
     plan       TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'premium')),
+    -- capa 31: cobro POR ASIENTO. Id de la suscripción de Stripe del equipo
+    -- (`sub_...`). NULL = equipo free, o premium puesto a mano por el
+    -- operador (sin suscripción real). Con él, cuando entra un miembro
+    -- nuevo a un equipo premium, el server ajusta la cantidad de asientos
+    -- de la suscripción (factura = precio_unitario * miembros).
+    stripe_subscription_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- Idempotente para DBs ya desplegadas (capa 15) que no tenían la columna:
@@ -45,6 +51,8 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
 -- Recrear el CHECK constraint si vino sin él (DBs pre-fix).
 ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_plan_check;
 ALTER TABLE teams ADD CONSTRAINT teams_plan_check CHECK (plan IN ('free', 'premium'));
+-- capa 31: idempotente para DBs ya desplegadas que no tenían la columna.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 
 CREATE TABLE IF NOT EXISTS team_members (
     team_id  TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,

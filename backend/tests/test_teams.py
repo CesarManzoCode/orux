@@ -109,8 +109,10 @@ async def test_equipos_de_y_miembros() -> None:
     code = await s.crear_invitacion(a["id"], "ana")
     await s.redimir(code, "beto")
     assert [e["nombre"] for e in await s.equipos_de("ana")] == ["Alpha", "Beta"]
+    # `miembros` (capa 31, cobro por asiento): Alpha tiene a ana + beto.
     assert await s.equipos_de("beto") == [
-        {"id": a["id"], "nombre": "Alpha", "rol": "member", "plan": "free"}
+        {"id": a["id"], "nombre": "Alpha", "rol": "member", "plan": "free",
+         "miembros": 2}
     ]
     assert await s.miembros(a["id"]) == [
         {"usuario": "ana", "rol": "admin"},
@@ -156,3 +158,38 @@ async def test_tope_de_devs_free_y_premium() -> None:
     # Upgrade: el código RECHAZADO antes NO se quemó y ahora sí entra.
     await s.set_plan(tid, "premium")
     assert await s.redimir(code6, "dev5") is not None
+
+
+# --- Capa 31: cobro por asiento ------------------------------------------
+
+
+async def test_contar_miembros() -> None:
+    # contar_miembros = asientos que se le cobran al equipo.
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    tid = t["id"]
+    assert await s.contar_miembros(tid) == 1  # solo el creador
+    code = await s.crear_invitacion(tid, "ana")
+    await s.redimir(code, "beto")
+    assert await s.contar_miembros(tid) == 2
+    assert await s.contar_miembros("no-existe") == 0
+
+
+async def test_suscripcion_se_guarda_y_se_limpia() -> None:
+    # actualizar_suscripcion fija plan + id de Stripe juntos (lo usa el
+    # webhook). El equipo nuevo no tiene suscripción.
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    tid = t["id"]
+    assert await s.suscripcion(tid) == ""
+    # Alta: premium + id de la suscripción.
+    await s.actualizar_suscripcion(tid, "premium", "sub_abc")
+    assert await s.plan(tid) == "premium"
+    assert await s.suscripcion(tid) == "sub_abc"
+    # Baja: vuelve a free y limpia el id (la suscripción ya no existe).
+    await s.actualizar_suscripcion(tid, "free", "")
+    assert await s.plan(tid) == "free"
+    assert await s.suscripcion(tid) == ""
+    # Equipo inexistente: no explota, sigue sin suscripción.
+    await s.actualizar_suscripcion("nope", "premium", "sub_x")
+    assert await s.suscripcion("nope") == ""
