@@ -1,0 +1,525 @@
+/*
+ * ───────────────────────────────────────────────────────────────────────
+ * Orux · LANDING — dirección de arte v3 "Infraestructura / Sala de control"
+ * ───────────────────────────────────────────────────────────────────────
+ * No es una landing SaaS. Es la ficha de una capa de infraestructura de
+ * coordinación para equipos que escriben código. Reglas duras:
+ *
+ *  · IDENTIDAD = ACERO. La marca y el CTA primario son un azul-acero
+ *    desaturado y MATE (cero gradiente de hue, cero glow). El verde dejó
+ *    de ser relleno de marca: ahora SÓLO significa "vivo / coordinado".
+ *    Ámbar = riesgo/impacto. Azul claro = "otra persona". Nada decora.
+ *  · Titulares en tinta sólida, tracking apretado, a la izquierda. La
+ *    autoridad la da la escala, la composición y el silencio — no el color.
+ *  · Fondo = PLANO técnico arquitectónico: rejilla estructural + ejes
+ *    mayores + trazas de relación tenues. No es papel pintado: es el
+ *    sistema observando archivos, personas y cambios.
+ *  · Profundidad por luminancia y sombra sobria. Hairlines de verdad.
+ *    Densidad controlada. Sin auroras, sin neón, sin cyberpunk.
+ *  · Motion: revelados mínimos, easing preciso, cero rebote. Se apaga
+ *    entero con prefers-reduced-motion.
+ *
+ * Continuidad landing→login→app: misma familia de negros fríos y el mismo
+ * acero, recalibrados a registro enterprise.
+ */
+
+:root {
+  /* ── Superficies: negro frío, rampa de 6. Diferencias de luminancia
+       MÍNIMAS — cada capa se despega por luz, jamás por borde llamativo. */
+  --bg: #070809;
+  --bg-1: #0a0b0e;
+  --bg-2: #0e1014;
+  --bg-3: #131620;
+  --bg-4: #191d27;
+  --bg-5: #20242f;
+
+  /* ── Texto: 4 niveles, todos AA sobre --bg-2. ── */
+  --ink: #edeff3;
+  --ink-2: #a9afbc;     /* secundario legible (cuerpo largo) */
+  --mut: #747a89;       /* terciario (metadata) */
+  --faint: #454a55;     /* casi-silencio (hairline text) */
+
+  /* ── Estructura ── */
+  --line: #20242c;
+  --line-soft: #14161c;
+  --line-strong: #2e3440;
+  --hair: rgba(255, 255, 255, 0.045);
+  --hair-2: rgba(255, 255, 255, 0.022);
+
+  /* ── ACERO: identidad. Mate, frío, desaturado. El relleno del CTA es
+       un 2-stop de ~6% de luminancia (NO un gradiente de hue): se lee
+       sólido. Los trazos funcionales finos usan --steel-line. ── */
+  --steel: #5d7fa6;            /* trazo/acento de acero            */
+  --steel-fill-top: #4c6f97;   /* relleno CTA, borde superior      */
+  --steel-fill-bot: #3c5a7e;   /* relleno CTA, borde inferior      */
+  --steel-ink: #eef4fb;        /* texto sobre el relleno (AA)      */
+  --steel-weak: rgba(93, 127, 166, 0.13);
+  --steel-soft: rgba(93, 127, 166, 0.20);
+  --steel-line: rgba(123, 156, 195, 0.50);
+  --steel-fill: linear-gradient(180deg, var(--steel-fill-top), var(--steel-fill-bot));
+
+  /* ── Estado (color = significado, + tinte que se posa sobre cualquier
+       superficie sin romper la profundidad) ── */
+  --live: #43b98a; --live-bg: rgba(67, 185, 138, 0.13); --live-line: rgba(67, 185, 138, 0.5);  /* vivo/coordinado */
+  --risk: #d6a341; --risk-bg: rgba(214, 163, 65, 0.13); --risk-line: rgba(214, 163, 65, 0.42); /* riesgo/impacto */
+  --peer: #6ea8e6; --peer-bg: rgba(110, 168, 230, 0.14); --peer-line: rgba(110, 168, 230, 0.48); /* otra persona */
+  --bad:  #e0606c; --bad-bg:  rgba(224, 96, 108, 0.13);
+
+  /* ── Elevación: sombra real + hairline = objeto táctil. Sin neón. ── */
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --sh-2: 0 2px 6px rgba(0, 0, 0, 0.42), 0 14px 30px -18px rgba(0, 0, 0, 0.7);
+  --sh-3: 0 10px 28px -10px rgba(0, 0, 0, 0.6), 0 30px 74px -34px rgba(0, 0, 0, 0.85);
+  --sh-deep: 0 50px 130px -52px rgba(0, 0, 0, 0.92);
+
+  /* ── Radios: instrumento, no burbuja ── */
+  --r-xs: 4px; --r-sm: 6px; --r: 8px; --r-lg: 11px; --r-isla: 14px; --r-pill: 999px;
+
+  /* ── Motion ── */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tr: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.62 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11" 1, "ss03" 1;
+  overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+.mono, code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+::selection { background: rgba(123, 156, 195, 0.30); color: #fff; }
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--steel-line);
+  border-radius: var(--r-sm);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * FONDO — plano técnico arquitectónico. Tres capas: (1) rejilla fina +
+ * ejes mayores enmascarados (estructura, no papel pintado); (2) trazas
+ * de relación diagonales tenues que cruzan el viewport (el sistema
+ * "mirando" vínculos); (3) una vignette fría que asienta el plano. Sin
+ * aurora, sin glow, sin color de marca de ambiente.
+ * ───────────────────────────────────────────────────────────────────── */
+.grid-bg {
+  position: fixed; inset: 0; z-index: -3; pointer-events: none;
+  background-image:
+    linear-gradient(var(--hair-2) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hair-2) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px, 288px 288px, 288px 288px;
+  -webkit-mask-image: radial-gradient(135% 95% at 72% -4%, #000 0%, #000 36%, transparent 80%);
+  mask-image: radial-gradient(135% 95% at 72% -4%, #000 0%, #000 36%, transparent 80%);
+}
+/* Trazas de relación: dos haces diagonales finísimos. Es el "sistema
+   observando" — deliberadamente casi subliminal. */
+.traces {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background-image:
+    linear-gradient(118deg, transparent 0 49.9%, rgba(123, 156, 195, 0.05) 50%, transparent 50.1% 100%),
+    linear-gradient(64deg, transparent 0 41.9%, rgba(123, 156, 195, 0.035) 42%, transparent 42.1% 100%);
+  background-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(120% 80% at 78% 4%, #000, transparent 70%);
+  mask-image: radial-gradient(120% 80% at 78% 4%, #000, transparent 70%);
+}
+.vignette {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(120vw 72vh at 72% -12%, rgba(255, 255, 255, 0.02), transparent 60%),
+    radial-gradient(85vw 60vh at 50% 112%, rgba(0, 0, 0, 0.55), transparent 55%);
+}
+
+/* ── Layout ── */
+.wrap { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
+.sec-line {
+  position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent);
+}
+
+/* Cabecera de sección: índice mono + lead sólido, alineados a izquierda. */
+.kicker {
+  display: inline-flex; align-items: center; gap: 12px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--mut);
+}
+.kicker::before {
+  content: ""; width: 26px; height: 1px; background: var(--steel-line);
+}
+.lead {
+  margin-top: 22px; font-size: clamp(28px, 4vw, 50px);
+  line-height: 1.12; letter-spacing: -0.032em; font-weight: 640;
+  color: var(--ink); max-width: 19ch;
+}
+.lead .soft { color: var(--mut); font-weight: 600; }
+.sec-sub {
+  margin-top: 20px; max-width: 58ch; color: var(--ink-2);
+  font-size: clamp(15px, 1.5vw, 17.5px); line-height: 1.66;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * NAV — compacta, estable, premium. Hairline inferior siempre; al hacer
+ * scroll gana fondo translúcido y se asienta.
+ * ───────────────────────────────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 60; height: 66px;
+  border-bottom: 1px solid var(--line-soft);
+  transition: background var(--tr), border-color var(--tr), height var(--tr);
+}
+.nav.scrolled {
+  height: 60px;
+  background: rgba(7, 8, 9, 0.78);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom-color: var(--line);
+}
+.nav .wrap { display: flex; align-items: center; gap: 26px; height: 100%; }
+.brand {
+  display: inline-flex; align-items: center; gap: 11px;
+  font-weight: 680; font-size: 18px; letter-spacing: -0.02em; color: var(--ink);
+}
+/* Logo de marca: hexafoil suelto (sin placa). El gradiente plateado del
+   propio SVG aporta la presencia de acero; envolverlo en otra placa de
+   acero duplicaba el material y aplastaba el dibujo. */
+.brand .mk { display: block; flex: none; }
+.brand b { font-weight: 680; }
+.brand .tag {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint);
+  padding-left: 13px; border-left: 1px solid var(--line);
+}
+.nav-links {
+  margin-left: auto; display: flex; gap: 32px;
+  font-size: 13.5px; color: var(--mut);
+}
+.nav-links a { position: relative; transition: color var(--tr); padding: 6px 0; }
+.nav-links a::after {
+  content: ""; position: absolute; left: 0; right: 100%; bottom: 0;
+  height: 1px; background: var(--steel-line); transition: right var(--tr);
+}
+.nav-links a:hover { color: var(--ink); }
+.nav-links a:hover::after { right: 0; }
+.nav-right { display: flex; align-items: center; gap: 18px; }
+.nav-stat {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--mut);
+}
+.nav-stat i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--live);
+  box-shadow: 0 0 0 3px var(--live-bg);
+}
+.nav-sep { width: 1px; height: 22px; background: var(--line); }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * BOTONES — táctiles, compactos, precisos. El primario es ACERO mate
+ * (relleno casi-plano + hairline superior + sombra sobria). Sin glow.
+ * ───────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px 20px; border-radius: var(--r); font-weight: 600;
+  font-size: 14px; letter-spacing: -0.004em; cursor: pointer;
+  border: 1px solid transparent; white-space: nowrap;
+  transition: transform var(--tr), background var(--tr),
+    border-color var(--tr), box-shadow var(--tr), color var(--tr), filter var(--tr);
+}
+.btn .arr { transition: transform var(--tr); }
+.btn:hover .arr { transform: translateX(3px); }
+.btn.sm { padding: 8px 14px; font-size: 12.5px; }
+.btn.lg { padding: 15px 26px; font-size: 15px; }
+.btn.full { width: 100%; }
+.btn.primary {
+  color: var(--steel-ink); background: var(--steel-fill);
+  border-color: var(--steel-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -16px rgba(60, 90, 126, 0.7);
+}
+.btn.primary:hover { transform: translateY(-1px); filter: brightness(1.09); }
+.btn.ghost {
+  color: var(--ink); background: var(--bg-2);
+  border-color: var(--line); box-shadow: inset 0 1px 0 var(--hair);
+}
+.btn.ghost:hover { background: var(--bg-3); border-color: var(--line-strong); }
+.btn:active { transform: translateY(0); }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * HERO — escena de producto. La copia ocupa una columna estrecha y firme;
+ * la escena del IDE es protagonista, cinematográfica, sangra fuera del
+ * viewport a la derecha. Tira de métricas sobria debajo del fold.
+ * ───────────────────────────────────────────────────────────────────── */
+.hero { padding-top: clamp(48px, 7vw, 84px); padding-bottom: 0; overflow: hidden; }
+.hero .wrap {
+  display: grid; grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: clamp(24px, 3.5vw, 56px); align-items: center;
+  min-height: clamp(560px, 78vh, 760px);
+}
+.hero-copy { max-width: 540px; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 11px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2);
+  padding: 7px 14px 7px 12px; border-radius: var(--r-pill);
+  background: var(--bg-2); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 var(--hair);
+}
+.eyebrow .live {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--live);
+  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55); animation: pulse 2.8s ease-out infinite;
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.5); }
+  70%, 100% { box-shadow: 0 0 0 9px rgba(67, 185, 138, 0); }
+}
+h1 {
+  margin-top: 28px;
+  font-size: clamp(40px, 5.6vw, 74px);
+  line-height: 1.02; letter-spacing: -0.042em; font-weight: 680;
+  color: var(--ink); max-width: 14ch;
+}
+h1 .dim { color: var(--ink-2); font-weight: 600; }
+.sub {
+  margin-top: 26px; max-width: 46ch; color: var(--ink-2);
+  font-size: clamp(15.5px, 1.5vw, 18px); line-height: 1.64;
+}
+.cta { display: flex; gap: 12px; margin-top: 36px; flex-wrap: wrap; }
+/* "60s para empezar" — pill compacta, fría, justo bajo el CTA. No es un
+   claim grande (la promesa fuerte vive en final_micro): es un anchor de
+   afordancia. Verde "vivo" con punto pulsante = coherencia con el resto
+   del lenguaje visual (eyebrow, sticky-cta). */
+.hero-time {
+  display: inline-flex; align-items: center; gap: 9px;
+  margin-top: 18px; padding: 7px 14px 7px 11px;
+  border-radius: var(--r-pill);
+  background: var(--live-bg);
+  border: 1px solid var(--live-line);
+  font-family: var(--font-mono);
+  font-size: 11.5px; font-weight: 600;
+  color: var(--live);
+  letter-spacing: 0.005em;
+}
+.hero-time-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55);
+  animation: pulse 2.8s ease-out infinite;
+}
+.signals {
+  margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line-soft);
+  display: flex; flex-wrap: wrap; gap: 10px 26px;
+}
+.signals .sig {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.signals .sig b { color: var(--ink); font-weight: 600; }
+.signals .sig::before {
+  content: ""; width: 5px; height: 5px; border-radius: 1px;
+  background: var(--steel-line); transform: rotate(45deg);
+}
+
+/* ── Escena del producto: ventana IDE inclinada en el espacio + tarjetas
+   flotantes conectadas por trazas + plano de profundidad detrás. Sangra
+   fuera del viewport a la derecha. Estática (sin animación continua). ── */
+.stage {
+  position: relative; perspective: 2400px;
+  margin-right: clamp(-220px, -10vw, -56px);
+}
+.stage-back, .stage-back2 {
+  position: absolute; z-index: 0; border-radius: var(--r-isla);
+  border: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, var(--bg-1), var(--bg));
+}
+.stage-back {
+  inset: 22px -44px -38px 70px;
+  transform: rotateY(-11deg) rotateX(4deg) translateZ(-70px);
+  opacity: 0.5;
+}
+.stage-back2 {
+  inset: 44px -78px -70px 132px;
+  transform: rotateY(-11deg) rotateX(4deg) translateZ(-140px);
+  opacity: 0.28;
+}
+.ide {
+  position: relative; z-index: 1; border-radius: var(--r-isla);
+  overflow: hidden; background: var(--bg-1);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-deep), 0 0 0 1px var(--hair), inset 0 1px 0 var(--hair);
+  transform: rotateY(-11deg) rotateX(4deg);
+  transform-origin: left center;
+}
+.ide-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; background: var(--bg-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.tl { width: 11px; height: 11px; border-radius: 50%; opacity: 0.85; }
+.tl.r { background: #e0606c; } .tl.y { background: #d6a341; } .tl.g { background: #43b98a; }
+.ide-path {
+  margin-left: 10px; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--mut);
+}
+.ide-path .br { color: var(--ink-2); }
+.ide-live { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; }
+.faces { display: inline-flex; }
+.face {
+  width: 21px; height: 21px; border-radius: 50%; margin-left: -7px;
+  display: grid; place-items: center; font-size: 9.5px; font-weight: 700;
+  color: #07120c; border: 2px solid var(--bg-2);
+}
+.face:first-child { margin-left: 0; }
+.ide-live span {
+  font-family: var(--font-mono); font-size: 11px; color: var(--live);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.ide-live span::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 3px var(--live-bg);
+}
+.ide-body { display: grid; grid-template-columns: 196px 1fr; min-height: 372px; }
+.ide-rail {
+  display: flex; flex-direction: column; gap: 1px; padding: 14px 10px;
+  border-right: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, 0.26);
+  font-family: var(--font-mono); font-size: 12px; color: var(--mut);
+}
+.rail-h {
+  font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--faint); padding: 2px 8px 9px;
+}
+.f {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--r-sm); white-space: nowrap;
+}
+.f .dirn { color: var(--faint); }
+.f.on { background: var(--bg-3); color: var(--ink); box-shadow: inset 2px 0 0 var(--steel); }
+.f .own {
+  margin-left: auto; font-size: 9px; letter-spacing: 0.02em;
+  padding: 1px 7px; border-radius: var(--r-xs); border: 1px solid;
+}
+.f .own.me { color: var(--live); border-color: var(--live-line); background: var(--live-bg); }
+.f .own.peer { color: var(--peer); border-color: var(--peer-line); background: var(--peer-bg); }
+.ide-code {
+  position: relative; padding: 18px 0;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 2.05;
+}
+.ln { display: flex; gap: 18px; padding: 0 20px; position: relative; }
+.ln .n { color: var(--faint); width: 20px; text-align: right; flex: none; user-select: none; }
+.ln code { color: #c2c8d2; white-space: pre; }
+.ln .kw { color: #8fa6c9; }
+.ln .fn { color: var(--ink); }
+.ln .st { color: #c79a4f; }
+.ln .cm { color: var(--faint); }
+.ln.me { background: rgba(67, 185, 138, 0.10); box-shadow: inset 2px 0 0 var(--live); }
+.ln.peer { background: rgba(110, 168, 230, 0.09); box-shadow: inset 2px 0 0 var(--peer); }
+.ln .cursor {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  color: #06121f; background: var(--peer);
+  padding: 2px 8px; border-radius: var(--r-xs) var(--r-xs) var(--r-xs) 1px;
+}
+.ide-status {
+  display: flex; align-items: center; gap: 20px;
+  padding: 9px 18px; border-top: 1px solid var(--line-soft);
+  background: var(--bg-2); font-family: var(--font-mono);
+  font-size: 10.5px; color: var(--mut);
+}
+.ide-status .s { display: inline-flex; align-items: center; gap: 7px; }
+.ide-status .s.acc { color: var(--live); }
+.ide-status .dotg { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+.ide-status .push { margin-left: auto; }
+
+/* Tarjetas flotantes: profundidad real (sombra + overhang). Conectadas
+   por una traza fina al editor — el sistema relacionando, no decorando. */
+.float {
+  position: absolute; z-index: 3; border-radius: var(--r-lg);
+  background: var(--bg-2); border: 1px solid var(--line);
+  box-shadow: var(--sh-3); padding: 15px 17px;
+  transform: rotateY(-11deg) rotateX(4deg);
+}
+.float .ft {
+  display: flex; align-items: center; gap: 9px; font-size: 12px;
+  font-weight: 640; color: var(--ink); margin-bottom: 10px;
+}
+.float .ic {
+  width: 21px; height: 21px; border-radius: var(--r-sm); display: grid;
+  place-items: center; font-size: 11px; flex: none;
+}
+.card-impact { top: 23%; right: -72px; width: 290px; }
+.card-impact .ic { color: var(--risk); background: var(--risk-bg); border: 1px solid var(--risk-line); }
+.card-impact .body { font-size: 12px; color: var(--ink-2); line-height: 1.56; }
+.card-impact .body code { color: var(--ink); font-size: 11.5px; }
+.card-impact .uses {
+  margin-top: 10px; display: flex; flex-direction: column; gap: 5px;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--mut);
+}
+.card-impact .uses span::before { content: "→ "; color: var(--risk); }
+.card-impact .auto {
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+  font-size: 11px; color: var(--live); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.card-impact .auto::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--live);
+}
+.card-prop { bottom: -40px; left: -68px; width: 278px; }
+.card-prop .ic { color: var(--peer); background: var(--peer-bg); border: 1px solid var(--peer-line); }
+.card-prop .meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--mut); margin-bottom: 12px; }
+.card-prop .meta b { color: var(--ink-2); font-weight: 600; }
+.card-prop .acts { display: flex; gap: 8px; }
+.card-prop .ap, .card-prop .vw {
+  flex: 1; text-align: center; font-size: 11.5px; font-weight: 640;
+  padding: 8px; border-radius: var(--r-sm); border: 1px solid transparent;
+}
+.card-prop .ap { color: var(--steel-ink); background: var(--steel-fill); border-color: var(--steel-line); }
+.card-prop .vw { color: var(--ink-2); background: var(--bg-3); border-color: var(--line); }
+.card-prop .pend {
+  margin-top: 10px; font-family: var(--font-mono); font-size: 10px;
+  color: var(--risk); display: inline-flex; align-items: center; gap: 6px;
+}
+.card-prop .pend::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--risk); }
+
+/* ── Tira de métricas (no marquee): registro enterprise, señal de
+   seriedad. Reemplaza el slogan con datos del sistema. ── */
+.trust {
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.008);
+}
+.trust .wrap {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding-top: 0; padding-bottom: 0;
+}
+.trust .ti {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 26px 30px; border-right: 1px solid var(--line-soft);
+}
+.trust .ti:first-child { padding-left: 0; }
+.trust .ti:last-child { border-right: none; padding-right: 0; }
+.trust .ti .tk {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--faint);
+}
+.trust .ti .tv { font-size: 14px; color: var(--ink-2); font-weight: 550; }
+.trust .ti .tv b { color: var(--ink); font-weight: 650; }
+.trust .ti .tv i { color: var(--live); font-style: normal; }
+
