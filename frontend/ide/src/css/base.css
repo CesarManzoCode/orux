@@ -1,0 +1,551 @@
+/*
+ * ───────────────────────────────────────────────────────────────────────
+ * SISTEMA DE DISEÑO  ·  "Islands Dark" — refundación enterprise
+ * ───────────────────────────────────────────────────────────────────────
+ * Misma arquitectura de tokens (un valor mueve todo el producto), pero
+ * recalibrada con criterio de staff designer de tooling: más PROFUNDIDAD
+ * (rampa de superficies de 6 escalones, no 4), hairlines de verdad, sombras
+ * sobrias, CERO glow/neón, y densidad alta. El acento de marca existe pero
+ * se gasta con intención (foco, activo, presencia) — nunca decora.
+ *
+ * Inspiración: JetBrains (densidad, guías de indentación), Linear/Raycast
+ * (sobriedad, hairlines, motion preciso), Cursor/VSCode (jerarquía de
+ * editor). Identidad propia, no copia.
+ *
+ * CONTRATO SAGRADO DEL EDITOR: el componente Editor depende de
+ * LINE_H=22 / PAD_TOP=20 / gutter 52px sincronizados con ESTE CSS. El
+ * bloque "── Editor ──" conserva su GEOMETRÍA EXACTA (line-height 22px,
+ * padding 20px 24px 20px 64px, gutter width 52px / font 14px / lh 22px,
+ * .ed-active y .marca height 22px, .ed-active left 52px). Solo se
+ * reestiliza el "chrome" (fondo, bordes, banda activa, selección,
+ * scrollbars, presencia). NO tocar esos números: desalinea las marcas.
+ *
+ * Los NOMBRES de token NO cambian (el editor sagrado los referencia); se
+ * refinan valores y se SUMAN tokens nuevos.
+ */
+:root {
+  /* ── Color: negro frío azulado. Rampa de 6 superficies para que cada
+       capa se despegue de la de abajo por luminancia, no por borde:
+       deep < bg < surface < surface-2 < surface-3 < elevated. ── */
+  --bg-deep: #050608;
+  --bg: #0a0b0e;
+  --surface: #101217;
+  --surface-2: #15181e;
+  --surface-3: #1b1f26;
+  --elevated: #232830;
+
+  --border: #272b34;          /* divisor visible en controles            */
+  --border-soft: #181b21;     /* hairline: costura entre paneles/filas    */
+  --border-strong: #333a47;   /* borde enfatizado (hover de inputs)       */
+  --hl: rgba(255, 255, 255, 0.035);  /* luz superior de la isla (sutil)   */
+
+  /* ── Texto: 4 niveles. --text-2 es NUEVO: el escalón legible secundario
+       (valores, etiquetas) que faltaba entre --text y --muted. Todos AA
+       sobre --surface. ── */
+  --text: #e8eaef;
+  --text-2: #b5bac5;
+  --muted: #8a8f9c;
+  --faint: #5b606e;
+
+  /* ── Acento de marca: verde→cian. El gradiente SOLO en el logomark y el
+       CTA primario; el resto usa el sólido o un tinte neutro. ── */
+  --accent: #4cc38a;
+  --accent-2: #34d9bf;
+  --accent-weak: rgba(76, 195, 138, 0.10);
+  --accent-soft: rgba(76, 195, 138, 0.16);
+  --accent-line: rgba(76, 195, 138, 0.55);  /* indicadores finos, sin glow */
+  --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+
+  /* ── Semántica: color + tinte translúcido (se posa bien sobre cualquier
+       superficie, no es un bloque opaco que rompe la profundidad). ── */
+  --ok: #4cc98a;   --ok-bg: rgba(76, 201, 138, 0.13);
+  --warn: #d8a93e; --warn-bg: rgba(216, 169, 62, 0.13);
+  --bad: #e8636f;  --bad-bg: rgba(232, 99, 111, 0.13);
+  --info: #62a8f0; --info-bg: rgba(98, 168, 240, 0.13);
+  --vio: #a98bf0;  --vio-bg: rgba(169, 139, 240, 0.13);
+
+  /* ── Superficie de código: tokens NUEVOS y aislados (no tocan la
+       geometría sagrada, sólo el aspecto del "pozo" donde se escribe).
+       Las guías de indentación son la firma de un IDE de verdad: muy
+       tenues en reposo, una más visible para la columna activa. ── */
+  --ed-line: rgba(255, 255, 255, 0.032);     /* banda de línea activa    */
+  --ed-line-edge: rgba(76, 195, 138, 0.55);  /* filo izq. de esa banda   */
+  --ed-guide: rgba(255, 255, 255, 0.085);    /* guía de indentación      */
+  --ed-guide-activa: rgba(76, 195, 138, 0.5);/* guía del scope activo    */
+  --ed-gutter-bg: #08090c;                   /* canaleta, un punto + honda */
+  --ed-blueprint: rgba(255, 255, 255, 0.016);/* trama del vacío          */
+
+  /* ── Elevación: sombra real + hairline = objeto táctil. Sin neón. Tres
+       niveles para jerarquía (isla < flotante < modal). ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -14px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 2px 5px rgba(0, 0, 0, 0.36), 0 14px 36px -18px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 24px 64px -16px rgba(0, 0, 0, 0.66), 0 2px 8px rgba(0, 0, 0, 0.45);
+  --glow: 0 0 0 1px var(--accent-soft);  /* "glow" = ahora solo un anillo  */
+  /* Foco de teclado: anillo doble sobrio (negro + acento translúcido). */
+  --ring: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+
+  /* ── Radii: un punto menos redondo que antes = más instrumento, menos
+       burbuja. Consistencia total. ── */
+  --r: 7px; --r-sm: 5px; --r-md: 8px; --r-lg: 10px; --r-isla: 12px; --r-pill: 999px;
+
+  /* ── Spacing: escala 4px. Usar SIEMPRE estas variables. ── */
+  --s-0: 2px; --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+
+  /* ── Tipografía: escala modular densa. Titulares apretados, cuerpo a
+       13px (densidad de IDE, no de landing). ── */
+  --t-xs: 10.5px; --t-sm: 11.5px; --t-base: 13px; --t-md: 13.5px;
+  --t-lg: 15px; --t-xl: 19px; --t-2xl: 23px; --t-3xl: 30px;
+
+  /* ── Motion: estado/hover muy rápido y plano; entradas con un overshoot
+       suave; press hunde 1px. Microinteracción precisa, nunca flashy. ── */
+  --tr: 120ms cubic-bezier(.4, 0, .2, 1);
+  --tr-slow: 220ms cubic-bezier(.4, 0, .2, 1);
+  --ease-in: cubic-bezier(.22, 1, .36, 1);
+  --dur-in: 360ms;
+
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  /* Alias semánticos: el código suele pedir --font-base para "texto del
+     producto"; resuelve al UI sin que cada componente lo conozca. */
+  --font-base: var(--font-ui);
+
+  /* ── Avatares e ink-sobre-acento. Los avatares (presencia, hub teams,
+       ContextBar, Inspector) llevan iniciales sobre un FONDO de color
+       saturado: el texto blanco se ve sucio sobre ámbar/verde claro. El
+       token define el tono de tinta para esos casos (negro azulado, no
+       puro: matchea el fondo del IDE). Cambiar acá = mueve todos los
+       avatares y todas las pills coloreadas a la vez. ── */
+  --av-ink: #0a0c10;             /* tinta sobre relleno claro (avatares)  */
+  --accent-ink: #04130c;         /* tinta sobre el acento (CTA primario)  */
+  --accent-fill: var(--grad);    /* relleno del CTA primario              */
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; font-family: var(--font-ui); font-size: var(--t-base);
+  line-height: 1.5; background: var(--bg-deep); color: var(--text);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Inter variable: tamaño óptico automático + letterforms refinadas
+     (cv11 = 'l'/'i' inequívocas, ss03 = 'g' de una planta). Detalle
+     invisible que el ojo igual registra como "caro". */
+  font-optical-sizing: auto;
+  font-feature-settings: "cv11" 1, "ss03" 1;
+}
+/* Backdrop ESTÁTICO y NEUTRO: una sola vignette blanca casi imperceptible
+   que levanta el borde superior. Sin color de marca de ambiente — eso era
+   lo que delataba "webapp", no "instrumento". */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(130vw 80vh at 50% -25%,
+    rgba(255, 255, 255, 0.014), transparent 62%);
+}
+::selection { background: rgba(76, 195, 138, 0.24); }
+
+/* Scrollbars: finas, casi invisibles en reposo, despiertan al pasar. El
+   detalle que separa "app" de "herramienta". */
+*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: var(--r-pill);
+  border: 3px solid transparent; background-clip: padding-box;
+  transition: background var(--tr);
+}
+*::-webkit-scrollbar-thumb:hover { background: #3a3f4b; background-clip: padding-box; }
+*::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* Números que se alinean en columna (gutter, contadores, métricas) =
+   tabular. En prosa NO (queda peor); por eso es scoped, no global. */
+.tabnum, .gitp ol, .h2-num, .cuenta, .ammeta,
+.statusbar, code, .ed-gutter { font-variant-numeric: tabular-nums; }
+
+/* Foco visible REAL: anillo doble que se ve sobre cualquier fondo.
+   Accesibilidad no negociable. */
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+
+/* ── PATRÓN: botones. Tres variantes, misma física (hover sube 1px,
+   press hunde). El primario es el único con gradiente de marca. ── */
+button { font-family: inherit; transition:
+  background var(--tr), color var(--tr), border-color var(--tr),
+  box-shadow var(--tr), transform var(--tr), filter var(--tr); }
+button:active { transform: translateY(1px); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--s-2); border-radius: var(--r); cursor: pointer;
+  font-family: inherit; font-size: var(--t-base); font-weight: 600;
+  padding: 0.55rem 0.9rem; border: 1px solid transparent;
+  line-height: 1; white-space: nowrap; letter-spacing: -0.005em;
+}
+.btn-primario {
+  background: var(--grad); color: var(--accent-ink); font-weight: 700;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 4px 14px -8px rgba(52, 217, 191, 0.5);
+}
+.btn-primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.btn-primario:active { transform: translateY(1px); filter: brightness(.98); }
+.btn-secundario {
+  background: var(--surface-2); color: var(--text);
+  border-color: var(--border);
+}
+.btn-secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--muted); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: 0.4; cursor: default; transform: none !important; filter: none !important; }
+
+/* ── PATRÓN: inputs. Una sola identidad para TODO control de texto del
+   IDE (login, git, modal): foco = borde acento + halo íntimo. ── */
+.field, .login-card input, .gitp input, .ambar select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 0.6rem 0.75rem; font-size: var(--t-base);
+  font-family: inherit; outline: none; width: 100%;
+  transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.field::placeholder, .login-card input::placeholder,
+.gitp input::placeholder { color: var(--faint); }
+.field:hover, .login-card input:hover,
+.gitp input:hover, .ambar select:hover { border-color: var(--border-strong); }
+.field:focus, .login-card input:focus,
+.gitp input:focus, .ambar select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+  background: var(--surface);
+}
+
+/* ── PATRÓN: estado vacío. Icono + título + subtítulo. Un vacío con voz
+   orienta y no parece roto. ── */
+.empty {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: var(--s-2); padding: var(--s-8) var(--s-5);
+  color: var(--muted); animation: fade-in var(--dur-in) var(--ease-in) both;
+}
+.empty .empty-ic {
+  width: 42px; height: 42px; border-radius: var(--r-lg);
+  display: grid; place-items: center; color: var(--faint);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  margin-bottom: var(--s-1); box-shadow: var(--shadow-sm);
+}
+.empty .empty-tit { font-size: var(--t-md); font-weight: 650; color: var(--text); letter-spacing: -0.01em; }
+.empty .empty-sub { font-size: var(--t-sm); color: var(--muted); max-width: 32ch; line-height: 1.55; }
+.empty.compacto { padding: var(--s-5) var(--s-4); }
+
+/* ── PATRÓN: pill / chip de estado genérico ── */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s-1);
+  padding: 0.18rem 0.55rem; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; line-height: 1;
+}
+
+/* Animaciones reutilizables. Entrada una vez, después quieto. */
+@keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes pop-in  { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+
+.app { height: 100%; display: flex; flex-direction: column; padding: 6px; gap: 6px; }
+
+/* La "isla": objeto diseñado, no panel plano. Elevación contenida +
+   hairline de luz arriba. Costura fina, no marco grueso: el conjunto se
+   lee como un instrumento, no como tarjetas flotando. */
+.isla {
+  background:
+    linear-gradient(180deg, var(--hl), transparent 2px),
+    var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-isla);
+  box-shadow: var(--shadow);
+}
+.app > .isla,
+.app > .layout > .isla { animation: fade-in 340ms var(--ease-in) both; }
+.app > .layout > .rail { animation-delay: 30ms; }
+.app > .layout > .sidebar { animation-delay: 55ms; }
+.app > .layout > .main { animation-delay: 80ms; }
+.app > .statusbar { animation-delay: 105ms; }
+
+/* ── Topbar: tres grupos con divisores finos. Ritmo, no ruido. ── */
+.topbar { display: flex; align-items: center; gap: 0.55rem; padding: 0.4rem 0.6rem 0.4rem 0.55rem; flex-shrink: 0; }
+/* Grupo lógico: une lo que va junto y lo separa de lo que no. */
+.tb-grp { display: inline-flex; align-items: center; gap: 0.5rem; }
+/* Divisor vertical sutil entre grupos (1px, hairline). */
+.tb-div { width: 1px; align-self: stretch; margin: 0.32rem 0.15rem; background: var(--border-soft); }
+.mark {
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px;
+  display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+}
+.mark svg { display: block; }
+.brand { font-size: var(--t-md); font-weight: 550; letter-spacing: -0.02em; color: var(--text-2); }
+.brand b { font-weight: 750; color: var(--text); }
+.chev { color: var(--faint); font-size: var(--t-sm); }
+/* El equipo como chip de "cabina", no texto suelto. */
+.proy {
+  color: var(--text); font-size: var(--t-sm); font-weight: 600;
+  font-family: var(--font-mono); padding: 3px 9px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  letter-spacing: -0.01em;
+}
+.spacer { flex: 1; }
+.status {
+  padding: 0.22rem 0.6rem 0.22rem 0.5rem; border-radius: var(--r-pill);
+  font-size: var(--t-xs); font-weight: 600; background: var(--surface-2);
+  color: var(--muted); display: inline-flex; align-items: center;
+  gap: 0.4rem; border: 1px solid var(--border-soft);
+  text-transform: lowercase; letter-spacing: 0.01em;
+}
+.status::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+/* El punto "vivo" respira muy leve SOLO con conexión sana: señal de que
+   el realtime está despierto. Amplitud baja, no es una alarma. */
+.status.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.status.ok::before { animation: pulso 2.6s ease-in-out infinite; }
+.status.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+@keyframes pulso {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.yo {
+  color: var(--text-2); display: inline-flex; align-items: center;
+  gap: 0.42rem; font-size: var(--t-sm); font-weight: 550;
+}
+.yo .dot { width: 7px; height: 7px; border-radius: 50%; }
+.yo code {
+  font-family: var(--font-mono); background: var(--surface-2);
+  color: var(--text); padding: 2px 6px; border-radius: var(--r-sm);
+  border: 1px solid var(--border-soft); font-size: var(--t-xs);
+}
+/* Presencia del equipo, FIRST-CLASS: avatares vivos. ES la señal de
+   "esto es multiplayer" — el diferenciador. Anillo de la superficie de
+   abajo para que se recorten limpios; realce sobrio al pasar. */
+.peers { display: inline-flex; align-items: center; padding-left: 2px; }
+.peers .av {
+  width: 23px; height: 23px; border-radius: 50%; margin-left: -7px;
+  display: grid; place-items: center; font-size: 9.5px; font-weight: 750;
+  color: var(--av-ink); border: 2px solid var(--surface);
+  font-family: var(--font-ui); cursor: default;
+  transition: transform var(--tr), box-shadow var(--tr);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.peers .av:first-child { margin-left: 0; }
+.peers .av:hover {
+  transform: translateY(-2px); z-index: 2;
+  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+.peers .av.mas { background: var(--surface-3); color: var(--muted); border-color: var(--surface); font-weight: 650; }
+.salir, .invitar {
+  font-size: var(--t-xs); color: var(--muted); cursor: pointer;
+  padding: 0.3rem 0.62rem; border-radius: 6px;
+  border: 1px solid var(--border-soft); background: var(--surface-2);
+  font-weight: 550;
+  transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr);
+}
+.salir:hover, .invitar:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); transform: translateY(-1px); }
+
+/* Toggle del inspector en la esquina superior derecha. Visualmente del
+   peso de un botón de cabina (chrome de ventana): no compite con las
+   acciones, pero se ve a la primera. */
+.tb-insp {
+  width: 28px; height: 28px; border-radius: 7px;
+  border: 1px solid var(--border-soft); background: var(--surface-2);
+  color: var(--muted); cursor: pointer;
+  display: grid; place-items: center;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+.tb-insp:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); }
+.tb-insp.activo { color: var(--accent); border-color: var(--accent-weak); background: var(--accent-weak); }
+
+/* ── Layout: rail + sidebar + main ── */
+.layout { flex: 1; display: flex; min-height: 0; gap: 6px; }
+.rail {
+  width: 44px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; padding: 7px 0;
+}
+.rail button {
+  width: 34px; height: 34px; border: none; border-radius: 9px;
+  background: transparent; color: var(--faint); cursor: pointer;
+  display: grid; place-items: center; position: relative;
+}
+.rail button:hover { background: var(--surface-2); color: var(--text-2); }
+.rail button.activo { background: var(--accent-weak); color: var(--accent); }
+/* La barra de "activo" cuelga al borde del rail. Plana, sin glow: el
+   color YA es la señal; el glow era ruido. */
+.rail button.activo::before {
+  content: ""; position: absolute; left: -7px; top: 7px; bottom: 7px;
+  width: 2.5px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+.rail .rail-sep { width: 18px; height: 1px; background: var(--border-soft); margin: 2px 0; }
+
+/* Capa 27 — Splitter vertical entre paneles. 5px de ancho real, hairline
+   visible solo al acercarse. Cursor `col-resize` en reposo (aparece
+   antes de hacer click, descubrible); fondo del acento durante el
+   arrastre, para que el ojo confirme que la acción está pasando.
+   `touch-action: none` evita que el navegador interprete el drag como
+   scroll en trackpads/táctiles. */
+.splitter {
+  width: 5px; flex-shrink: 0; cursor: col-resize;
+  background: transparent; position: relative; z-index: 1;
+  touch-action: none;
+  transition: background var(--tr);
+}
+.splitter::after {
+  content: ""; position: absolute; top: 8px; bottom: 8px;
+  left: 50%; width: 1px; transform: translateX(-0.5px);
+  background: transparent;
+  transition: background var(--tr);
+}
+.splitter:hover::after, .splitter.arr::after { background: var(--accent); }
+.splitter.arr { background: var(--accent-weak); }
+
+.sidebar {
+  width: 248px; flex-shrink: 0; padding: 0.7rem 0.6rem; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.55rem;
+}
+/* Encabezado de sección: micro, ancho, en mayúsculas — estructura sin
+   gritar. */
+.h2 {
+  margin: 0.2rem 0.35rem 0.05rem; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.13em; color: var(--faint);
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.h2 .h2-num {
+  font-family: var(--font-mono); color: var(--muted);
+  background: var(--surface-2); border-radius: var(--r-pill);
+  padding: 1px 6px; font-size: 9.5px; letter-spacing: 0;
+}
+.btn-nuevo {
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--border-soft); border-radius: 6px;
+  padding: 0.5rem 0.65rem; font-size: 12px; font-weight: 550;
+  cursor: pointer; text-align: left; display: flex; align-items: center;
+  gap: 0.5rem; transition: background var(--tr), color var(--tr),
+  border-color var(--tr);
+}
+.btn-nuevo:hover {
+  background: var(--surface-3); border-color: var(--border);
+  color: var(--text);
+}
+.btn-nuevo svg { flex-shrink: 0; color: var(--faint); transition: color var(--tr); }
+.btn-nuevo:hover svg { color: var(--accent); }
+
+/* ── File tree: denso, con GUÍAS DE INDENTACIÓN al estilo VSCode/JetBrains.
+   Cada nivel pinta una columna `.tg` (14px) con un hairline vertical
+   centrado, conectando archivos con su carpeta padre. Reemplaza el
+   carácter ▸/▾ por un ChevronRight de lucide que rota 90° al abrir.
+   Cero cambio de lógica: la jerarquía sigue derivándose de paths. ── */
+.tree {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+}
+.row {
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.34rem 0.5rem 0.34rem 0.25rem;
+  border-radius: var(--r-sm); cursor: pointer;
+  font-size: 12.5px; color: var(--muted); position: relative;
+  transition: background var(--tr), color var(--tr), box-shadow var(--tr);
+}
+.row:hover { background: var(--surface-2); color: var(--text); }
+.row.activo {
+  background: var(--accent-weak); color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.row.dir { color: var(--text-2); }
+.row.dir .name { font-weight: 600; }
+.row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; letter-spacing: -0.005em; }
+
+/* Bloque indent: guías + slot del chevron. gap=0 para que las columnas
+   queden flush; el resto de la .row mantiene su gap normal para nombre/
+   chip/signals/badges. */
+.row-indent {
+  display: inline-flex; align-self: stretch; align-items: center;
+  flex: none; gap: 0;
+}
+.tg {
+  flex: none;
+  width: 14px;
+  align-self: stretch;
+  position: relative;
+}
+.tg::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 7px;
+  width: 1px;
+  background: var(--border-soft);
+  opacity: 0.6;
+  transition: opacity var(--tr), background var(--tr);
+}
+.row:hover .tg::before { opacity: 0.95; background: var(--border); }
+.row.activo .tg::before {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+/* Chevron de carpeta — slot fijo 14px (igual ancho que una guía) para
+   que la rejilla virtual de niveles encaje. Rotación 90° al abrir,
+   ease del IDE. */
+.row .twist {
+  width: 14px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--faint);
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), color var(--tr);
+}
+.row .twist svg { display: block; }
+.row.dir:hover .twist { color: var(--muted); }
+.row.dir.abierta .twist {
+  transform: rotate(90deg);
+  color: var(--text-2);
+}
+/* Slot fantasma del chevron en archivos: misma anchura, sin glyph. Esto
+   alinea el contenido del archivo con el contenido de su carpeta padre
+   (no con el chevron mismo) — el efecto tree clásico de un IDE real. */
+.row .twist-pad { width: 14px; flex: none; align-self: stretch; }
+.chip {
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 9px;
+  font-weight: 700; line-height: 1; padding: 3px 4px; border-radius: 4px;
+  min-width: 19px; text-align: center; text-transform: lowercase;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-soft);
+}
+/* Tipo por color, pero apagado (texto teñido, no caramelo): scaneás sin
+   que grite. */
+.chip.t-py { color: #6cc78a; }
+.chip.t-js { color: #d8bd55; }
+.chip.t-ts { color: #5fa0e8; }
+.chip.t-go { color: #5cc7d2; }
+.chip.t-rs { color: #d89065; }
+.chip.t-java { color: #d8895f; }
+.chip.t-cpp { color: #7aa0e8; }
+.chip.t-md { color: #969cab; }
+.chip.t-cfg { color: #a98bcf; }
+.badges { display: flex; gap: 3px; flex-shrink: 0; }
+/* Presencia: alguien está EN ese archivo ahora. Anillo de la superficie
+   para recortarlo; sin loop de glow (la vida la da el color + estar). */
+.badge {
+  width: 16px; height: 16px; border-radius: 50%; font-size: 8.5px;
+  line-height: 16px; text-align: center; color: var(--av-ink);
+  font-weight: 750; box-shadow: 0 0 0 2px var(--surface);
+}
+/* Botón "borrar archivo" — invisible en reposo, aparece al hover/focus
+   de la fila. Iconito lucide en vez del "✕" tipográfico anterior: queda
+   centrado y consistente con el resto del UI. Tono "bad" al hover/focus
+   para anunciar que es destructivo. */
+.delx {
+  border: none; background: transparent; color: var(--faint);
+  cursor: pointer; padding: 4px 5px; border-radius: var(--r-sm);
+  opacity: 0; display: inline-flex; align-items: center;
+  transition: opacity var(--tr), color var(--tr), background var(--tr);
+}
+.delx svg { display: block; }
+.row:hover .delx, .row:focus-within .delx, .delx:focus-visible { opacity: 1; }
+.delx:hover { color: var(--bad); background: var(--bad-bg); }
+.delx:focus-visible {
+  outline: none; color: var(--bad); background: var(--bad-bg);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--bad);
+}
+

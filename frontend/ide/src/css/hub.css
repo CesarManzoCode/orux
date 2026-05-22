@@ -1,0 +1,510 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * HUB · dashboard real (Lobby v2, 2026-05-19)
+ *
+ * Autenticado pero todavía sin equipo abierto. La app sigue cerrada un
+ * escalón más: hasta entrar a un equipo NO se ve nada del workspace.
+ *
+ * Antes era un split del Login con una tarjeta flotando — se sentía
+ * como otra pantalla de acceso, no como "tu lugar". Esta versión es
+ * un dashboard full-bleed: HEADER fijo (marca · conexión · identidad ·
+ * salir) + GRID de cards con áreas nombradas (equipos · identidad ·
+ * acciones · sistema). Sumar un widget = una tarjeta nueva + un área
+ * en .hub-grid, sin tocar el resto.
+ *
+ * Reusa la paleta Acero del Login (tokens .landing/.login redefinen
+ * --accent al acero — para que el Hub también herede esa paleta sin
+ * tocar el :root global, se aplican los MISMOS tokens dentro de .hub).
+ * Verde sigue reservado a "vivo".
+ * ───────────────────────────────────────────────────────────────────── */
+.hub {
+  /* Mismos tokens Acero que .landing/.login: no se toca el :root global
+     (el IDE conserva su verde) y la consola de hub queda coherente. */
+  --steel: #5d7fa6;
+  --steel-fill: linear-gradient(180deg, #4c6f97, #3c5a7e);
+  --steel-ink: #eef4fb;
+  --accent: #5d7fa6;
+  --accent-2: #7b9cc3;
+  --accent-weak: rgba(93, 127, 166, 0.13);
+  --accent-soft: rgba(93, 127, 166, 0.20);
+  --accent-line: rgba(123, 156, 195, 0.50);
+  --grad: var(--steel-fill);
+
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; grid-template-rows: auto 1fr;
+  background:
+    radial-gradient(80vw 60vh at 100% -10%, rgba(123, 156, 195, 0.06), transparent 60%),
+    radial-gradient(60vw 50vh at 0% 100%, rgba(123, 156, 195, 0.04), transparent 60%),
+    var(--bg-deep);
+  overflow: auto;
+}
+.hub :focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-line);
+  border-radius: 4px;
+}
+/* Plano técnico: rejilla finísima al fondo, mismo idioma que la landing. */
+.hub::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(90% 70% at 50% 30%, #000, transparent 80%);
+  mask-image: radial-gradient(90% 70% at 50% 30%, #000, transparent 80%);
+}
+
+/* ── HEADER ─────────────────────────────────────────────────────────
+   Barra superior fija que ancla "dónde estoy". Tres slots:
+   [brand] ················· [conexión] ················· [identidad].
+   Sin glow, registro enterprise — mismo lenguaje que el card del Login. */
+.hub-head {
+  position: relative; z-index: 1;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 1rem; padding: 0.95rem clamp(1.2rem, 3vw, 2rem);
+  background: linear-gradient(180deg, var(--bg), transparent);
+  border-bottom: 1px solid var(--border-soft);
+  backdrop-filter: blur(6px);
+}
+.hub-brand {
+  display: inline-flex; align-items: center; gap: 11px;
+  font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.035em;
+  color: var(--text);
+}
+.hub-brand b { font-weight: 800; color: var(--accent); }
+/* El logo va pegado al wordmark; un microajuste vertical lo asienta sobre
+   la línea óptica del texto sin tocar el resto de tipografías. */
+.hub-brand-mk { display: block; flex: none; margin-right: -2px; }
+.hub-brand-sub {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+  padding-left: 11px; border-left: 1px solid var(--border);
+  align-self: center;
+}
+.hub-head-mid { display: flex; justify-content: center; }
+.hub-conn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted);
+  padding: 5px 12px; border: 1px solid var(--border-soft);
+  border-radius: 99px; background: rgba(0, 0, 0, 0.22);
+}
+.hub-conn i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.55);
+  animation: lp-ping 2.6s ease-out infinite;
+}
+.hub-conn.st-wt i { background: var(--warn); animation: none; }
+.hub-conn.st-bad i { background: var(--bad); animation: none; }
+.hub-me {
+  display: inline-flex; align-items: center; gap: 11px; justify-self: end;
+  padding: 5px 6px 5px 5px; border: 1px solid var(--border-soft);
+  border-radius: 999px; background: var(--surface);
+}
+.hub-me-ava {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 800; color: var(--bg-deep);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.hub-me-meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.hub-me-meta b {
+  font-size: var(--t-sm); font-weight: 650; color: var(--text);
+  letter-spacing: -0.005em; line-height: 1.1;
+  max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hub-me-meta code {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+}
+.hub-me-out {
+  margin-left: 4px; padding: 6px 12px;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.hub-me-out:hover {
+  color: var(--text); border-color: var(--accent-line);
+  background: var(--accent-weak);
+}
+
+/* ── GRID de widgets ────────────────────────────────────────────────
+   Áreas nombradas: el JSX no se preocupa del layout, sólo da nombres.
+   Para sumar un widget: añadir .hub-card.hc-X con `grid-area: X` y
+   sumar `X` en el template (o un nuevo row). Default 2 columnas. */
+.hub-grid {
+  position: relative; z-index: 1;
+  display: grid; gap: 1rem;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-areas:
+    "teams id"
+    "teams new"
+    "sys   sys";
+  padding: 1.4rem clamp(1.2rem, 3vw, 2rem) 2rem;
+  max-width: 1200px; width: 100%; margin: 0 auto;
+  animation: rise-in .5s var(--ease-in) both;
+}
+.hc-teams { grid-area: teams; }
+.hc-id    { grid-area: id;    }
+.hc-new   { grid-area: new;   }
+.hc-sys   { grid-area: sys;   }
+
+/* ── Card base ──────────────────────────────────────────────────── */
+.hub-card {
+  position: relative; display: flex; flex-direction: column;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 30%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-isla); padding: 1.15rem 1.2rem 1.2rem;
+  box-shadow: 0 22px 60px -28px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 var(--hl);
+}
+/* Filo de acero superior, sutil — la card "respira" enterprise. */
+.hub-card::before {
+  content: ""; position: absolute; left: 1.2rem; right: 1.2rem; top: 0;
+  height: 1px; background: linear-gradient(90deg,
+    transparent, var(--accent-line) 30%, var(--accent-line) 70%, transparent);
+}
+.hub-card .hc-h {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 0.85rem; margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.hc-h-eyebrow {
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted);
+}
+.hc-h-num {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.04em; color: var(--accent);
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-weak); border: 1px solid var(--accent-soft);
+}
+.hc-h-hint {
+  margin-left: auto; font-size: 11.5px; color: var(--faint);
+  font-style: italic;
+}
+
+/* ── EQUIPOS: lista de equipos como controles reales. Las clases .hub-team
+   / .ht-* se reusan del diseño previo (lo único que rescatamos: la fila
+   ya estaba bien). */
+.hub-teams {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 540px; overflow-y: auto;
+  list-style: none; padding: 0; margin: 0;
+  scrollbar-width: thin;
+}
+.hub-teams > li { list-style: none; }
+.hub-teams::-webkit-scrollbar { width: 7px; }
+.hub-teams::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 99px;
+}
+.hub-team {
+  display: flex; align-items: center; gap: 13px; width: 100%;
+  padding: 0.85rem 0.95rem; border-radius: var(--r);
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; text-align: left;
+  transition: background var(--tr), border-color var(--tr),
+    box-shadow var(--tr), transform var(--tr);
+}
+.hub-team:hover {
+  background: var(--surface-3); border-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 10px 28px -22px rgba(76, 195, 138, 0.6);
+  transform: translateY(-1px);
+}
+.hub-team:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+}
+.hub-team:active { transform: translateY(0); }
+.ht-ava {
+  width: 36px; height: 36px; border-radius: 9px; flex: none;
+  display: grid; place-items: center;
+  font-size: 15px; font-weight: 800; color: var(--bg-deep);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.ht-meta {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px;
+  flex-wrap: wrap; row-gap: 4px;
+}
+.ht-name {
+  font-size: var(--t-md); font-weight: 650; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: -0.01em; max-width: 100%;
+}
+/* Badge de rol — icono + texto. La diferencia ADMIN vs MIEMBRO se ve
+   sin leer (Shield acento / Users muted), y con texto (a11y). */
+.ht-rol {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+  background: var(--bg); padding: 3px 9px 3px 7px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.ht-rol svg { display: block; opacity: 0.9; }
+.ht-rol.r-admin {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: var(--accent-weak);
+}
+.ht-rol.r-member { color: var(--muted); }
+.hub-team:hover .ht-rol.r-member { color: var(--text-2); border-color: var(--border); }
+/* "Abrir" — antes texto plano "abrir →"; ahora pill con chevron animado.
+   Esta es la afordancia que el testing real pidió: el botón completo era
+   clicable, pero los usuarios nuevos no se atrevían a tocarlo sin un CTA
+   visible. La pill no roba foco (la card sigue siendo el botón), solo
+   *anuncia* que algo va a pasar. */
+.ht-go {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint);
+  padding: 5px 10px 5px 12px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border-soft);
+  transition: color var(--tr), background var(--tr),
+    border-color var(--tr), transform var(--tr);
+}
+.ht-go svg { transition: transform var(--tr); }
+.ht-go-tx {
+  /* En tarjetas estrechas escondemos el texto, dejamos solo el icono.
+     La a11y queda cubierta por aria-label de la tarjeta. */
+}
+.hub-team:hover .ht-go {
+  color: var(--accent-ink, var(--bg-deep));
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.hub-team:hover .ht-go svg { transform: translateX(3px); }
+@media (max-width: 540px) {
+  .ht-go-tx { display: none; }
+  .ht-go { padding: 5px 8px; }
+}
+
+/* Empty-state: ahora con icono guía + texto + flecha al CTA. La flecha
+   apunta al formulario "crear o unirme" — redundancia útil para usuarios
+   que no exploran columnas. */
+.hub-empty {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  gap: 14px;
+  font-size: var(--t-sm); color: var(--muted); line-height: 1.6;
+  padding: 1.15rem 1.25rem; border-radius: var(--r);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px dashed var(--border);
+}
+.hub-empty-ic {
+  display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: 11px; flex: none;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-soft);
+}
+.hub-empty-tx { display: flex; flex-direction: column; gap: 6px; }
+.hub-empty b {
+  font-size: var(--t-md); font-weight: 700; color: var(--text);
+  letter-spacing: -0.01em;
+}
+.hub-empty-arrow {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent);
+  padding: 6px 11px; border-radius: 999px;
+  background: var(--accent-weak); border: 1px solid var(--accent-soft);
+  animation: hub-empty-pulse 2.6s ease-in-out infinite;
+}
+.hub-empty-arrow svg { color: var(--accent); }
+@keyframes hub-empty-pulse {
+  0%, 100% { transform: translateX(0); opacity: 0.95; }
+  50%      { transform: translateX(2px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub-empty-arrow { animation: none; }
+}
+@media (max-width: 600px) {
+  .hub-empty { grid-template-columns: auto 1fr; }
+  .hub-empty-arrow { grid-column: 1 / -1; justify-self: flex-start; }
+}
+/* Botón "volver al equipo previo" en la cabecera del Hub — ahora con icono. */
+.hub-back {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  background: transparent; border: 1px solid var(--border-soft);
+  padding: 5px 11px 5px 9px; border-radius: 999px;
+  cursor: pointer; transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.hub-back:hover { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-weak); }
+.hub-back:focus-visible {
+  outline: none; color: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+}
+
+/* ── IDENTIDAD: avatar grande + KPIs + nota. */
+.hc-id-row {
+  display: flex; align-items: center; gap: 14px;
+  padding-bottom: 0.95rem; border-bottom: 1px solid var(--border-soft);
+}
+.hc-id-ava {
+  width: 48px; height: 48px; border-radius: 13px; flex: none;
+  display: grid; place-items: center;
+  font-size: 20px; font-weight: 800; color: var(--bg-deep);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 6px 16px -9px rgba(0, 0, 0, 0.75);
+}
+.hc-id-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hc-id-meta b {
+  font-size: var(--t-lg); font-weight: 720; color: var(--text);
+  letter-spacing: -0.015em; word-break: break-word;
+}
+.hc-id-meta code {
+  font-family: var(--font-mono); font-size: 10px; color: var(--faint);
+  letter-spacing: 0.02em;
+}
+.hc-id-kpis {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  margin: 0.95rem 0 0.85rem;
+}
+.hc-id-kpis div {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 0.55rem 0.7rem; border-radius: var(--r-sm);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
+.hc-id-kpis b {
+  font-size: var(--t-2xl); font-weight: 750; color: var(--text); line-height: 1;
+}
+.hc-id-kpis span {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+}
+.hc-id-foot {
+  margin: 0; font-size: 11.5px; color: var(--faint); line-height: 1.55;
+}
+
+/* ── ACCIONES: inputs reusan .login-card token (mismo idioma de form).
+   La caja en sí usa .fg/.fg-hint (mismas reglas que el Login agregando
+   un hint pequeño debajo del campo). */
+.hc-new .fg { display: flex; flex-direction: column; gap: 0.32rem; }
+.hc-new .fg + .hub-sep + .fg { margin-top: 0; }
+.hc-new .fg label {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+}
+.hc-new .fg-hint {
+  margin: 4px 0 0; font-size: 11px; color: var(--faint); line-height: 1.5;
+}
+/* Error de SERVER en el Hub: se enseña con el mismo lenguaje que el
+   login (caja translúcida + disco "!"). Empty => oculto, NO ocupa
+   espacio. Vive al final del card y NO se confunde con el hint del
+   input local (.fg-err). */
+.hc-new .err {
+  font-size: var(--t-sm); color: var(--bad);
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bad-bg);
+  border: 1px solid color-mix(in srgb, var(--bad) 28%, transparent);
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
+.hc-new .err:empty { display: none; }
+.hc-new .err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
+}
+
+/* Costura entre los dos formularios. */
+.hub-sep {
+  height: 1px; margin: 0.95rem 0 0.85rem;
+  background: linear-gradient(90deg,
+    transparent, var(--border-soft) 12%, var(--border-soft) 88%, transparent);
+}
+.hub-row { display: flex; gap: 0.5rem; }
+.hub-row input {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 0.62rem 0.7rem; font-size: var(--t-base);
+  background: var(--surface-2); color: var(--text);
+  transition: border-color var(--tr), background var(--tr);
+}
+.hub-row input::placeholder { color: var(--faint); }
+.hub-row input:hover { border-color: var(--border-strong); }
+.hub-row input:focus { border-color: var(--accent); background: var(--bg-deep); outline: none; }
+.hub-row button {
+  flex: none; padding: 0.62rem 1.2rem;
+  border: 1px solid transparent; border-radius: var(--r);
+  font-size: var(--t-base); font-weight: 650; cursor: pointer; line-height: 1;
+  transition: background var(--tr), border-color var(--tr),
+    transform var(--tr), filter var(--tr), opacity var(--tr);
+}
+.hub-row .primario {
+  background: var(--grad); color: var(--steel-ink);
+  border-color: var(--accent-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -14px rgba(60, 90, 126, 0.7);
+}
+.hub-row .primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.hub-row .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.hub-row .secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
+.hub-row button:disabled {
+  opacity: 0.45; cursor: default; transform: none !important; filter: none !important;
+}
+
+/* ── SISTEMA: tres filas con dot+label+nota, banda larga abajo. */
+.hc-sys { padding-top: 1.1rem; }
+.hc-sys-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.hc-sys-row {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: center;
+  gap: 8px; padding: 0.7rem 0.85rem; border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.22); border: 1px solid var(--border-soft);
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.hc-sys-row b { font-weight: 700; color: var(--text); }
+.hc-sys-row span {
+  grid-column: 1 / -1; font-family: var(--font-ui); font-size: 11.5px;
+  font-weight: 400; color: var(--faint); letter-spacing: 0; line-height: 1.5;
+}
+.hc-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+}
+.hc-dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.5);
+  animation: lp-ping 2.6s ease-out infinite;
+}
+
+/* ── Responsive: en pantallas medianas el grid colapsa a 1 col, en
+   chicas el header se apila. */
+@media (max-width: 1000px) {
+  .hub-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "teams"
+      "id"
+      "new"
+      "sys";
+  }
+  .hc-sys-list { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .hub-head {
+    grid-template-columns: 1fr; grid-template-rows: auto auto auto;
+    gap: 0.55rem; padding: 0.85rem 1rem;
+  }
+  .hub-head-mid { justify-content: flex-start; }
+  .hub-me { justify-self: stretch; }
+  .hub-grid { padding: 1rem; }
+}
+
+/* .login-card sigue ocultando errores vacíos (regla que vivía suelta). */
+.login-card .err:empty { display: none; }
+

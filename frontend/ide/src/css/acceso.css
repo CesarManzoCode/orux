@@ -1,0 +1,155 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * LOGIN / ACCESO  ·  dirección de arte v2 (coherente con la landing)
+ * Deja de ser "tarjeta flotando en negro": split con relato enterprise
+ * a la izquierda y CONSOLA de acceso a la derecha. El color es estado,
+ * los titulares no llevan gradiente, el fondo es plano técnico (sin
+ * aurora). `.login`/`.login-card`/`.marca`/`.fila`/`.primario`/
+ * `.secundario`/`.err`/`.lazo` los reusa Lobby — se refinan SIN romper
+ * su estructura (clases de login nuevas son aditivas). No se toca el
+ * :root global ni el editor sagrado.
+ * ───────────────────────────────────────────────────────────────────── */
+
+/* ── IDENTIDAD ACERO, sólo en las pantallas de acceso. NO toca el :root
+   global (el IDE sigue verde): se redefinen los tokens de marca/CTA
+   dentro de .landing/.login. El verde queda reservado a "vivo" (se
+   re-apunta a --ok donde antes era marca). Lobby reusa .login/.login-card
+   → hereda el acero, coherente y sin romper su estructura. ── */
+.landing, .login {
+  --steel: #5d7fa6;
+  --steel-fill: linear-gradient(180deg, #4c6f97, #3c5a7e);
+  --steel-ink: #eef4fb;
+  --accent: #5d7fa6;                       /* marca/acento = acero      */
+  --accent-2: #7b9cc3;
+  --accent-weak: rgba(93, 127, 166, 0.13);
+  --accent-soft: rgba(93, 127, 166, 0.20);
+  --accent-line: rgba(123, 156, 195, 0.50);
+  --grad: var(--steel-fill);               /* CTA primario = acero mate */
+}
+/* Foco accesible en acero dentro del acceso (el IDE conserva el suyo). */
+.landing :focus-visible, .login :focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-line);
+}
+
+/* Contenedor centrado (lo usa Lobby; Login usa .landing). Fondo sobrio,
+   sin radial de marca: plano técnico + vignette fría. */
+.login {
+  position: fixed; inset: 0; z-index: 50; display: flex;
+  align-items: center; justify-content: center; padding: 1rem;
+  background:
+    radial-gradient(120vw 70vh at 50% -10%, rgba(255, 255, 255, 0.02), transparent 60%),
+    var(--bg-deep);
+}
+.login::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(80% 60% at 50% 35%, #000, transparent 75%);
+  mask-image: radial-gradient(80% 60% at 50% 35%, #000, transparent 75%);
+}
+.login-card {
+  position: relative; width: min(360px, 92vw);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-isla); padding: 1.9rem; display: flex;
+  flex-direction: column; gap: 0.55rem;
+  box-shadow: var(--shadow-modal), inset 0 1px 0 var(--hl);
+  animation: rise-in var(--dur-in) var(--ease-in) both;
+}
+/* Header del card: brand + cue de seguridad apilados verticalmente.
+   Se separó como .lc-head porque antes el brand vivía con className
+   "marca" y heredaba el `.marca { position: absolute; height: 22px }`
+   GLOBAL del editor (línea activa) — se salía de flujo y se encimaba
+   con el cue. Ahora el brand es .lc-brand y vive en su propia caja. */
+.login-card .lc-head {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 0.35rem;
+}
+.login-card .lc-brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.035em;
+  line-height: 1.1; color: var(--text);
+}
+.login-card .lc-brand b { font-weight: 800; color: var(--accent); }
+.login-card .lc-brand-mk { display: block; flex: none; }
+/* Cue de seguridad: registro enterprise, mono, discreto. */
+.login-card .cue {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+}
+.login-card .cue .lk {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.login-card p {
+  margin: 0.45rem 0 0.6rem; font-size: var(--t-sm); color: var(--muted);
+  line-height: 1.6;
+}
+/* Campo con label accesible (Login). Lobby no usa .fg → aditivo. */
+.login-card .fg { display: flex; flex-direction: column; gap: 0.32rem; }
+.login-card .fg + .fg { margin-top: 0.5rem; }
+.login-card .fg label {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+}
+.login-card input:disabled { opacity: 0.55; cursor: not-allowed; }
+.login-card .fila { display: flex; gap: 0.55rem; margin-top: 0.85rem; }
+.login-card button {
+  border: 1px solid transparent; border-radius: var(--r);
+  padding: 0.62rem 0.7rem; font-size: var(--t-base); font-weight: 650;
+  cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  transition: background var(--tr), border-color var(--tr),
+    transform var(--tr), filter var(--tr), opacity var(--tr);
+}
+.login-card .fila button { flex: 1; }
+.login-card .primario {
+  background: var(--grad); color: var(--steel-ink); font-weight: 650;
+  border-color: var(--accent-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -14px rgba(60, 90, 126, 0.7);
+}
+.login-card .primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.login-card .primario:active { transform: translateY(1px); }
+.login-card .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.login-card .secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
+.login-card button:disabled {
+  opacity: 0.45; cursor: default; transform: none !important;
+  filter: none !important;
+}
+.login-card .spin {
+  width: 13px; height: 13px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(238, 244, 251, 0.32); border-top-color: var(--steel-ink);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.login-card .err {
+  font-size: var(--t-sm); color: var(--bad); min-height: 1.2em;
+  display: flex; align-items: center; gap: 7px; margin-top: 0.2rem;
+}
+.login-card .err:not(:empty) {
+  padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--bad-bg); border: 1px solid rgba(232, 99, 111, 0.25);
+}
+.login-card .err:not(:empty)::before {
+  content: "!"; width: 15px; height: 15px; border-radius: 50%;
+  background: rgba(232, 99, 111, 0.22); color: var(--bad); display: grid;
+  place-items: center; font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.login-card .cardfoot {
+  margin-top: 0.7rem; font-size: 11px; color: var(--faint);
+  line-height: 1.55; border-top: 1px solid var(--border-soft);
+  padding-top: 0.8rem;
+}
+.login-card .cardfoot code {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2);
+  background: var(--surface-2); padding: 1px 5px; border-radius: 4px;
+  border: 1px solid var(--border-soft); margin: 0 2px;
+}
+.login-card .lazo {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: var(--t-sm); margin-top: 0.3rem; align-self: flex-start;
+  padding: 4px 2px; flex: none; transition: color var(--tr);
+}
+.login-card .lazo:hover { color: var(--text); }
+

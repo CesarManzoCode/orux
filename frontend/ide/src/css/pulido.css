@@ -1,0 +1,420 @@
+/* ===========================================================================
+   CAPA 30 — Atajos de teclado: hoja de ayuda + toast inline
+   ---------------------------------------------------------------------------
+   La feature acelera lo que ya hacen los botones del Inspector. El CSS por
+   tanto es chico a propósito: la hoja reusa `.modal` (sin re-tematizar) y
+   sólo agrega el grid de filas kbd+descripción. El toast es una píldora
+   discreta abajo a la derecha; nunca tapa el editor.
+   =========================================================================== */
+.kbd-modal { width: min(520px, 92vw); }
+.kbd-modal .modal-intro { margin-bottom: 0.6rem; }
+.kbd-section { margin-top: 0.85rem; }
+.kbd-section-h {
+  margin: 0 0 0.4rem;
+  font: 600 10px/1 var(--font-base);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.kbd-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.kbd-row:first-child { border-top: 0; }
+.kbd-keys { display: inline-flex; align-items: center; gap: 0.3rem; }
+.kbd-row kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 22px;
+  padding: 0 0.4rem;
+  font: 600 11px/1 var(--font-mono);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+.kbd-plus {
+  font: 700 11px/1 var(--font-mono);
+  color: var(--muted);
+  padding: 0 1px;
+}
+.kbd-desc {
+  font: 400 12px/1.35 var(--font-base);
+  color: var(--text);
+}
+.kbd-hint {
+  margin-top: 0.85rem;
+  font: 400 11px/1.4 var(--font-base);
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Toast: aparece abajo-derecha, no roba foco, desaparece sola. Bus global
+   en store.ts (emitToast); App.tsx renderiza el último. Tres tonos —
+   cada uno con borde + color suave para que el ojo lea el TIPO antes que
+   el contenido (verde = ok, ámbar = atención, rojo = falló). Iconito a la
+   izquierda como redundancia no-cromática (a11y daltonismo). */
+.kbd-toast {
+  position: fixed;
+  bottom: 32px;
+  right: 24px;
+  z-index: 2200;
+  padding: 0.6rem 0.95rem;
+  font: 600 12.5px/1.25 var(--font-base);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  animation: kbd-toast-in 220ms var(--ease-in) both;
+  pointer-events: none;
+  max-width: min(420px, 60vw);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.005em;
+}
+.kbd-toast.t-ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.kbd-toast.t-warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.kbd-toast.t-bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 42%, transparent);
+  box-shadow: 0 14px 32px -8px rgba(0,0,0,0.55),
+    inset 0 1px 0 color-mix(in srgb, var(--bad) 12%, transparent);
+}
+/* Compat: las dos clases viejas (.ok / .warn sueltas) siguen funcionando
+   por si quedó algún call site sin migrar. */
+.kbd-toast.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 38%, transparent); }
+.kbd-toast.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 38%, transparent); }
+@keyframes kbd-toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kbd-toast { animation: none; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 32 · Pulido senior (2026-05-21)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico: refina los detalles que más mueven la sensación
+   "premium / instrumento" sin agregar features ni tocar tokens. Resuelve
+   los hallazgos de la auditoría UX/UI de este sprint:
+
+   1) Plegado del Inspector con transición real (antes: snap visual).
+   2) Modal primario con personalidad (lenguaje del CTA, no plano).
+   3) Rail dots con halo discreto (la señal se ve, no grita).
+   4) StatusBar prioritaria en pantallas medianas (no se pisa).
+   5) Hover de cards (modules/aud/sec) más sobrio: borde + sombra
+      compacta, no nube SaaS.
+   6) ContextBar: ritmo por gap, no por dividers en cada chip.
+   7) Editor: pulir el latido de presencia (sin lock-in en hover).
+
+   La regla: tocar la apariencia, jamás la geometría sagrada del editor
+   ni los contratos protocolo.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) Plegado animado del Inspector ─────────────────────────────────
+   Técnica: el contenedor `.insec` es un grid con dos filas (header +
+   body). El body usa `grid-template-rows: 1fr` y al plegar pasa a `0fr`
+   — la fila colapsa con transición, sin desmontar el DOM. Requiere que
+   `.insec-b` siempre exista (Inspector.tsx debe renderearlo cuando
+   .plegada). Beneficio: animación de altura "auto" real, accesible
+   (aria-expanded sigue siendo la verdad), reduced-motion-friendly. */
+.insec {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  transition: grid-template-rows 220ms var(--ease-in);
+}
+.insec.plegada { grid-template-rows: auto 0fr; }
+.insec-b {
+  min-height: 0;
+  overflow: hidden;
+  transition: padding 180ms var(--ease-in), opacity 180ms var(--ease-in);
+}
+.insec.plegada > .insec-b {
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+.insec-chev { transition: transform 220ms var(--ease-in); }
+@media (prefers-reduced-motion: reduce) {
+  .insec, .insec-b, .insec-chev { transition: none; }
+}
+
+/* ── 2) Modal primario con lenguaje del CTA ──────────────────────────
+   El sistema tiene `.btn-primario` con gradiente + sombra inset que se
+   siente "decidir". El botón del modal-foot era plano (background
+   `--accent` plano). Lo alineamos al lenguaje del CTA principal: la
+   "primaria" del modal ahora se siente igual que apretar el CTA del
+   editor empty. Mismo idioma, una sola sensación. */
+.modal-foot button.primario {
+  background: var(--grad);
+  color: var(--accent-ink, #0c1410);
+  border: 1px solid var(--accent);
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 8px 22px -14px rgba(76, 195, 138, 0.55);
+}
+.modal-foot button.primario:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+.modal-foot button.primario:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ── 3) Rail dots con halo ───────────────────────────────────────────
+   El dot de aviso del Rail era 6px sobre un fondo oscuro: invisible al
+   barrer. Subimos 1px y añadimos un anillo del color rebajado — sigue
+   siendo sobrio, pero el ojo lo registra en la periferia. La señal es
+   "hay algo que mirar", no una alarma. */
+.rail-dot {
+  width: 7px; height: 7px;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3.5px color-mix(in srgb, var(--info) 38%, transparent);
+}
+.rail-dot.warn {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3.5px color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+/* ── 4) StatusBar — priorizar segmentos en pantallas medianas ─────────
+   La barra es densa por diseño, pero a 1280px se pisa con tabs y
+   contextbar. Marcamos los segmentos prescindibles con `.sb-low` desde
+   el JSX (StatusBar.tsx) y el divider previo con `.sb-div-low` — a
+   1080px se esconden los dos. Identidad y conexión nunca ceden: son
+   el latido. */
+@media (max-width: 1080px) {
+  .statusbar .sb-low,
+  .statusbar .sb-div-low { display: none; }
+}
+
+/* ── 5) Hover de cards más sobrio ─────────────────────────────────────
+   No aplica en IDE (no hay cards de marketing), pero unifica con la
+   landing: si en algún momento el IDE muestra cards (Hub.team ya tiene
+   uno bien hecho), la sombra es de "instrumento" — corta, mate. Esta
+   sección queda como ancla para futura coherencia. */
+
+/* ── 6) ContextBar — ritmo por gap ────────────────────────────────────
+   El bar tenía 6 `.ctx-div` (uno por chip). La división lógica real son
+   2: [modo · presencia | ownership · impacto]. Reducimos opacidad de
+   los dividers internos y aumentamos gap base; el ojo agrupa por
+   espaciado, no por líneas. */
+.ctxbar { gap: 0.7rem; }
+.ctx-div {
+  width: 1px;
+  background: var(--border-soft);
+  opacity: 0.45;
+  margin: 0.32rem 0.05rem;
+}
+
+/* ── 7) Editor livepill — la cápsula de co-edición se asienta mejor ──
+   Detalle: añadir una sombra interior muy sutil (acero, no glow) para
+   que se despegue del código sin parecer otro panel. Coherente con la
+   regla "color = estado, profundidad = jerarquía". */
+.ed-livepill {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ── 8) Empty states del Inspector — borde dashed ya estaba bien,
+   añadimos espacio de respiración entre `.in-empty + .in-explain`
+   para que la nota no se pegue al cuadro de empty. Detalle de
+   maquetación: el ojo separa la caja del texto explicativo. */
+.in-empty + .in-explain { margin-top: 0.55rem; }
+
+/* ── 9) Foco visible: refuerzo de la regla global ────────────────────
+   Reasentamos la regla aquí al final con la misma fórmula — algunos
+   navegadores le dan más peso a una declaración tardía cuando los
+   browsers de soporte parcial pintan dos rings. Es defensivo. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+.modal-foot button:focus-visible,
+.modal-x:focus-visible,
+.inv-code:focus-visible,
+.inv-btn:focus-visible,
+.inimp-x:focus-visible,
+.tb-hub:focus-visible,
+.hub-back:focus-visible,
+.in-act:focus-visible,
+.btn:focus-visible,
+.btn-primario:focus-visible,
+.btn-secundario:focus-visible,
+.btn-ghost:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+.in-act.primario:focus-visible,
+.modal-foot button.primario:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px var(--accent-soft);
+}
+
+/* ═══ STRIPE / PLANES — capa 30 ══════════════════════════════════════════
+   Aditivo: badge de plan en la tarjeta de equipo del Hub + botón de
+   upgrade. No toca :root ni el bloque sagrado del editor. El foco de
+   .ht-upgrade lo cubre el `button:focus-visible` global (anillo unificado
+   del pulido senior) — por eso no lleva regla de foco propia. */
+
+/* Badge de plan — mismo lenguaje de pill que .ht-rol. Free queda sobrio
+   (es el estado base, no un error); Premium destaca en acento con ★. */
+.ht-plan {
+  display: inline-flex; align-items: center; flex: none;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+}
+.ht-plan.p-free { color: var(--faint); background: var(--bg); }
+.ht-plan.p-premium {
+  color: var(--accent); background: var(--accent-weak);
+  border-color: var(--accent-soft);
+}
+.ht-plan.p-premium::before {
+  content: "★"; font-size: 8px; margin-right: 4px;
+}
+
+/* Botón "Mejorar a Premium" — debajo de la tarjeta del equipo. Acción
+   secundaria: acento tenue, no compite con la tarjeta (que es el botón
+   primario "abrir"). */
+.ht-upgrade {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; width: 100%; margin-top: 6px;
+  padding: 0.5rem 0.7rem; border-radius: var(--r);
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+  letter-spacing: -0.005em; cursor: pointer;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+  transition: background var(--tr), border-color var(--tr),
+    color var(--tr), transform var(--tr), filter var(--tr);
+}
+.ht-upgrade:hover {
+  background: var(--accent-soft); border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+.ht-upgrade:active { transform: translateY(0); }
+.ht-upgrade:disabled {
+  opacity: 0.6; cursor: progress; transform: none; filter: saturate(0.7);
+}
+.ht-upgrade svg { display: block; flex: none; }
+
+/* ── Login con GitHub (OAuth) ────────────────────────────────────────────
+   Botón "Continuar con GitHub" + separador, dentro del login-card. Bloque
+   aditivo: no toca :root ni la geometría sagrada del editor. El botón es
+   oscuro a propósito: es la convención universal de "Sign in with GitHub"
+   y distingue el acceso de terceros del botón primario de acero. */
+.gh-sep {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.9rem 0 0.7rem;
+}
+.gh-sep-line {
+  flex: 1; height: 1px;
+  /* Un separador estructural va en hairline neutro: en este sistema el
+     color es ESTADO, no decoración — el acero es la marca, no una línea. */
+  background: var(--border);
+}
+.gh-sep-tx {
+  font-family: var(--font-ui); font-size: 0.72rem;
+  color: var(--muted);
+}
+.gh-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; width: 100%;
+  padding: 0.62rem 0.8rem; border-radius: var(--r);
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+  letter-spacing: -0.005em; cursor: pointer;
+  color: #ffffff;
+  background: #1f2328;
+  border: 1px solid #3a4048;
+  transition: background var(--tr), border-color var(--tr),
+    transform var(--tr), filter var(--tr);
+}
+.gh-btn:hover {
+  background: #2c333b; border-color: #4a525c;
+  transform: translateY(-1px);
+}
+.gh-btn:active { transform: translateY(0); }
+.gh-btn:disabled {
+  opacity: 0.55; cursor: not-allowed; transform: none; filter: saturate(0.6);
+}
+.gh-btn svg { display: block; flex: none; }
+
+/* ── Empty-state del workspace (primera sesión guiada) ───────────────────
+   Se muestra en el área central cuando el equipo no tiene archivos: orienta
+   al equipo nuevo a clonar, crear o invitar. Bloque aditivo. */
+.ews {
+  flex: 1; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem; overflow: auto;
+}
+.ews-card { width: 100%; max-width: 520px; }
+.ews-h {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-ui); font-size: 1.15rem; font-weight: 680;
+  letter-spacing: -0.015em;
+}
+.ews-sub {
+  margin: 0 0 1.4rem;
+  font-family: var(--font-ui); font-size: var(--t-sm);
+  color: var(--muted); line-height: 1.5;
+}
+.ews-steps { display: flex; flex-direction: column; gap: 0.6rem; }
+.ews-step {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 0.85rem 0.9rem; border-radius: var(--r);
+  color: inherit;
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+  transition: background var(--tr), border-color var(--tr), transform var(--tr);
+}
+.ews-step:hover {
+  background: var(--accent-soft); border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+.ews-step:active { transform: translateY(0); }
+.ews-step svg { flex: none; margin-top: 1px; color: var(--accent); }
+.ews-step-tx { display: flex; flex-direction: column; gap: 2px; }
+.ews-step-tx b {
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+}
+.ews-step-tx span {
+  font-family: var(--font-ui); font-size: 0.78rem;
+  color: var(--muted); line-height: 1.45;
+}
+.ews-primary {
+  background: var(--accent-soft); border-color: var(--accent-line);
+}
+.ews-foot {
+  margin: 1.3rem 0 0;
+  font-family: var(--font-ui); font-size: 0.78rem;
+  color: var(--muted); line-height: 1.5;
+}

@@ -1,0 +1,430 @@
+/* ── Selector de idioma (LangToggle) ── */
+.lang-toggle {
+  display: inline-flex; align-items: center;
+  gap: 1px; background: var(--surface-2);
+  border: 1px solid var(--border-soft); border-radius: var(--r-pill);
+  padding: 1px 3px;
+}
+.lang-toggle button {
+  font: 700 9px/1 var(--font-mono); text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+  padding: 2px 5px; border-radius: var(--r-pill);
+  cursor: pointer; transition: background var(--tr), color var(--tr);
+  background: transparent;
+}
+.lang-toggle button:hover { color: var(--text); }
+.lang-toggle button.lt-active {
+  background: var(--accent-weak); color: var(--accent);
+}
+/* Variante dentro del login card (margen extra) */
+.login-lang { margin-top: 0.8rem; align-self: flex-start; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Sprint de pulido pre-mercado (capa 29) — modales, validaciones, hub.
+   AdITIVO al final: no toca :root ni el bloque sagrado del editor. Diseña
+   con tokens existentes — coherencia con todo lo de antes.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Backdrop de cualquier modal: un velo oscuro semitransparente que también
+   centra la card. z-index alto para superar topbar/sidebar/inspector. */
+.modalbg {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: blur(6px);
+  padding: 1rem;
+  animation: modal-fade 0.18s ease-out;
+}
+@keyframes modal-fade { from { opacity: 0 } to { opacity: 1 } }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4);
+  max-width: 520px; width: 100%;
+  max-height: calc(100vh - 2rem);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: modal-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97) }
+  to { opacity: 1; transform: none }
+}
+
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.85rem 1rem 0.7rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.modal-h {
+  margin: 0; font-size: var(--t-sm); font-weight: 700;
+  color: var(--text); letter-spacing: -0.005em;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.modal-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  background: transparent; color: var(--muted);
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  cursor: pointer; transition: background var(--tr), color var(--tr);
+}
+.modal-x:hover { color: var(--text); background: var(--surface-2); }
+
+.modal-intro {
+  font-size: var(--t-xs); color: var(--muted);
+  margin: 0; padding: 0.7rem 1rem 0.2rem;
+  line-height: 1.55;
+}
+
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+.modal-foot button {
+  font: 600 12px/1 var(--font-base);
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--r-sm);
+  cursor: pointer; transition: background var(--tr), color var(--tr), border-color var(--tr);
+  display: inline-flex; align-items: center; gap: 0.35rem;
+}
+.modal-foot button.primario {
+  background: var(--accent-fill, var(--accent));
+  color: var(--accent-ink, #0c1410);
+  border: 1px solid var(--accent);
+}
+.modal-foot button.primario:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.modal-foot button.primario:disabled {
+  opacity: 0.5; cursor: not-allowed; filter: grayscale(0.4);
+}
+.modal-foot button.secundario {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.modal-foot button.secundario:hover { background: var(--surface-2); }
+
+/* ── Modal invitación ── */
+.inv-modal { max-width: 480px; }
+.inv-code-row {
+  display: flex; gap: 0.4rem; align-items: stretch;
+  padding: 0.5rem 1rem 0.4rem;
+}
+.inv-code {
+  flex: 1;
+  font: 700 16px/1.15 var(--font-mono);
+  letter-spacing: 0.08em;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0.55rem 0.7rem;
+  text-align: center;
+  user-select: all;
+}
+.inv-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font: 600 12px/1 var(--font-base);
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+.inv-btn:hover { background: var(--surface-2); }
+.inv-btn.ok {
+  background: var(--ok-bg, color-mix(in srgb, var(--ok) 14%, transparent));
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+}
+.inv-err {
+  margin: 0 1rem 0.4rem; padding: 0.5rem 0.65rem;
+  background: var(--bad-bg);
+  color: var(--bad);
+  border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  display: flex; align-items: center; gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
+.inv-err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
+}
+.inv-how {
+  padding: 0.5rem 1rem 0.2rem;
+}
+.inv-how-h {
+  font: 600 10px/1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+  margin: 0 0 0.45rem;
+}
+.inv-how ol {
+  margin: 0; padding-left: 1.2rem;
+  font-size: var(--t-xs); color: var(--muted);
+  line-height: 1.55;
+}
+.inv-how li { margin: 0.2rem 0; }
+.inv-limit {
+  margin: 0.2rem 1rem 0.5rem;
+  font-size: 10px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* ── Modal nuevo archivo ── */
+.nf-modal { max-width: 440px; }
+.nf-modal .fg { padding: 0.6rem 1rem 0.8rem; }
+.nf-modal label {
+  display: block;
+  font: 600 10px/1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+  margin-bottom: 0.35rem;
+}
+.nf-modal input {
+  width: 100%;
+  font: 600 14px/1.2 var(--font-mono);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0.55rem 0.65rem;
+  transition: border-color var(--tr), background var(--tr);
+}
+.nf-modal input::placeholder { color: var(--faint); font-weight: 500; }
+.nf-modal input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.nf-modal input[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 22%, transparent);
+}
+
+/* Mensajes inline — un único lenguaje para error / hint en TODO el IDE
+   (modales, hub, login). El error es notorio pero no agresivo: tinta
+   roja sobre tinte translúcido, hairline del mismo tono y un disco "!"
+   compacto que dispara el reflejo de "algo que mirar". */
+.fg-err {
+  margin-top: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  font-size: var(--t-xs);
+  color: var(--bad);
+  line-height: 1.45;
+  background: var(--bad-bg);
+  border: 1px solid color-mix(in srgb, var(--bad) 28%, transparent);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: fade-in 180ms var(--ease-in) both;
+}
+.fg-err::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 14px; height: 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  color: var(--bad);
+  font: 800 10px/1 var(--font-ui);
+}
+.fg-hint {
+  margin: 0.4rem 0 0;
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+/* ── Hub: toast inline, back-to-team, ajustes responsive ── */
+.hub-toast {
+  position: relative;
+  margin: 0.6rem 1.2rem 0;
+  padding: 0.55rem 0.85rem;
+  background: var(--ok-bg, color-mix(in srgb, var(--ok) 12%, transparent));
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  animation: hub-toast-in 0.3s ease-out;
+}
+@keyframes hub-toast-in {
+  from { opacity: 0; transform: translateY(-4px) }
+  to { opacity: 1; transform: none }
+}
+.hub-back {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font: 600 11px/1 var(--font-base);
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: 0.4rem 0.6rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  transition: color var(--tr), background var(--tr), border-color var(--tr);
+}
+.hub-back:hover {
+  color: var(--text); background: var(--surface);
+  border-color: var(--border);
+}
+/* TopBar — botón "hub" para volver desde dentro del equipo */
+.tb-hub {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font: 600 11px/1 var(--font-base);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: 0.3rem 0.55rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  transition: color var(--tr), background var(--tr), border-color var(--tr);
+}
+.tb-hub:hover {
+  color: var(--text); background: var(--surface-2);
+  border-color: var(--border);
+}
+
+/* ── Inspector: explicaciones, draft notice, send proposal CTA ── */
+.in-explain {
+  margin: 0.25rem 0 0;
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.55;
+  font-style: italic;
+}
+.in-file.off {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  padding: 0.7rem 0.85rem;
+}
+.in-file-sub {
+  font-size: 10.5px;
+  color: var(--faint);
+  font-style: italic;
+  line-height: 1.45;
+}
+.in-flag.warn-soft {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+}
+.in-draft-note { margin: 0.45rem 0 0.3rem; }
+.in-draft-acc {
+  display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem;
+}
+.in-draft-acc .in-act {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.35rem 0.65rem;
+}
+.in-draft-acc .in-act.primario {
+  background: var(--accent-fill, var(--accent));
+  color: var(--accent-ink, #0c1410);
+  border-color: var(--accent);
+}
+.in-draft-acc .in-act.primario:hover { filter: brightness(1.06); }
+.in-draft-acc .in-act.secundario {
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border-soft);
+}
+.in-draft-acc .in-act.secundario:hover { color: var(--text); }
+
+.in-act[aria-busy="true"] { opacity: 0.7; cursor: progress; }
+
+/* Foco visible: ya lo cubre la regla :focus-visible global del :root con
+   `box-shadow: var(--ring)` — anillo doble (negro + acento translúcido)
+   que se ve igual sobre cualquier superficie. Antes había una segunda
+   regla aquí con `outline: 2px solid var(--accent)` que pintaba dos
+   indicadores encima — quitarla deja un solo lenguaje de foco, mismo
+   idioma del resto del sistema. Las variantes por color (danger/warn)
+   viven más abajo en sus propios selectores. */
+
+/* ── Responsive: pulido pre-mercado ── */
+/* Tablet: hub se relaja a 1 columna a tiempo, modales ajustados */
+@media (max-width: 760px) {
+  .hub-grid { grid-template-columns: 1fr !important; }
+  .hub-head {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.8rem;
+  }
+  .hub-head-mid { order: 3; flex-basis: 100%; }
+  .modal { max-width: 100%; }
+  .inv-code { font-size: 13px; letter-spacing: 0.06em; }
+}
+/* Phone pequeño: el IDE no es navegable; redirigimos visualmente al hub
+   o mostramos un cartel honesto en vez de UI rota. NO ocultamos el hub:
+   la lectura de equipos sigue útil. Solo escondemos el editor donde
+   sería ilegible. */
+@media (max-width: 640px) {
+  .hub-card { padding: 0.85rem; }
+  .hub-row { flex-direction: column; align-items: stretch; gap: 0.45rem; }
+  .hub-row button { width: 100%; justify-content: center; }
+  /* Topbar: comprimir en mobile (rail + Tabs siguen viables si el dev
+     gira el teléfono). */
+  .topbar { flex-wrap: wrap; gap: 0.3rem; }
+  .tb-grp.repo { display: none; }
+  .peers { display: none; }
+  .tb-hub span { display: none; }  /* solo el icono */
+}
+
+/* ── Modal de confirmación: usado por ConfirmarSalida y ConfirmDialog.
+   El componente reusable tiñe el header según `tone` y el botón primario
+   según `tone` también — un único bloque CSS para todas las
+   confirmaciones del producto. */
+.cnf-modal { max-width: 460px; }
+.cnf-h { display: inline-flex; align-items: center; gap: 8px; color: var(--warn); }
+.cnf-h svg { color: var(--warn); }
+.cnf-desc { color: var(--text); padding-top: 0.8rem; line-height: 1.55; }
+/* Tono "danger" (eliminar, push fuerza). Rojo PROFESIONAL: borde + fondo
+   suave, sin grito visual. Mismo "anillo" en focus que el resto del UI. */
+.modal-foot button.primario.danger {
+  background: var(--bad);
+  color: #fff;
+  border-color: var(--bad);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12),
+    0 8px 22px -14px rgba(232, 99, 111, 0.7);
+}
+.modal-foot button.primario.danger:hover:not(:disabled) { filter: brightness(1.06); }
+.modal-foot button.primario.danger:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
+}
+/* Tono "warn" (clonar y reemplazar workspace). Ambar sobrio. */
+.modal-foot button.primario.warn {
+  background: var(--warn); color: #14110a; border-color: var(--warn);
+}
+.modal-foot button.primario.warn:hover:not(:disabled) { filter: brightness(1.05); }
+.modal-foot button.primario.warn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--warn) 55%, transparent);
+}
+

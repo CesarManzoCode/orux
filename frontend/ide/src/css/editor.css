@@ -1,0 +1,495 @@
+/* ── Main ── */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.tabs {
+  display: flex; align-items: stretch; gap: 3px; padding: 5px 6px 0;
+  background: var(--bg); border-bottom: 1px solid var(--border-soft);
+  min-height: 37px;
+}
+.tabs .vacio {
+  color: var(--faint); font-size: var(--t-sm); padding: 0.5rem 0.65rem;
+  display: inline-flex; align-items: center; gap: 0.42rem;
+}
+.tabs .vacio svg { opacity: .7; }
+.tab {
+  display: flex; align-items: center; gap: 0.45rem; position: relative;
+  padding: 0.46rem 0.5rem 0.46rem 0.62rem; background: var(--surface);
+  color: var(--text); border: 1px solid var(--border-soft);
+  border-bottom: none; border-radius: 7px 7px 0 0; font-size: 12px;
+  font-family: var(--font-mono); max-width: 260px;
+  animation: pop-in 180ms var(--ease-in) both;
+}
+/* La pestaña abierta se ata al editor por un filo de acento ARRIBA, fino
+   y sin glow, y se "funde" con el cuerpo por abajo (gana 1px que tapa la
+   costura). Lectura de IDE real, no de tabs de webapp. */
+.tab::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--accent);
+}
+.tab::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 1px; background: var(--surface);
+}
+.tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+/* Capa 19: dot de "sin marcar". Aviso suave, no alarma. */
+/* El componente pasa un glyph "●" como texto; lo ocultamos (font-size 0)
+   y dibujamos un punto limpio por CSS — el círculo no depende del render
+   del glyph en cada fuente. */
+.tab .dot-sinmarcar {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+  flex-shrink: 0; cursor: default; font-size: 0; overflow: hidden;
+  align-self: center;
+}
+.tab .tabx {
+  border: none; background: transparent; color: var(--faint);
+  cursor: pointer; line-height: 0; padding: 3px;
+  border-radius: 4px; flex-shrink: 0; display: flex;
+  transition: color var(--tr), background var(--tr);
+}
+.tab .tabx:hover { color: var(--bad); background: var(--bad-bg); }
+.ctxbar {
+  padding: 0.42rem 0.9rem; border-bottom: 1px solid var(--border-soft);
+  background: var(--surface); font-size: var(--t-sm); color: var(--muted);
+  display: flex; align-items: center; gap: 0.55rem; min-height: 34px;
+  flex-wrap: wrap;
+}
+.aqui { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.aqui .quien {
+  font-size: var(--t-xs); padding: 0.14rem 0.5rem 0.14rem 0.42rem;
+  border-radius: var(--r-pill); color: var(--av-ink); font-weight: 700;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.aqui .quien::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+}
+.otag {
+  padding: 0.14rem 0.55rem 0.14rem 0.45rem; border-radius: var(--r-pill);
+  font-weight: 650; font-size: var(--t-xs); display: inline-flex;
+  align-items: center; gap: 5px;
+}
+.otag::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.otag.tuyo { background: var(--ok-bg); color: var(--ok); }
+.otag.ajeno { background: var(--warn-bg); color: var(--warn); }
+.ctx-nota { color: var(--muted); font-size: var(--t-sm); }
+.ctx-nota b, .ctx-nota strong { color: var(--warn); }
+.reclamar {
+  background: var(--surface-2); color: var(--text-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 0.24rem 0.65rem; font-size: var(--t-xs); font-weight: 600; cursor: pointer;
+  transition: background var(--tr), border-color var(--tr), color var(--tr), transform var(--tr);
+}
+.reclamar:hover { background: var(--accent-weak); border-color: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
+
+/* ── Bandejas: aviso / propuestas / impacto. EL diferenciador del
+   producto: se leen como un "feed de review" intencional, no como una
+   lista de debug. ── */
+.aviso { padding: 0.55rem 0.9rem; font-size: var(--t-sm); background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--border-soft); }
+.tray {
+  border-bottom: 1px solid var(--border-soft); background: var(--surface);
+  animation: fade-in 260ms var(--ease-in) both;
+}
+.tray h3 {
+  margin: 0; padding: 0.5rem 0.9rem; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.13em; font-weight: 700; color: var(--muted);
+  background: var(--bg); border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.tray h3::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--muted);
+}
+.tray h3 .cuenta {
+  margin-left: auto; font-family: var(--font-mono); letter-spacing: 0;
+  background: var(--surface-2); color: var(--muted);
+  padding: 1px 7px; border-radius: var(--r-pill); font-size: 10px;
+  border: 1px solid var(--border-soft);
+}
+.tray.imp h3 { color: var(--accent); }
+.tray.imp h3::before { background: var(--accent); }
+.tray.imp h3 .cuenta { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-weak); }
+.prop { padding: 0.75rem 0.9rem; border-top: 1px solid var(--border-soft); animation: fade-in 220ms var(--ease-in) both; }
+.prop:first-of-type { border-top: none; }
+.prop .cab { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.55rem; }
+.prop .quien { font-size: 12px; color: var(--muted); }
+.prop .quien b { color: var(--text); font-weight: 650; }
+.prop .acc { margin-left: auto; display: flex; gap: 0.4rem; }
+.prop button {
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  padding: 0.3rem 0.8rem; font-size: var(--t-sm); font-weight: 650;
+  cursor: pointer; transition: background var(--tr), transform var(--tr), filter var(--tr);
+}
+.prop button:hover { transform: translateY(-1px); filter: brightness(1.1); }
+.prop .ok { background: var(--ok-bg); color: var(--ok); }
+.prop .no { background: var(--bad-bg); color: var(--bad); }
+/* Diff de review: canal de signo a la izquierda (lo dibuja el CSS, no
+   texto), filas teñidas sobrias, gutter como GitHub/Linear. */
+.diff {
+  margin: 0; font-family: var(--font-mono); font-size: var(--t-sm);
+  line-height: 1.6; white-space: pre-wrap; max-height: 230px;
+  overflow: auto; border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm); background: var(--bg);
+}
+.diff div { padding: 1px 0.7rem 1px 1.7rem; position: relative; }
+.diff div::before {
+  position: absolute; left: 0; width: 1.7rem; text-align: center;
+  color: inherit; opacity: 0.7;
+}
+.diff .add { background: rgba(76, 201, 138, 0.1); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
+.diff .add::before { content: "+"; }
+.diff .del { background: rgba(232, 99, 111, 0.1); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
+.diff .del::before { content: "\2212"; }
+.diff .eq { color: var(--faint); }
+.imp-row {
+  padding: 0.65rem 0.9rem; border-top: 1px solid var(--border-soft);
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  font-size: 12.5px; color: var(--text-2);
+  animation: fade-in 220ms var(--ease-in) both;
+}
+.imp-row:first-of-type { border-top: none; }
+.imp-row .izq { flex: 1; min-width: 0; }
+.imp-row b { color: var(--text); font-weight: 650; }
+.imp-row code { background: var(--surface-2); color: var(--accent); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--border-soft); }
+.imp-row .por {
+  margin-top: 0.38rem; font-size: var(--t-sm); line-height: 1.5;
+  color: var(--muted); display: flex; gap: 0.45rem; align-items: flex-start;
+}
+.imp-row .por .motivo {
+  flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word;
+  padding-top: 1px;
+}
+/* Capa 24d: badge de severidad — el triage del dueño. */
+.imp-row .sev {
+  font-size: 9px; font-weight: 750; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 1px 6px; border-radius: var(--r-pill);
+  flex-shrink: 0;
+}
+.imp-row .sev-alta { background: var(--bad-bg); color: var(--bad); }
+.imp-row .sev-media { background: var(--warn-bg); color: var(--warn); }
+.imp-row .sev-baja { background: var(--surface-2); color: var(--faint); }
+/* Capa 24: cadena del impacto transitivo (premium). El PORQUÉ de la onda. */
+.imp-row .cadena {
+  margin-top: 0.42rem; font-size: var(--t-xs); line-height: 1.7;
+  color: var(--faint); word-break: break-word;
+}
+.imp-row .cadena .flecha { color: var(--accent); padding: 0 2px; }
+.imp-row .acc { margin-left: auto; display: flex; gap: 0.35rem; flex-shrink: 0; }
+.imp-row .acc button {
+  border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+  padding: 0.28rem 0.65rem; font-size: var(--t-sm); font-weight: 550;
+  cursor: pointer; background: var(--surface-2); color: var(--text-2);
+  transition: background var(--tr), border-color var(--tr), color var(--tr), transform var(--tr);
+}
+.imp-row .acc button:hover {
+  border-color: var(--border); background: var(--surface-3);
+  color: var(--text); transform: translateY(-1px);
+}
+
+/* ── Editor (GEOMETRÍA SAGRADA: NO tocar valores de medida) ──
+   line-height 22, padding 20px 24px 20px 64px, gutter 52px / font 14 /
+   lh 22, .ed-active y .marca 22px. Solo se reestiliza el chrome: ahora el
+   editor es la superficie MÁS PROFUNDA (un "pozo" --bg bajo la isla
+   --surface) → el código es el foco, hay profundidad real. */
+.editorwrap { flex: 1; position: relative; display: flex; min-height: 0; background: var(--bg); }
+/* Vacío: NO un void muerto. Trama de plano técnico (blueprint) muy tenue,
+   enmascarada al centro, + un guion vertical de "regla" — superficie de
+   instrumento en reposo, no rectángulo negro. */
+.editorwrap.off {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.012), transparent 60%),
+    var(--bg);
+}
+.editorwrap.off::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(var(--ed-blueprint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ed-blueprint) 1px, transparent 1px);
+  background-size: 22px 22px, 33.6px 22px;
+  -webkit-mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
+  mask-image: radial-gradient(70% 58% at 50% 46%, #000, transparent 78%);
+}
+/* Estado vacío del editor (capa 31): tarjeta centrada con jerarquía y
+   CTAs reales. El ::after viejo era texto hard-coded en español y sin
+   afordancia — ahora la React renderea `.ed-empty` con i18n. Conservo el
+   patrón "blueprint" del fondo: la decoración existe (la capa
+   `.editorwrap.off::before` sigue activa).
+   La card no roba el espacio del overlay de presencia/marcas: tiene
+   pointer-events: auto solo en su contenido. */
+.ed-empty {
+  position: absolute; inset: 0; z-index: 5; display: grid;
+  place-items: center; padding: 2rem;
+  pointer-events: none;
+}
+.ed-empty-card {
+  pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  max-width: min(440px, 92%);
+  padding: 1.6rem 1.6rem 1.4rem;
+  border-radius: var(--r-isla);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), transparent 35%),
+    var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 28px 60px -28px rgba(0,0,0,0.7),
+    inset 0 1px 0 var(--hl);
+}
+.ed-empty-ic {
+  display: grid; place-items: center; width: 46px; height: 46px;
+  border-radius: 13px; margin-bottom: 0.85rem;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+}
+.ed-empty-tit {
+  margin: 0 0 0.4rem; font: 700 var(--t-lg)/1.3 var(--font-ui);
+  color: var(--text); letter-spacing: -0.015em;
+}
+.ed-empty-sub {
+  margin: 0 0 1rem; font-size: var(--t-sm); color: var(--muted);
+  line-height: 1.55; max-width: 34ch;
+}
+.ed-empty-cta {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0.55rem 1rem; border-radius: var(--r);
+  background: var(--grad); color: var(--accent-ink, var(--bg-deep));
+  border: 1px solid var(--accent-line); cursor: pointer;
+  font: 700 var(--t-sm)/1 var(--font-ui); letter-spacing: -0.005em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18),
+    0 10px 22px -14px rgba(76,195,138,0.55);
+  transition: filter var(--tr), transform var(--tr);
+}
+.ed-empty-cta:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.ed-empty-cta:active { transform: translateY(0); }
+.ed-empty-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent);
+}
+/* Ejemplos típicos — chips no clicables, pista del lenguaje del producto. */
+.ed-empty-ex {
+  list-style: none; padding: 0;
+  margin: 0.9rem 0 0; display: flex; flex-wrap: wrap; gap: 6px 8px;
+  justify-content: center;
+}
+.ed-empty-ex li code {
+  font: 500 11px/1 var(--font-mono); color: var(--muted);
+  background: var(--surface-2); padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--border-soft);
+}
+/* Tips de atajos cuando el workspace TIENE archivos. Pequeña enseñanza
+   del flujo sin gastar pantalla. */
+.ed-empty-tips {
+  list-style: none; padding: 0;
+  margin: 0.4rem 0 0; display: flex; flex-direction: column;
+  gap: 8px; text-align: left; width: 100%; max-width: 320px;
+}
+.ed-empty-tips li {
+  display: flex; align-items: center; gap: 10px;
+  font-size: var(--t-sm); color: var(--text-2);
+}
+.ed-empty-tips li > span { color: var(--muted); }
+.ed-empty-tips li kbd {
+  font: 600 11px/1 var(--font-mono); color: var(--text);
+  background: var(--surface-2);
+  padding: 3px 7px; border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.18);
+}
+/* Banda de línea activa PREMIUM: degradado lateral muy sutil (luz que cae
+   del filo de acento, no un bloque plano) + filo de acento a la izquierda
+   y costuras hairline arriba/abajo que la "asientan" en el código.
+   (left/right/height SAGRADOS — sólo cambia el aspecto.) */
+.ed-active {
+  position: absolute; left: 52px; right: 0; height: 22px;
+  z-index: 0; pointer-events: none;
+  background: linear-gradient(90deg,
+    rgba(76, 195, 138, 0.05), var(--ed-line) 96px, var(--ed-line));
+  box-shadow:
+    inset 2px 0 0 var(--ed-line-edge),
+    inset 0 1px 0 rgba(255, 255, 255, 0.022),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.022);
+}
+/* El "premium" continúa dentro de la canaleta: el nº de línea actual se
+   asienta sobre un realce gemelo de la banda (misma altura/aritmética). */
+.ed-gutter-active {
+  position: absolute; left: 0; width: 52px; height: 22px; z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--ed-line));
+  box-shadow: inset 2px 0 0 var(--ed-line-edge);
+}
+.ed-hl {
+  position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
+  pointer-events: none; font-family: var(--font-mono); font-size: 14px;
+  line-height: 22px; padding: 20px 24px 20px 64px; white-space: pre;
+  tab-size: 4; color: var(--text); background: transparent;
+}
+/* El <code> sólo aloja el texto resaltado. Las guías de indentación YA NO
+   se pintan aquí con un repeating-gradient full-screen (esa rejilla de
+   juguete a lo largo y ancho de TODO el editor era la queja): ahora son
+   una capa propia (.ed-guides) calculada del código real, sólo dentro de
+   bloques. width:max-content sigue siendo necesario para que el scroll
+   horizontal arrastre el bloque entero; min-height llena archivos cortos. */
+.ed-hl code {
+  display: block; font: inherit;
+  width: max-content; min-width: 100%; min-height: 100%;
+  background: none;
+}
+/* ── GUÍAS DE INDENTACIÓN reales (firma de IDE pro) ──────────────────
+   Una capa scroll-sincronizada (transform en sincronizarScroll, igual
+   que el <code> y la presencia: sin geometría nueva, reusa LINE_H/
+   PAD_TOP). Cada guía es un filo vertical que vive SÓLO el alto de su
+   bloque — no una rejilla. En reposo recede; la del scope que envuelve
+   al cursor se enciende en acento (como PyCharm). `ch` = celda mono
+   exacta (font 14px heredado), por eso cae justo en cada parada de 4. */
+.ed-guides {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  pointer-events: none; font: 14px/22px var(--font-mono);
+}
+.ed-guides-scroll { position: absolute; inset: 0; will-change: transform; }
+.ed-guide-line {
+  position: absolute; width: 1px;
+  background: var(--ed-guide);
+  transition: background var(--tr);
+}
+.ed-guide-line.activa {
+  background: var(--ed-guide-activa);
+  box-shadow: 0 0 0 0.5px var(--ed-guide-activa);
+}
+/* ── Plegado: marca "⋯" tras la cabecera contraída (look PyCharm) ──
+   Capa scroll-sincronizada (translate -sl,-st) igual que el código,
+   posicionada en `ch` exactos para caer justo donde termina el texto
+   de la cabecera. No intercepta el mouse: el textarea sigue editable. */
+.ed-folds {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  pointer-events: none; font: 14px/22px var(--font-mono);
+}
+.ed-folds-scroll { position: absolute; inset: 0; will-change: transform; }
+.ed-foldmark {
+  /* OJO: NO sobrescribimos font-size/font-family. El `left` del foldmark
+     viene calculado en `ch` con la fuente MONO 14px del editor (vive en
+     `.ed-folds`). Si acá poníamos UI 11px, `1ch` valía menos y el "⋯"
+     caía encima de la cabecera (issue visible cuando se plegaba). */
+  position: absolute; height: 22px; line-height: 22px;
+  color: var(--muted); opacity: 0.75;
+  display: inline-flex; align-items: center;
+  padding: 0 2px; letter-spacing: 0.04em;
+}
+/* ── Flecha de plegado en la canaleta ────────────────────────────────
+   El gutter es pointer-events:none (overlay); SOLO la flecha recibe
+   click. Discreta en reposo, nítida al pasar el mouse o si está
+   plegada — afordancia clara sin ruido visual. */
+.ed-gutter-fold {
+  position: absolute; left: 0; top: 0; right: 0;
+  z-index: 2; pointer-events: none; will-change: transform;
+}
+.ed-chevron {
+  position: absolute; left: 1px; width: 16px; height: 22px;
+  display: grid; place-items: center; padding: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); opacity: 0.5; pointer-events: auto;
+  transition: opacity var(--tr), color var(--tr);
+}
+/* Visible siempre (descubrible, como PyCharm); se realza al pasar el
+   mouse por la canaleta o al estar plegada. */
+.ed-gutter:hover .ed-chevron { opacity: 0.8; }
+.ed-chevron:hover { color: var(--text); opacity: 1; }
+.ed-chevron.plegada {
+  opacity: 1; color: var(--accent);
+}
+/* Plegada = flecha apuntando a la derecha (rotación del mismo glifo). */
+.ed-chevron.plegada svg { transform: rotate(-90deg); }
+.ed-chevron svg { transition: transform var(--tr); }
+.ed-pres { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.ed-pres-scroll { position: absolute; left: 0; right: 0; top: 0; }
+.marca { position: absolute; left: 0; right: 0; height: 22px; }
+.marca .tinte { position: absolute; inset: 0; opacity: 0.1; }
+.marca .raya { position: absolute; left: 0; right: 0; top: 0; height: 2px; }
+/* Etiqueta de presencia: cápsula nítida con el nombre, micro-sombra para
+   despegar del código sin taparlo. */
+.marca .etiqueta {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; padding: 1px 7px; border-radius: var(--r-pill); color: var(--av-ink);
+  font-weight: 750; white-space: nowrap; font-family: var(--font-ui);
+  letter-spacing: -0.01em; box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.6);
+}
+/* Peer cuyo cursor cae en un bloque QUE YO plegué: no se pierde (tesis
+   "el sistema sabe"). No pinto la banda de línea (no está en ESA línea):
+   solo su etiqueta sobre la cabecera, con "⋯", + el punto del gutter
+   anillado para distinguir "está adentro, contraído". */
+.marca.oculto .tinte, .marca.oculto .raya { opacity: 0; }
+.marca.oculto .etiqueta { opacity: 0.92; }
+.gmark.oculto { box-shadow: 0 0 0 1.5px var(--ed-gutter-bg), 0 0 0 2.5px currentColor; }
+.ed-ta {
+  flex: 1; position: relative; z-index: 1; background: transparent;
+  color: transparent; -webkit-text-fill-color: transparent;
+  caret-color: var(--accent); border: none; font-family: var(--font-mono);
+  font-size: 14px; line-height: 22px; padding: 20px 24px 20px 64px;
+  resize: none; outline: none; white-space: pre; overflow: auto; tab-size: 4;
+}
+.ed-ta::selection { background: rgba(76, 195, 138, 0.26); }
+.ed-ta::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
+.ed-gutter {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 52px;
+  overflow: hidden; pointer-events: none; z-index: 3;
+  background: var(--ed-gutter-bg);
+  border-right: 1px solid var(--border-soft);
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.3);
+  font-family: var(--font-mono); font-size: 14px; line-height: 22px;
+}
+.ed-gutter-scroll {
+  position: relative; z-index: 1;
+  padding: 20px 10px 0 0; text-align: right;
+  color: var(--faint); white-space: pre;
+}
+.editorwrap.off .ed-gutter,
+.editorwrap.off .ed-active,
+.editorwrap.off .ed-gutter-active { display: none; }
+/* En vacío manda UN solo mensaje: el ::after con jerarquía. El textarea
+   sigue presente (es el editor real) pero su placeholder NO compite —
+   se calla para no duplicar el aviso con otras palabras. */
+.editorwrap.off .ed-ta::placeholder { color: transparent; -webkit-text-fill-color: transparent; }
+
+/* Tokens de Prism con NUESTRA paleta (sin su theme). Calibrados para
+   JERARQUÍA, no para colorido: lo que MÁS leés —identificadores y
+   variables— se queda en --text (lo más brillante); la sintaxis (azúcar,
+   puntuación, comentarios) RECEDE. Tipos ≠ funciones ≠ builtins: tres
+   familias frías distintas para escanear estructura sin esfuerzo. Sin
+   saturación de juguete, contraste AA sobre el pozo. */
+.token.comment, .token.prolog, .token.doctype, .token.cdata {
+  color: #7c8598; font-style: italic;  /* 2º plano pero AA real sobre el pozo */
+}
+.token.punctuation { color: var(--muted); }
+.token.operator, .token.entity { color: var(--text-2); }
+.token.url { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+.token.keyword, .token.boolean, .token.important, .token.atrule { color: #c79ce0; }
+.token.string, .token.char, .token.attr-value, .token.regex { color: #d8b35e; }
+.token.number, .token.unit { color: #dd9266; }
+/* función ≠ marca: verde calmo, NO el accent del producto (no compite
+   con la UI viva). */
+.token.function, .token.maybe-class-name { color: #5cc8a2; }
+/* tipos/clases: cian frío, su propia familia (se despegan de funciones
+   y de los builtins azules). */
+.token.class-name, .token.title.class-name { color: #4fc4c9; }
+.token.builtin, .token.tag, .token.selector, .token.attr-name,
+.token.property, .token.constant, .token.symbol { color: #66aef0; }
+/* decoradores/anotaciones/namespace = meta: su propia familia (lavanda
+   apagada), bien separada del gris de la puntuación y del púrpura vivo
+   del keyword — no se confunde con ninguno. */
+.token.decorator, .token.annotation, .token.namespace { color: #9d8fc4; }
+.token.deleted { color: var(--bad); }
+.token.inserted { color: var(--ok); }
+
+/* ── Status bar ── */
+.statusbar {
+  flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0.8rem; font-size: var(--t-xs); color: var(--muted);
+  min-height: 27px;
+}
+.statusbar .sb { display: inline-flex; align-items: center; gap: 0.35rem; }
+.statusbar .sep { color: var(--faint); opacity: .55; }
+.statusbar .pt { width: 6px; height: 6px; border-radius: 50%; }
+.statusbar .vivo {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: pulso 2.6s ease-in-out infinite;
+}
+.statusbar b { color: var(--text-2); font-weight: 600; }
+
