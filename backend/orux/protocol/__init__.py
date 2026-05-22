@@ -35,9 +35,8 @@ from .messages import (
     SessionMessage,
     UpdateMessage,
     WelcomeMessage,
-    decode,
-    encode,
 )
+from .codec import decode, encode
 
 __all__ = [
     "AdminAssignManyMessage",
