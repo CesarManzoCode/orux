@@ -42,12 +42,14 @@ UI es deuda cosmética (se pule luego con un display-name), no se negocia.
    no se inicia nada — opcional: ocultarlo si un `GET /oauth/github/login`
    diera 503, pero no es necesario para un primer corte.
 
-2. **Al volver al SPA** (`/app/`), leer los query params:
-   - Éxito: `?session=<token>`. Tratarlo **idéntico** a `orux_session`
-     de localStorage hoy: guardarlo y mandar `SessionMessage(token)` por el
-     WebSocket. Es el mismo token de la capa 7 — el flujo auth→lobby→equipo
-     no cambia. Limpiar el query de la URL después (history.replaceState)
-     para que el token no quede en la barra ni en el historial.
+2. **Al volver al SPA** (`/app/`), leer la URL de retorno:
+   - Éxito: el token viene en el **FRAGMENT** — `#session=<token>`, NO en el
+     query. El fragmento no viaja al server ni aparece en Referer/logs de
+     proxy (ver `_volver` en `api/app.py`, BACKEND-AUDIT-0019). Leerlo de
+     `location.hash`, tratarlo **idéntico** a `orux_session` de localStorage:
+     guardarlo y mandar `SessionMessage(token)`. Es el mismo token de la capa
+     7 — el flujo auth→lobby→equipo no cambia. Limpiar el fragmento después
+     (history.replaceState).
    - Error: `?oauth_error=<código>` — códigos: `cancelado` (el usuario
      canceló en GitHub), `state` (CSRF/link vencido), `github` (falló el
      intercambio). Mostrar un aviso y volver al login normal.

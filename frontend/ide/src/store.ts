@@ -443,23 +443,23 @@ function onMessage(raw: string) {
 }
 
 // OAuth GitHub: cuando el login con GitHub sale bien, el callback del backend
-// redirige el navegador a /app/?session=<token>. Ese token es el MISMO de la
-// capa 7 (HMAC) — lo absorbemos como si fuera el `orux_session` de
-// localStorage y dejamos que `connect()` lo mande como SessionMessage, igual
-// que el auto-login. Limpiamos el query para que el token no quede en la
-// barra de direcciones ni en el historial. (El caso de error, ?oauth_error=,
-// lo muestra Login.tsx.)
+// redirige el navegador a /app/#session=<token>. El token va en el FRAGMENT
+// (#...), NO en el query — el fragmento no viaja al server ni aparece en
+// Referer/logs de proxy (decisión de seguridad del backend, `_volver` en
+// api/app.py). Por eso se lee de `location.hash`, no de `location.search`.
+// Ese token es el MISMO de la capa 7 (HMAC); lo absorbemos como si fuera el
+// `orux_session` de localStorage y `connect()` lo manda como SessionMessage,
+// igual que el auto-login. Limpiamos el fragmento para que el token no quede
+// en la barra ni en el historial. (El error, ?oauth_error=, sí va en el
+// query y lo muestra Login.tsx.)
 function absorberSesionDeURL() {
   try {
-    const params = new URLSearchParams(location.search);
-    const token = params.get("session");
+    const hash = location.hash.replace(/^#/, "");
+    const token = new URLSearchParams(hash).get("session");
     if (!token) return;
     localStorage.setItem("orux_session", token);
-    params.delete("session");
-    const q = params.toString();
-    history.replaceState(
-      null, "", location.pathname + (q ? "?" + q : "") + location.hash,
-    );
+    // Saca el token del fragmento; deja intactos el path y el query.
+    history.replaceState(null, "", location.pathname + location.search);
   } catch { /* sin URL API / storage bloqueado: sigue el login normal */ }
 }
 
