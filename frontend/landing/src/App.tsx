@@ -43,12 +43,15 @@ function Logomark({ size = 22, className }: { size?: number; className?: string 
 }
 
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
 };
+// Stagger del hero: 0.05 (no 0.08) — la cascada se siente "instrumento
+// se asienta", no "se está dibujando despacio". Con 9 hijos, 0.05 deja
+// el último item en 360ms, dentro del bolsillo del TTI percibido.
 const stagger: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.08 } },
+  show: { transition: { staggerChildren: 0.05 } },
 };
 
 function Reveal({
@@ -314,14 +317,28 @@ function Stage({ t }: { t: Traducciones }) {
 
 export function App() {
   const reduce = useReducedMotion();
+  // Dos disparadores distintos para dos efectos distintos:
+  //  · `scrolled` apenas salgas del top → activa el fondo translúcido
+  //    del nav (es un acabado: "ya empezaste a leer").
+  //  · `pastHero` cuando dejás atrás el hero (~viewport completo) →
+  //    activa el sticky CTA móvil. Antes ambos usaban el mismo umbral
+  //    (16px), así que el sticky aparecía a los 4 px de scroll y robaba
+  //    fold antes de que el visitante hubiese leído el pitch.
   const [scrolled, setScrolled] = useState(false);
+  const [pastHero, setPastHero] = useState(false);
   const [lang, setLangState] = useState<Lang>(cargaLang);
   const t = T[lang];
 
   const setLang = (l: Lang) => { guardaLang(l); setLangState(l); };
 
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 16);
+    const on = () => {
+      const y = window.scrollY;
+      setScrolled(y > 16);
+      // Umbral móvil: ~80% del viewport. El sticky entra cuando el
+      // visitante DEJÓ el hero, no cuando movió el dedo.
+      setPastHero(y > Math.min(window.innerHeight * 0.8, 720));
+    };
     on();
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
@@ -404,9 +421,9 @@ export function App() {
           </motion.div>
 
           <motion.div className="hero-stage-col"
-            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 24 }}
+            initial={reduce ? { opacity: 1 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
           >
             <Stage t={t} />
             <p className="stage-cap" aria-label={t.stage_cap_aria}>
@@ -652,13 +669,13 @@ export function App() {
         </div>
       </section>
 
-      {/* ── Sticky CTA móvil (solo aparece tras hacer scroll) ── */}
-      <div className={"sticky-cta" + (scrolled ? " visible" : "")} aria-hidden={!scrolled}>
+      {/* ── Sticky CTA móvil (solo aparece tras dejar atrás el hero) ── */}
+      <div className={"sticky-cta" + (pastHero ? " visible" : "")} aria-hidden={!pastHero}>
         <div className="sticky-l">
           <span className="sticky-dot" />
           <span>{t.sticky_label}</span>
         </div>
-        <a className="btn primary sm" href={APP} tabIndex={scrolled ? 0 : -1}>
+        <a className="btn primary sm" href={APP} tabIndex={pastHero ? 0 : -1}>
           {t.sticky_cta} <span className="arr">→</span>
         </a>
       </div>

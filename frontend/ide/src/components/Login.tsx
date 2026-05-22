@@ -186,11 +186,11 @@ export function Login() {
           <div className="lp-feed" aria-hidden>
             <div className="lf-h"><span className="lf-live" /> {t.login_feed_header}</div>
             <div className="lf-row">
-              <span className="who" style={{ background: "#6ea8e6" }}>A</span>
+              <span className="who" style={{ background: "var(--info)" }}>A</span>
               Ana → roster.py <em className="ok">{t.login_feed_approved}</em>
             </div>
             <div className="lf-row">
-              <span className="who" style={{ background: "#d6a341" }}>K</span>
+              <span className="who" style={{ background: "var(--warn)" }}>K</span>
               Kai → sync.py <em className="wt">{t.login_feed_impact}</em>
             </div>
           </div>

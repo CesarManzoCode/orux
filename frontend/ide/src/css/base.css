@@ -450,6 +450,11 @@ button:active { transform: translateY(1px); }
   transition: background var(--tr), color var(--tr), box-shadow var(--tr);
 }
 .row:hover { background: var(--surface-2); color: var(--text); }
+/* Navegación por teclado: cuando un botón interno (twist o delx)
+   recibe foco, la fila gana el mismo registro que el hover —
+   el ojo del usuario que tabula no se pierde. La activa sigue
+   ganando (mantiene su barra de acento). */
+.row:focus-within:not(.activo) { background: var(--surface-2); color: var(--text); }
 .row.activo {
   background: var(--accent-weak); color: var(--text);
   box-shadow: inset 2px 0 0 var(--accent);
@@ -542,7 +547,11 @@ button:active { transform: translateY(1px); }
   transition: opacity var(--tr), color var(--tr), background var(--tr);
 }
 .delx svg { display: block; }
-.row:hover .delx, .row:focus-within .delx, .delx:focus-visible { opacity: 1; }
+/* Descubribilidad: al hover de la fila el botón asoma a media tinta
+   (no agresivo, pero el ojo sabe que existe). Al hover sobre el
+   propio botón pasa al 100% y vira a "bad" para anunciar destructivo. */
+.row:hover .delx { opacity: 0.45; }
+.row:focus-within .delx, .delx:focus-visible, .delx:hover { opacity: 1; }
 .delx:hover { color: var(--bad); background: var(--bad-bg); }
 .delx:focus-visible {
   outline: none; color: var(--bad); background: var(--bad-bg);

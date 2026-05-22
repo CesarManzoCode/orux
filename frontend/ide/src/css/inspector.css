@@ -521,8 +521,18 @@
     var(--shadow-sm),
     0 0 0 1px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(6px);
-  animation: fade-in 320ms var(--ease-in) both;
+  /* Entrada propia: el pill anuncia que ALGUIEN llegó a tu archivo.
+     Cae desde arriba con un leve scale para que el ojo lo registre
+     en la periferia sin que sea juguete. Es vida, no animación. */
+  animation: ed-livepill-in 320ms var(--ease-in) both;
   pointer-events: none;
+}
+@keyframes ed-livepill-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ed-livepill { animation: none; }
 }
 .ed-livepill svg { color: var(--accent); }
 .ed-livepill-tx { color: var(--accent); }

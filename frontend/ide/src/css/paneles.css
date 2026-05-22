@@ -183,6 +183,11 @@
   font-size: var(--t-xs); font-weight: 600; font-family: var(--font-mono);
   padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border-soft);
   background: var(--surface-2); letter-spacing: -0.01em;
+  /* `git status` cambia en vivo (rama, n° de cambios). La transición
+     hace que el chip "respire" al pasar de limpio a sucio en lugar de
+     saltar — vida sin alarma. */
+  transition: background var(--tr-slow), color var(--tr-slow),
+    border-color var(--tr-slow);
 }
 .tb-rama { color: var(--text-2); }
 .tb-rama svg { color: var(--faint); }
@@ -358,7 +363,12 @@
   font: inherit; color: inherit; cursor: pointer; text-align: left;
   transition: background var(--tr);
 }
+/* Hover del header: la afordancia "esto se pliega" se lee sin tocarlo.
+   El eyebrow y el chevron suben un escalón de contraste — el header
+   "tiene gesto", no "es un título estático". */
 .insec-h:hover { background: var(--surface-2); }
+.insec-h:hover .insec-t { color: var(--text-2); }
+.insec-h:hover .insec-chev { color: var(--muted); }
 .insec.plegada > .insec-h { border-bottom-color: transparent; }
 .insec-ic { color: var(--faint); display: flex; }
 .insec.alarma .insec-ic { color: var(--bad); }

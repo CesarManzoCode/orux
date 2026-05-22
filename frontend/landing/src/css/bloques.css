@@ -51,7 +51,10 @@
 
 @media (max-width: 600px) {
   .faq-q { font-size: 15px; padding: 18px 2px; gap: 12px; }
-  .faq-a { font-size: 13.5px; line-height: 1.62; }
+  .faq-a { font-size: 13.5px; line-height: 1.7; }
+  /* Respuesta del FAQ en mobile: un poco más de aire arriba (8px en vez
+     de 2px) para que el texto no se pegue al pregunta-button al expandir. */
+  .faq-a-inner { padding: 8px 4px 24px; }
   .faq-q .chev { width: 24px; height: 24px; }
 }
 
