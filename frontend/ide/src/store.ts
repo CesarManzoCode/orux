@@ -229,7 +229,7 @@ function sembrarYo(username: string) {
   // Identidad mínima inmediata (nombre = usuario, color tentativo) para que
   // el Hub muestre algo apenas autentica. El color real cae cuando termina
   // el hash; el welcome del equipo después lo confirma con el del server.
-  set({ yo: { client_id: username, name: username, color: "" } });
+  set({ yo: { client_id: username, name: nombreVisible(username), color: "" } });
   colorDeUsuario(username).then((color) => {
     const yo = state.yo;
     if (yo && yo.client_id === username) set({ yo: { ...yo, color } });
@@ -340,9 +340,12 @@ function onMessage(raw: string) {
       break;
     }
     case "welcome": {
+      // El server manda la identidad cruda (gh:<login> para usuarios de
+      // GitHub); la limpiamos para mostrar. client_id queda crudo.
       const peers: Record<string, Peer> = {};
-      for (const p of m.peers) peers[p.client_id] = p;
-      set({ yo: m.you, peers });
+      for (const p of m.peers)
+        peers[p.client_id] = { ...p, name: nombreVisible(p.name) };
+      set({ yo: { ...m.you, name: nombreVisible(m.you.name) }, peers });
       break;
     }
     case "presence":
@@ -353,13 +356,13 @@ function onMessage(raw: string) {
         !(m.client_id in state.peers) &&
         (!state.yo || m.client_id !== state.yo.client_id)
       ) {
-        act("join", m.name, "se conectó al equipo");
+        act("join", nombreVisible(m.name), "se conectó al equipo");
       }
       set({
         peers: {
           ...state.peers,
           [m.client_id]: {
-            client_id: m.client_id, name: m.name, color: m.color,
+            client_id: m.client_id, name: nombreVisible(m.name), color: m.color,
             path: m.path, line: m.line,
           },
         },
@@ -403,8 +406,10 @@ function onMessage(raw: string) {
       break;
     }
     case "proposal": {
-      act("propuesta", m.proposal.author_name,
-        "propuso cambios", m.proposal.path);
+      // author_name es texto para mostrar (se le saca el gh:); author_id,
+      // que es identidad, queda intacto dentro de ...m.proposal.
+      const autor = nombreVisible(m.proposal.author_name);
+      act("propuesta", autor, "propuso cambios", m.proposal.path);
       // Conservar seen_at si la propuesta ya existía (re-broadcast): el "hace
       // X" no debe rebotar a "recién" cuando el server reenvía el mismo id.
       const prev = state.proposals[m.proposal.id];
@@ -412,16 +417,16 @@ function onMessage(raw: string) {
       set({
         proposals: {
           ...state.proposals,
-          [m.proposal.id]: { ...m.proposal, seen_at },
+          [m.proposal.id]: { ...m.proposal, author_name: autor, seen_at },
         },
       });
       break;
     }
     case "impact": {
       const key = m.source_path + "::" + m.affected_path;
-      act("impacto", m.author_name,
-        `tocó ${m.source_path} — afecta`, m.affected_path);
-      set({ impacts: { ...state.impacts, [key]: m } });
+      const autor = nombreVisible(m.author_name);
+      act("impacto", autor, `tocó ${m.source_path} — afecta`, m.affected_path);
+      set({ impacts: { ...state.impacts, [key]: { ...m, author_name: autor } } });
       break;
     }
     case "admin_info":
@@ -713,8 +718,17 @@ export function descartarImpacto(key: string) {
   delete im[key];
   set({ impacts: im });
 }
+// Nombre para MOSTRAR: la identidad de un usuario de GitHub es `gh:<login>`
+// (el prefijo es una defensa de seguridad — ver identity/oauth.py: evita que
+// alguien preregistre el handle de una víctima). Pero ese `gh:` no se le
+// muestra a la gente: en pantalla va sólo el login. La identidad real
+// (client_id, author_id, owners, la lista de usuarios del admin) NUNCA se
+// toca — sólo se limpia el texto que ve un humano.
+export function nombreVisible(name: string): string {
+  return name.startsWith("gh:") ? name.slice(3) : name;
+}
 export function nombreDe(cid: string): string {
   if (state.yo && cid === state.yo.client_id) return state.yo.name;
   if (state.peers[cid]) return state.peers[cid].name;
-  return cid;
+  return nombreVisible(cid);
 }

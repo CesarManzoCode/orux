@@ -246,6 +246,23 @@ export const T = {
     inv_how_2: "Tu invitado lo abre y entra (con GitHub o usuario y contraseña).",
     inv_how_3: "Aparece dentro de este equipo con el rol \"member\".",
     inv_limit_note: "Plan free: 5 devs por equipo. Premium: sin tope.",
+    // Empty-state del workspace (primera sesión guiada)
+    ews_title: "Tu equipo está listo — falta el código.",
+    ews_sub: "Orux trabaja sobre tu repositorio de Git. Traé tu código para arrancar, o creá un archivo si solo querés probar.",
+    ews_clone_t: "Clonar tu repositorio",
+    ews_clone_d: "El camino habitual: traé tu proyecto de GitHub y empezá a coordinar sobre él.",
+    ews_new_t: "Crear un archivo",
+    ews_new_d: "¿Solo querés probar? Empezá con un archivo en blanco.",
+    ews_invite_t: "Invitar a tu equipo",
+    ews_invite_d: "La coordinación se nota cuando hay alguien más. Sumalos con un link.",
+    ews_foot: "Apenas haya código y tu equipo esté dentro, vas a ver presencia, ownership e impacto en vivo en el panel de la derecha.",
+    // Avisos del navegador (notificaciones)
+    notif_prop_title: "Propuesta para vos",
+    notif_prop_body: (actor: string, archivo: string) =>
+      `${actor} te propone cambios en ${archivo}`,
+    notif_imp_title: "Impacto en tu código",
+    notif_imp_body: (actor: string, archivo: string) =>
+      `Un cambio de ${actor} afecta tu ${archivo}`,
 
     // Nuevo archivo modal
     nf_title: "nuevo archivo",
@@ -805,6 +822,23 @@ export const T = {
     inv_how_2: "They open it and sign in (with GitHub or username and password).",
     inv_how_3: "They appear inside this team with the \"member\" role.",
     inv_limit_note: "Free plan: 5 devs per team. Premium: no cap.",
+    // Workspace empty-state (guided first session)
+    ews_title: "Your team is set up — now the code.",
+    ews_sub: "Orux works on top of your Git repo. Bring your code in to start, or create a file if you just want to try it.",
+    ews_clone_t: "Clone your repository",
+    ews_clone_d: "The usual path: pull your project from GitHub and start coordinating on it.",
+    ews_new_t: "Create a file",
+    ews_new_d: "Just trying it out? Start with a blank file.",
+    ews_invite_t: "Invite your team",
+    ews_invite_d: "Coordination shows once someone else is here. Add them with a link.",
+    ews_foot: "Once there's code and your team is in, you'll see presence, ownership and impact live in the right-hand panel.",
+    // Browser notifications
+    notif_prop_title: "A proposal for you",
+    notif_prop_body: (actor: string, file: string) =>
+      `${actor} proposes changes to ${file}`,
+    notif_imp_title: "Impact on your code",
+    notif_imp_body: (actor: string, file: string) =>
+      `A change by ${actor} affects your ${file}`,
 
     // New file modal
     nf_title: "new file",

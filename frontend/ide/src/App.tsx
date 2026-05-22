@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "./useStore";
 import {
   getState, guardar, contarDrafts, resolver, seleccionar,
@@ -12,6 +12,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Tabs } from "./components/Tabs";
 import { ContextBar } from "./components/ContextBar";
 import { Editor } from "./components/Editor";
+import { EmptyWorkspace } from "./components/EmptyWorkspace";
 import { StatusBar } from "./components/StatusBar";
 import { AdminModal } from "./components/AdminModal";
 import { Inspector } from "./components/Inspector";
@@ -272,6 +273,68 @@ export function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
+  // Avisos del navegador — registro de avisos ya mostrados (por id de
+  // evento). Es un ref, no estado: cambiarlo no debe re-renderizar.
+  const notifSeen = useRef<Set<string>>(new Set());
+
+  // Pide permiso de notificaciones al entrar a un equipo. `requestPermission`
+  // sólo abre el diálogo si la decisión está pendiente ("default"); si ya se
+  // concedió o denegó, no molesta. También reinicia el registro de avisos:
+  // es por-equipo (cambiar de equipo empieza de cero).
+  useEffect(() => {
+    if (s.fase !== "team") return;
+    notifSeen.current.clear();
+    if ("Notification" in window && Notification.permission === "default") {
+      try { Notification.requestPermission().catch(() => {}); }
+      catch { /* navegador sin la API */ }
+    }
+  }, [s.fase]);
+
+  // Avisos del navegador — dispara una notificación cuando llega algo que te
+  // NECESITA (una propuesta sobre un archivo tuyo, o un impacto sobre uno
+  // tuyo) y la pestaña NO está enfocada. Si estás mirando Orux no molesta:
+  // ya lo ves en vivo. `notifSeen` evita re-notificar lo mismo en cada
+  // render; al entrar a un equipo la pestaña está enfocada, así que las
+  // propuestas pendientes que cargan en el handshake no disparan aviso.
+  useEffect(() => {
+    const yo = s.yo?.client_id;
+    if (!yo) return;
+    const puede =
+      "Notification" in window && Notification.permission === "granted";
+
+    type Aviso = { id: string; titulo: string; cuerpo: string };
+    const avisos: Aviso[] = [];
+    for (const p of Object.values(s.proposals)) {
+      if (s.owners[p.path] === yo && p.author_id !== yo) {
+        avisos.push({
+          id: "prop:" + p.id,
+          titulo: t.notif_prop_title,
+          cuerpo: t.notif_prop_body(p.author_name, p.path),
+        });
+      }
+    }
+    for (const im of Object.values(s.impacts)) {
+      if (s.owners[im.affected_path] === yo) {
+        avisos.push({
+          id: "imp:" + im.source_path + "::" + im.affected_path,
+          titulo: t.notif_imp_title,
+          cuerpo: t.notif_imp_body(im.author_name, im.affected_path),
+        });
+      }
+    }
+
+    for (const a of avisos) {
+      if (notifSeen.current.has(a.id)) continue;
+      notifSeen.current.add(a.id);  // visto: no re-notificar en próximos renders
+      if (puede && document.hidden) {
+        try {
+          const n = new Notification(a.titulo, { body: a.cuerpo, tag: a.id });
+          n.onclick = () => { window.focus(); n.close(); };
+        } catch { /* algunos navegadores restringen el constructor */ }
+      }
+    }
+  }, [s.proposals, s.impacts, s.owners, s.yo, t]);
+
   // La app está cerrada por dos compuertas: sin autenticar -> login;
   // autenticado pero sin equipo -> lobby (capa 15). Sólo dentro de un
   // equipo se ve el IDE, y es el de ESE equipo y de ningún otro.
@@ -294,9 +357,15 @@ export function App() {
           onResize={onResizeSide}
         />
         <main className="main isla">
-          <Tabs />
-          <ContextBar />
-          <Editor />
+          {Object.keys(s.files).length === 0 ? (
+            <EmptyWorkspace onIrAGit={() => setVista("git")} />
+          ) : (
+            <>
+              <Tabs />
+              <ContextBar />
+              <Editor />
+            </>
+          )}
         </main>
         {inspOpen && (
           <>

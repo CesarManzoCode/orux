@@ -3810,3 +3810,55 @@ button:active { transform: translateY(1px); }
   opacity: 0.55; cursor: not-allowed; transform: none; filter: saturate(0.6);
 }
 .gh-btn svg { display: block; flex: none; }
+
+/* ── Empty-state del workspace (primera sesión guiada) ───────────────────
+   Se muestra en el área central cuando el equipo no tiene archivos: orienta
+   al equipo nuevo a clonar, crear o invitar. Bloque aditivo. */
+.ews {
+  flex: 1; width: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem; overflow: auto;
+}
+.ews-card { width: 100%; max-width: 520px; }
+.ews-h {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-ui); font-size: 1.15rem; font-weight: 680;
+  letter-spacing: -0.015em;
+}
+.ews-sub {
+  margin: 0 0 1.4rem;
+  font-family: var(--font-ui); font-size: var(--t-sm);
+  color: var(--mut, #8b9098); line-height: 1.5;
+}
+.ews-steps { display: flex; flex-direction: column; gap: 0.6rem; }
+.ews-step {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 0.85rem 0.9rem; border-radius: var(--r);
+  color: inherit;
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-soft);
+  transition: background var(--tr), border-color var(--tr), transform var(--tr);
+}
+.ews-step:hover {
+  background: var(--accent-soft); border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+.ews-step:active { transform: translateY(0); }
+.ews-step svg { flex: none; margin-top: 1px; color: var(--accent); }
+.ews-step-tx { display: flex; flex-direction: column; gap: 2px; }
+.ews-step-tx b {
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+}
+.ews-step-tx span {
+  font-family: var(--font-ui); font-size: 0.78rem;
+  color: var(--mut, #8b9098); line-height: 1.45;
+}
+.ews-primary {
+  background: var(--accent-soft); border-color: var(--accent-line);
+}
+.ews-foot {
+  margin: 1.3rem 0 0;
+  font-family: var(--font-ui); font-size: 0.78rem;
+  color: var(--mut, #8b9098); line-height: 1.5;
+}

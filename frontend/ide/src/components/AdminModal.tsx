@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shield, X } from "lucide-react";
 import { useStore } from "../useStore";
-import { adminAsignarVarios, nombreDe } from "../store";
+import { adminAsignarVarios, nombreDe, nombreVisible } from "../store";
 import { arbol, archivosDe, chipDe, type Nodo } from "../lang";
 import { useI18n } from "../i18n";
 import { ModalPortal } from "./ModalPortal";
@@ -137,7 +137,9 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
             {t.am_owner_label}
             <select value={user} onChange={(e) => setUser(e.target.value)}>
               <option value="">{t.am_owner_empty}</option>
-              {s.usuarios.map((u) => <option key={u} value={u}>{u}</option>)}
+              {s.usuarios.map((u) => (
+                <option key={u} value={u}>{nombreVisible(u)}</option>
+              ))}
             </select>
           </label>
           <span className="amcount">
@@ -162,7 +164,7 @@ export function AdminModal({ onClose }: { onClose: () => void }) {
           {n === 0
             ? t.am_hint_empty
             : user
-              ? t.am_hint_assign(user, n)
+              ? t.am_hint_assign(nombreVisible(user), n)
               : t.am_hint_nouser(n)}
         </footer>
       </div>
