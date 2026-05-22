@@ -1,9 +1,9 @@
-// Modal de invitación — el botón "invitar" del TopBar ya no muestra el
-// código como `<span>...<code>X</code></span>` (que invitaba al admin a
-// adivinar qué hacer con el string). Ahora abre esta vista: código grande,
-// botón copiar con feedback, microcopy de cómo se usa, y CTA para
-// regenerar si se perdió el viejo. El flujo del server (capa 15) no cambia
-// — sólo lo presentamos.
+// Modal de invitación — el botón "invitar" del TopBar abre esta vista: el
+// LINK de invitación (no el código suelto), botón copiar con feedback,
+// microcopy de cómo se usa, y CTA para regenerar. El invitado hace clic en
+// el link, entra (GitHub o usuario/contraseña) y se une al equipo solo —
+// store.ts canjea el ?invite= al llegar al lobby. El flujo del server
+// (capa 15) no cambia: el link sólo envuelve el código de un solo uso.
 import { useEffect, useRef, useState } from "react";
 import { Copy, Check, RefreshCw, X } from "lucide-react";
 import { crearInvite, emitToast } from "../store";
@@ -19,6 +19,12 @@ export function InviteModal({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  // Lo que se comparte es un LINK, no el código suelto. location.origin +
+  // pathname = la URL de la app (prod /app/, dev /). Si todavía no llegó el
+  // código del server, link queda "" (el input se ve vacío, igual que antes).
+  const link = code
+    ? location.origin + location.pathname + "?invite=" + encodeURIComponent(code)
+    : "";
   // Estados del botón "copiar": idle / ok / failed. `ok` se resetea solo
   // a los 1.5s para que el botón vuelva a su estado normal sin ruido.
   const [estado, setEstado] = useState<"idle" | "ok" | "failed">("idle");
@@ -42,7 +48,7 @@ export function InviteModal({
   }, [onClose]);
 
   const onCopiar = async () => {
-    const ok = await copiarTexto(code);
+    const ok = await copiarTexto(link);
     setEstado(ok ? "ok" : "failed");
     // Doble feedback: el botón cambia a "copiado" (afordancia local que
     // el ojo ya estaba mirando) Y un toast confirma a quien no apuntaba
@@ -90,7 +96,7 @@ export function InviteModal({
           <input
             ref={codeRef}
             className="inv-code"
-            value={code}
+            value={link}
             readOnly
             aria-label={t.inv_title}
             // Click sobre el campo selecciona todo: muscle memory de

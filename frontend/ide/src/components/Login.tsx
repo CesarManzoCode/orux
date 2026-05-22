@@ -23,6 +23,7 @@ import { validarUsuarioNuevo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
 import { LegalModal, type LegalDoc } from "./LegalModal";
 import { Logomark } from "./Logomark";
+import { Github } from "lucide-react";
 
 type Modo = "login" | "register";
 
@@ -42,6 +43,10 @@ export function Login() {
   // Doc legal abierto (null = ningún modal). Cuando hay valor, se monta
   // <LegalModal/> por encima de toda la pantalla; cerrar = volver a null.
   const [legalOpen, setLegalOpen] = useState<LegalDoc | null>(null);
+  // OAuth GitHub: si el callback falló, el navegador vuelve a
+  // /app/?oauth_error=<código>. Guardamos el código crudo (no el texto) y
+  // lo traducimos en el render, así el aviso sigue al idioma activo.
+  const [oauthErrCode, setOauthErrCode] = useState<string>("");
 
   // El spinner se apaga cuando el server responde (auth ok = se cambia de
   // vista; auth fail = entra loginError). Si en 7s no llegó nada, lo
@@ -52,6 +57,24 @@ export function Login() {
     const id = setTimeout(() => setBusy(false), 7000);
     return () => clearTimeout(id);
   }, [busy]);
+
+  // OAuth GitHub: al montar, leer una sola vez si volvimos con un error del
+  // callback. Se limpia el query de la URL para que no quede en la barra ni
+  // en el historial. El caso de éxito (?session=) lo absorbe `connect()` en
+  // store.ts antes de que esta pantalla se monte.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const err = params.get("oauth_error");
+      if (!err) return;
+      setOauthErrCode(err);
+      params.delete("oauth_error");
+      const q = params.toString();
+      history.replaceState(
+        null, "", location.pathname + (q ? "?" + q : "") + location.hash,
+      );
+    } catch { /* sin URL API: ignorar, se ve el login normal */ }
+  }, []);
 
   // Al cambiar de modo limpio contraseñas y errores; el usuario se queda
   // (es la única cosa "estable" entre crear y entrar — la mayoría lo
@@ -85,6 +108,16 @@ export function Login() {
     charset: t.login_user_charset,
     reservado: t.login_user_reserved,
   };
+  // Códigos de error que devuelve el callback de OAuth GitHub. Se traduce
+  // en el render (no al guardarlo) para que el aviso siga al idioma activo.
+  const MSG_OAUTH: Record<string, string> = {
+    cancelado: t.oauth_err_cancel,
+    state: t.oauth_err_state,
+    github: t.oauth_err_github,
+  };
+  const oauthErr = oauthErrCode
+    ? (MSG_OAUTH[oauthErrCode] ?? t.oauth_err_generic)
+    : "";
 
   const noPuede =
     busy ||
@@ -112,9 +145,16 @@ export function Login() {
     if (e.key === "Enter") enviar();
   };
 
+  // OAuth GitHub: navegación de página entera al backend (contenedor `api`;
+  // Caddy proxya /oauth/*). NO es fetch/WS. El backend hace el viaje a
+  // GitHub y vuelve a /app/ con ?session= o ?oauth_error=.
+  const irAGitHub = () => {
+    window.location.href = "/oauth/github/login";
+  };
+
   // Error a mostrar: si el server respondió algo, eso manda. Si no, el
   // local. Si no, el de offline. `min-height` en el CSS evita salto.
-  const errVisible = s.loginError || localErr || (offline ? t.login_offline : "");
+  const errVisible = s.loginError || localErr || oauthErr || (offline ? t.login_offline : "");
 
   return (
     <div className="landing">
@@ -324,6 +364,26 @@ export function Login() {
           </div>
 
           <div className="err" role="alert">{errVisible}</div>
+
+          {/* OAuth GitHub — entrar o registrarse con un clic, sin usuario
+              ni contraseña. Navegación de página entera al backend (Caddy
+              proxya /oauth/*); vuelve a /app/ con ?session= (lo absorbe
+              store.ts) o ?oauth_error= (lo lee el useEffect de arriba).
+              Sirve a ambos modos: si la cuenta gh: no existe, se crea. */}
+          <div className="gh-sep" aria-hidden>
+            <span className="gh-sep-line" />
+            <span className="gh-sep-tx">{t.login_oauth_sep}</span>
+            <span className="gh-sep-line" />
+          </div>
+          <button
+            type="button"
+            className="gh-btn"
+            onClick={irAGitHub}
+            disabled={busy}
+          >
+            <Github size={16} aria-hidden />
+            {t.login_github}
+          </button>
 
           {/* Footer-link al otro modo. Mismo motivo que el segmented: hay
               dos caminos al cruce porque hay dos formas de leer la UI. */}

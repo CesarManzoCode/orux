@@ -53,6 +53,13 @@ export const T = {
     login_sec1: "sesión HMAC",
     login_sec2: "cuenta cerrada",
     login_sec3: "sin telemetría",
+    // Login — OAuth con GitHub
+    login_github: "Continuar con GitHub",
+    login_oauth_sep: "o",
+    oauth_err_cancel: "Cancelaste el acceso con GitHub.",
+    oauth_err_state: "El enlace de acceso con GitHub venció. Probá de nuevo.",
+    oauth_err_github: "GitHub no pudo completar el acceso. Probá de nuevo.",
+    oauth_err_generic: "No se pudo entrar con GitHub. Probá de nuevo.",
 
     // Login — switch entre formularios (capa 29+)
     login_tab_signin: "Entrar",
@@ -228,15 +235,15 @@ export const T = {
 
     // Invite modal
     inv_title: "invitar a este equipo",
-    inv_intro: "Comparte este código con quien quieres invitar. Es de un solo uso: en cuanto alguien lo redime, generamos uno nuevo.",
+    inv_intro: "Comparte este link de invitación. Es de un solo uso: en cuanto alguien lo abre y entra, generamos uno nuevo.",
     inv_copy: "copiar",
     inv_copied: "copiado",
     inv_copy_failed: "no se pudo copiar — selecciónalo a mano",
-    inv_regenerate: "generar otro código",
+    inv_regenerate: "generar otro link",
     inv_close: "cerrar",
     inv_how_title: "cómo se usa",
-    inv_how_1: "Tu invitado entra a la app y abre el hub.",
-    inv_how_2: "Pega este código en \"unirme con un código\".",
+    inv_how_1: "Copia el link y mándaselo a quien quieras invitar.",
+    inv_how_2: "Tu invitado lo abre y entra (con GitHub o usuario y contraseña).",
     inv_how_3: "Aparece dentro de este equipo con el rol \"member\".",
     inv_limit_note: "Plan free: 5 devs por equipo. Premium: sin tope.",
 
@@ -605,6 +612,13 @@ export const T = {
     login_sec1: "HMAC session",
     login_sec2: "closed account",
     login_sec3: "no telemetry",
+    // Login — GitHub OAuth
+    login_github: "Continue with GitHub",
+    login_oauth_sep: "or",
+    oauth_err_cancel: "You cancelled the GitHub sign-in.",
+    oauth_err_state: "The GitHub sign-in link expired. Try again.",
+    oauth_err_github: "GitHub couldn't complete the sign-in. Try again.",
+    oauth_err_generic: "Couldn't sign in with GitHub. Try again.",
 
     // Login — switch between forms
     login_tab_signin: "Sign in",
@@ -780,15 +794,15 @@ export const T = {
 
     // Invite modal
     inv_title: "invite to this team",
-    inv_intro: "Share this code with the person you want to invite. It's one-time-use: once someone redeems it, we generate a new one.",
+    inv_intro: "Share this invite link. It's one-time-use: once someone opens it and joins, we generate a new one.",
     inv_copy: "copy",
     inv_copied: "copied",
     inv_copy_failed: "couldn't copy — select it manually",
-    inv_regenerate: "generate another code",
+    inv_regenerate: "generate another link",
     inv_close: "close",
     inv_how_title: "how it works",
-    inv_how_1: "Your invitee opens the app and goes to the hub.",
-    inv_how_2: "They paste this code into \"join with a code\".",
+    inv_how_1: "Copy the link and send it to whoever you want to invite.",
+    inv_how_2: "They open it and sign in (with GitHub or username and password).",
     inv_how_3: "They appear inside this team with the \"member\" role.",
     inv_limit_note: "Free plan: 5 devs per team. Premium: no cap.",
 

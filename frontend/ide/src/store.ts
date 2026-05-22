@@ -255,9 +255,22 @@ function onMessage(raw: string) {
       localStorage.removeItem("orux_session");
       set({ authed: false, loginError: m.reason, fase: "auth" });
       break;
-    case "lobby":
+    case "lobby": {
       set({ fase: "lobby", equipos: m.teams || [], equipoError: m.error || "" });
+      // Invitación por link: si llegamos con ?invite=<code> (guardado en
+      // sessionStorage), lo canjeamos ahora — ya estamos autenticados y en
+      // el lobby. Se consume una sola vez: lo borramos ANTES de mandar el
+      // redeem, así un `lobby` posterior (código inválido) no reintenta. Si
+      // el código es válido el server entra directo al equipo; si no,
+      // reenvía `lobby` con el error y se ve el Hub normal.
+      let invite: string | null = null;
+      try { invite = sessionStorage.getItem("orux_invite"); } catch { /* sin storage */ }
+      if (invite) {
+        try { sessionStorage.removeItem("orux_invite"); } catch { /* idem */ }
+        send({ type: "redeem_invite", code: invite });
+      }
       break;
+    }
     case "team_ready":
       // Entramos a un equipo: lo que sigue (init/welcome/...) es de ÉL.
       set({
@@ -424,7 +437,48 @@ function onMessage(raw: string) {
   }
 }
 
+// OAuth GitHub: cuando el login con GitHub sale bien, el callback del backend
+// redirige el navegador a /app/?session=<token>. Ese token es el MISMO de la
+// capa 7 (HMAC) — lo absorbemos como si fuera el `orux_session` de
+// localStorage y dejamos que `connect()` lo mande como SessionMessage, igual
+// que el auto-login. Limpiamos el query para que el token no quede en la
+// barra de direcciones ni en el historial. (El caso de error, ?oauth_error=,
+// lo muestra Login.tsx.)
+function absorberSesionDeURL() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("session");
+    if (!token) return;
+    localStorage.setItem("orux_session", token);
+    params.delete("session");
+    const q = params.toString();
+    history.replaceState(
+      null, "", location.pathname + (q ? "?" + q : "") + location.hash,
+    );
+  } catch { /* sin URL API / storage bloqueado: sigue el login normal */ }
+}
+
+// Invitación por link: un link de invitación es /app/?invite=<code>. El
+// código se guarda en sessionStorage —sobrevive el ida-y-vuelta de OAuth y
+// se borra al cerrar la pestaña— y se canjea en cuanto se llega al lobby
+// (ver el caso "lobby" de onMessage). Limpiamos el query de la URL.
+function absorberInviteDeURL() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("invite");
+    if (!code) return;
+    sessionStorage.setItem("orux_invite", code);
+    params.delete("invite");
+    const q = params.toString();
+    history.replaceState(
+      null, "", location.pathname + (q ? "?" + q : "") + location.hash,
+    );
+  } catch { /* sin URL API / storage: el invitado puede pegar el código a mano */ }
+}
+
 export function connect() {
+  absorberSesionDeURL();
+  absorberInviteDeURL();
   ws = new WebSocket(wsUrl());
   ws.onopen = () => {
     set({ conn: "conectado" });

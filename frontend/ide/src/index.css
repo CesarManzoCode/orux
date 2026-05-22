@@ -3771,3 +3771,42 @@ button:active { transform: translateY(1px); }
   opacity: 0.6; cursor: progress; transform: none; filter: saturate(0.7);
 }
 .ht-upgrade svg { display: block; flex: none; }
+
+/* ── Login con GitHub (OAuth) ────────────────────────────────────────────
+   Botón "Continuar con GitHub" + separador, dentro del login-card. Bloque
+   aditivo: no toca :root ni la geometría sagrada del editor. El botón es
+   oscuro a propósito: es la convención universal de "Sign in with GitHub"
+   y distingue el acceso de terceros del botón primario de acero. */
+.gh-sep {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.9rem 0 0.7rem;
+}
+.gh-sep-line {
+  flex: 1; height: 1px;
+  background: var(--accent-soft);
+}
+.gh-sep-tx {
+  font-family: var(--font-ui); font-size: 0.72rem;
+  color: var(--mut, #8b9098);
+}
+.gh-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; width: 100%;
+  padding: 0.62rem 0.8rem; border-radius: var(--r);
+  font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
+  letter-spacing: -0.005em; cursor: pointer;
+  color: #ffffff;
+  background: #1f2328;
+  border: 1px solid #3a4048;
+  transition: background var(--tr), border-color var(--tr),
+    transform var(--tr), filter var(--tr);
+}
+.gh-btn:hover {
+  background: #2c333b; border-color: #4a525c;
+  transform: translateY(-1px);
+}
+.gh-btn:active { transform: translateY(0); }
+.gh-btn:disabled {
+  opacity: 0.55; cursor: not-allowed; transform: none; filter: saturate(0.6);
+}
+.gh-btn svg { display: block; flex: none; }

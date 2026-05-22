@@ -2,53 +2,34 @@
 
 Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
 
-## Estado actual: capa 8 — integración con Git (prototipo completo)
+## Estado actual
 
-**Las 8 capas del README están implementadas.** El workspace persistido **es un repositorio git real**: `git clone ~/.orux/workspace` te da el código, sin formato propietario — la herramienta vive *sobre* Git, no lo reemplaza. El cliente muestra un panel de solo lectura (rama, cambios sin commitear, últimos commits, botón "actualizar"). El commit/push/branch lo hace el dev en su terminal; la tool no se interpone. Alcance mínimo deliberado: no hay commit/push/PRs desde la herramienta (eso necesitaría credenciales git por usuario — otra capa).
+Orux está **desplegado y en uso** en [orux.space](https://orux.space). Es un producto multi-equipo: cada equipo tiene su propio workspace aislado (un repositorio git real), con su presencia, ownership, propuestas y análisis. Construido por capas — alrededor de 30 hasta hoy. 417 tests en el backend.
+
+Funciona, end to end: registro y login, lobby de equipos (crear equipo, invitar por código, unirse), edición colaborativa en tiempo real, presencia por archivo y línea, ownership con edición tentativa y aprobación de un clic, prevención de colisiones, análisis de impacto semántico multi-lenguaje (Python, JS/TS, Go, Rust), integración con Git (estado, commit, clone y push desde la web), un panel de operador, y un modelo freemium con cobro por Stripe. Falta una sola cosa visible: el botón de "entrar con GitHub" en el frontend (el backend de OAuth ya está).
 
 ## Despliegue (Docker)
 
-El prototipo está empaquetado para correr en un VPS — **sin features nuevas**, solo desplegable y sólido. Caddy es lo único expuesto: sirve el cliente estático, termina TLS automático y proxya el WebSocket; el server Python no publica puertos. El estado (workspace=repo git, usuarios, ownership, secreto) vive en un volumen y sobrevive a recrear los contenedores. Sin base de datos a propósito: para 2–50 personas, JSON + git sobre un volumen persistente es lo correcto y coherente con "un `git clone` basta".
+Cuatro contenedores; sólo Caddy se expone a internet:
+
+- **orux** — el servidor WebSocket de sincronización.
+- **api** — un proceso aparte (Starlette): consola del operador, callbacks de OAuth, webhooks de Stripe.
+- **postgres** — los metadatos: usuarios, equipos, miembros, invitaciones, ownership.
+- **caddy** — sirve el frontend estático, termina TLS automático y proxya `/ws` y `/api`.
+
+El contenido de los archivos vive como repositorios git reales —uno por equipo— en un volumen persistente; Postgres guarda sólo metadatos. Coherente con "un `git clone` basta": cada carpeta de equipo es un repo de verdad.
 
 ```bash
-cp .env.example .env          # poné tu dominio en ORUX_SITE_ADDRESS
-make up                       # build + levanta server + Caddy
+cp .env.example .env          # configurá tu dominio y credenciales
+make up                       # build + levanta los 4 contenedores
 make logs                     # seguir logs   |   make down para apagar
 ```
 
 Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local: `make dev` (server desde `backend/`) + `cd frontend/ide && npm run dev` (el cliente detecta dev y usa `ws://localhost:8765`).
 
-### Capa 7 — identidad real
+### Cómo está construido
 
-La app está **cerrada**: hay que crear cuenta o iniciar sesión (usuario + contraseña) para ver el workspace. Self-hosted, sin dependencias externas: contraseñas con PBKDF2 (stdlib), token de sesión firmado con HMAC para auto-login al recargar. La **identidad es el usuario real**, estable; el **ownership ahora se persiste por usuario** y sobrevive a recargar la página y a reiniciar el server. No es auth de producción (sin expiración de sesión, sin recuperación de contraseña), pero es la base real sobre la que se puede construir Git y desplegar con seguridad. Estado en `~/.orux/` (`users.json`, `ownership.json`, `secret`, `workspace/`).
-
-### Capa 6 — análisis semántico de impacto
-
-Cambias una clase o función de nivel módulo en un `.py` y el sistema, **sin que clickees nada**, detecta qué otros archivos la usan y le avisa al **dueño de cada uno**: "ana cambió `Usuario` en `models.py` — afecta tu `auth.py`". Análisis con `ast` de la stdlib. Solo símbolos de nivel módulo y referencias por nombre (hint "míralo", no verdad de compilador); si el código está a medio escribir no avisa nada. El panel solo entera —no pide aprobar/rechazar—; "visto" lo descarta, "ver" salta al archivo.
-
-### Capa 5 — prevención de colisiones
-
-Si un archivo **no tiene dueño**, ya no se pisan: antes de aplicar un cambio, el servidor mira (vía presencia) si alguna línea que tocas la está ocupando otro presente. Si sí, **rechaza tu cambio y te devuelve el contenido real** — "nunca dos personas a la vez en la misma línea, el que la tocó primero escribe". El **dueño tiene preferencia**: a él el lock no le aplica. Cero CRDT: se previene, no se fusiona.
-
-### Capa 4 — ownership
-
-Un archivo puede tener **dueño** (quien lo crea lo es, sin botón). Si lo edita alguien que no es el dueño, su cambio **no se aplica**: se convierte en una **propuesta** que le llega al dueño, que la **aprueba o rechaza con un clic** (ve el diff por líneas, botón verde o rojo). Si aprueba, converge todo el mundo; si rechaza, al autor se le revierte.
-
-El dueño es el **usuario autenticado** (capa 7): el ownership se persiste por usuario y no se libera al desconectar — lo recuperas al volver a entrar.
-
-### Capa 3 — persistencia
-
-El workspace **sobrevive a reiniciar el servidor**. Al arrancar, el server lee los archivos de un directorio en disco (`~/.orux/workspace` por defecto —fuera del repo a propósito, para no disparar el auto-reload de servidores estáticos que vigilan la carpeta—, o `ORUX_DATA`); cada edición se escribe ahí. Sin historial ni versiones todavía. Los paths que llegan del cliente se validan contra *path traversal* antes de tocar el disco.
-
-### Capa 2 — presencia
-
-Cada quien ve **dónde está trabajando el resto**. Al conectar, el servidor asigna una identidad anónima (color + nombre tipo `anónimo-3`; sin login todavía). El sidebar muestra con puntos de color quién tiene abierto cada archivo, y dentro del archivo abierto se ve, sobre la línea exacta, en qué línea está escribiendo cada persona. Cuando alguien se desconecta, su marcador desaparece.
-
-Presencia por archivo + número de línea (no posición de caracter): es lo que responde "¿alguien ya está tocando esto?" sin la fragilidad de superponer cursores sobre un `<textarea>`.
-
-### Capa 1 — múltiples archivos (base)
-
-Sincronización de un **workspace** completo entre múltiples clientes en tiempo real. Cada cliente ve la lista de archivos, puede crearlos, abrirlos y editarlos. Las ediciones se propagan a todos los demás conectados sin pisarse entre archivos distintos.
+Orux se construyó por capas, una a la vez, cada una con tests desde el primer commit (`git log` tiene la historia completa). La visión y el detalle de cada pieza —presencia, ownership invisible, edición tentativa, prevención de colisiones, análisis semántico, integración con Git— están explicados abajo, en **La idea**.
 
 ### Cómo correrlo
 
@@ -70,11 +51,16 @@ cd backend && pytest
 
 ### Estructura
 
-- `backend/orux/protocol/` — mensajes que viajan por WebSocket (Init, Update, Welcome, Presence, Leave, Claim, Ownership, Proposal, Resolve).
-- `backend/orux/state/` — modelo del estado: `Document`, `Workspace`, `Roster` (quién está y dónde), `DiskStorage` (persistencia), `Ownership` (dueño por path), `Proposals` (cambios tentativos) y `lineas_tocadas` (diff LCS para el lock por línea).
-- `backend/orux/server/` — servidor WebSocket de sincronización.
-- `backend/tests/` — tests de protocolo, estado e integración.
-- `frontend/ide/` — cliente React del IDE (era `client/`). `frontend/landing/` — landing de marketing. `frontend/ops/` — panel de operador.
+- `backend/orux/protocol/` — los mensajes que viajan por WebSocket.
+- `backend/orux/state/` — el estado de un equipo: `Document`, `Workspace`, `Roster` (presencia), `Ownership`, `Proposals`, `DiskStorage`.
+- `backend/orux/server/` — el servidor WebSocket; `TeamRuntime` (un equipo aislado), el lobby y el handshake.
+- `backend/orux/teams/` y `backend/orux/db/` — el dominio de equipos y la persistencia en Postgres.
+- `backend/orux/analysis/` — el análisis de impacto semántico (Python, JS/TS, Go, Rust).
+- `backend/orux/identity/` — autenticación: contraseñas, tokens de sesión, OAuth con GitHub.
+- `backend/orux/git/` — la integración con Git.
+- `backend/orux/api/` — la API del operador, OAuth y el billing de Stripe.
+- `backend/tests/` — 417 tests de protocolo, estado, análisis, equipos e integración.
+- `frontend/ide/` — el cliente React del IDE. `frontend/landing/` — la landing de marketing. `frontend/ops/` — el panel de operador.
 
 ---
 
