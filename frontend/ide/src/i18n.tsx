@@ -458,6 +458,8 @@ export const T = {
     ed_team_alone: "tú solo en este archivo",
     ed_team_count: (n: number) => n === 1 ? "1 en vivo aquí" : `${n} en vivo aquí`,
     ed_team_tooltip: "personas editando este archivo ahora",
+    ed_fold_expand: "Expandir bloque",
+    ed_fold_collapse: "Contraer bloque",
     // Empty-state del editor — diferenciado: workspace vacío vs archivo sin abrir.
     ed_empty_ws_title: "Workspace listo, sin archivos todavía",
     ed_empty_ws_sub: "Crea el primero y los demás del equipo lo verán al instante. Cada archivo es un commit Git real — git clone sigue bastando.",
@@ -1034,6 +1036,8 @@ export const T = {
     ed_team_alone: "you alone in this file",
     ed_team_count: (n: number) => n === 1 ? "1 live here" : `${n} live here`,
     ed_team_tooltip: "people editing this file right now",
+    ed_fold_expand: "Expand block",
+    ed_fold_collapse: "Collapse block",
     // Editor empty-state — distinguishes empty workspace vs no-file-open.
     ed_empty_ws_title: "Workspace ready, no files yet",
     ed_empty_ws_sub: "Create the first one and the team sees it instantly. Each file is a real Git commit — git clone is still enough.",
@@ -1196,13 +1200,19 @@ export function useI18n() { return useContext(Ctx); }
 export function LangToggle({ className = "" }: { className?: string }) {
   const { lang, setLang } = useI18n();
   return (
-    <span className={"lang-toggle " + className}>
+    <span
+      className={"lang-toggle " + className}
+      role="group"
+      aria-label="idioma / language"
+    >
       <button
         className={lang === "es" ? "lt-active" : ""}
+        aria-pressed={lang === "es"}
         onClick={() => setLang("es")}
       >ES</button>
       <button
         className={lang === "en" ? "lt-active" : ""}
+        aria-pressed={lang === "en"}
         onClick={() => setLang("en")}
       >EN</button>
     </span>

@@ -96,9 +96,14 @@ def _rate_limit_login(ip: str) -> bool:
     if len(bucket) >= _LOGIN_RPM:
         return False
     bucket.append(ahora)
-    # GC perezoso del dict para no acumular IPs muertas.
+    # GC perezoso del dict. Descarta buckets OBSOLETOS (vacíos, o cuyo
+    # registro más nuevo ya venció la ventana), no sólo los vacíos: si sólo
+    # borrara los vacíos, un atacante rotando >10k IPs con un goteo las
+    # mantiene no-vacías y el dict crecería sin control.
     if len(_login_buckets) > 10_000:
-        muertas = [k for k, v in _login_buckets.items() if not v]
+        muertas = [
+            k for k, v in _login_buckets.items() if not v or v[-1] <= corte
+        ]
         for k in muertas:
             _login_buckets.pop(k, None)
     return True

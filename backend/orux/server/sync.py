@@ -412,38 +412,63 @@ class SyncServer:
         # dos workspaces del MISMO disco. Granular: el lock de un equipo no
         # bloquea al de otro.
         self._rt_locks: dict[str, asyncio.Lock] = {}
-        # Anti-abuso del registro (capa nueva): IP -> timestamps de los
-        # registros recientes de esa IP (ventana deslizante). Por-instancia
-        # a propósito: cada server arranca con el registro limpio (tests).
+        # Anti-abuso (capas nuevas): IP -> timestamps de registros / logins
+        # recientes (ventana deslizante). Por-instancia a propósito: cada
+        # server arranca con el contador limpio (tests).
         self._registro_buckets: dict[str, list[float]] = {}
+        self._login_buckets: dict[str, list[float]] = {}
 
-    def _throttle_registro(self, ip: str) -> bool:
-        """Anti-abuso del registro: tope de registros por IP en una ventana
-        deslizante. True = OK; False = la IP superó el tope.
+    def _throttle(
+        self, buckets: dict[str, list[float]], ip: str,
+        tope: int, ventana: float,
+    ) -> bool:
+        """Ventana deslizante por IP: True = OK, False = la IP superó `tope`
+        eventos en `ventana` segundos. Bucket por IP, limpieza perezosa.
 
-        Por qué hace falta: el registro es PÚBLICO y el backoff por-conexión
-        de `_autenticar` no lo frena — un bot que hace connect -> register ->
-        disconnect en bucle arranca cada conexión con 0 fallos, y un register
-        exitoso retorna de inmediato. Sin esto una IP crea cuentas sin límite.
-
-        El tope es generoso a propósito (default 20 cada 10 min): un equipo
-        entero registrándose desde la misma oficina (NAT) no debe chocarlo;
-        un bot sí, enseguida. Configurable con `ORUX_REGISTRO_MAX_POR_IP`.
-        Bucket por IP con limpieza perezosa (no crece sin control)."""
-        ventana = 600.0  # 10 minutos
-        tope = _env_int("ORUX_REGISTRO_MAX_POR_IP", 20, 1, 100_000)
+        El GC del dict descarta buckets OBSOLETOS (vacíos, o cuyo registro
+        más nuevo ya venció la ventana), no sólo los vacíos: si sólo borrara
+        los vacíos, un atacante rotando >10k IPs con un goteo las mantiene
+        no-vacías y el dict crecería sin control. Un bucket obsoleto es
+        equivalente a uno ausente."""
         ahora = time.monotonic()
         corte = ahora - ventana
-        bucket = self._registro_buckets.setdefault(ip, [])
+        bucket = buckets.setdefault(ip, [])
         bucket[:] = [t for t in bucket if t > corte]
         if len(bucket) >= tope:
             return False
         bucket.append(ahora)
-        # GC perezoso del dict para no acumular IPs muertas.
-        if len(self._registro_buckets) > 10_000:
-            for k in [k for k, v in self._registro_buckets.items() if not v]:
-                self._registro_buckets.pop(k, None)
+        if len(buckets) > 10_000:
+            for k in [
+                k for k, v in buckets.items() if not v or v[-1] <= corte
+            ]:
+                buckets.pop(k, None)
         return True
+
+    def _throttle_registro(self, ip: str) -> bool:
+        """Anti-abuso del registro: tope de registros por IP en ventana
+        deslizante. El registro es PÚBLICO y el backoff por-conexión de
+        `_autenticar` no lo frena — un bot que hace connect -> register ->
+        disconnect arranca cada conexión con 0 fallos y un register exitoso
+        retorna de inmediato. Tope generoso (default 20 cada 10 min): un
+        equipo entero registrándose desde una misma oficina (NAT) no lo
+        choca; un bot sí. Configurable con `ORUX_REGISTRO_MAX_POR_IP`."""
+        return self._throttle(
+            self._registro_buckets, ip,
+            _env_int("ORUX_REGISTRO_MAX_POR_IP", 20, 1, 100_000), 600.0,
+        )
+
+    def _throttle_login(self, ip: str) -> bool:
+        """Anti-fuerza-bruta del login: tope de intentos de login por IP en
+        ventana deslizante. Mismo agujero que el registro — el backoff
+        por-conexión se reinicia en cada reconexión, así que un bot prueba
+        contraseñas reconectando. Tope más holgado que el registro (default
+        40 cada 10 min): loguearse es más frecuente que registrarse, y el
+        auto-login usa `session`, no `login`. Configurable con
+        `ORUX_LOGIN_MAX_POR_IP`."""
+        return self._throttle(
+            self._login_buckets, ip,
+            _env_int("ORUX_LOGIN_MAX_POR_IP", 40, 1, 100_000), 600.0,
+        )
 
     async def _runtime_para(self, team_id: str) -> TeamRuntime:
         """Runtime del equipo, creado perezosamente. En deploy lo arma la
@@ -979,6 +1004,16 @@ class SyncServer:
                     if await _fallo(razon):
                         return None
             elif isinstance(msg, LoginMessage):
+                # Anti-fuerza-bruta: tope de logins por IP. El backoff
+                # por-conexión se reinicia al reconectar; este tope no. Ver
+                # `_throttle_login`.
+                if not self._throttle_login(_ip_cliente(websocket)):
+                    logger.warning("login: tope por IP alcanzado")
+                    if await _fallo(
+                        "demasiados intentos desde tu red, esperá unos minutos"
+                    ):
+                        return None
+                    continue
                 if await self.users.verificar(msg.username, msg.password):
                     return normalizar(msg.username)
                 if await _fallo("usuario o contraseña incorrectos"):

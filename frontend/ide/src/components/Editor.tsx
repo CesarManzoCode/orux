@@ -485,7 +485,8 @@ export function Editor() {
                 type="button"
                 className={"ed-chevron" + (c.plegada ? " plegada" : "")}
                 style={{ top: PAD_TOP + c.visLine * LINE_H + "px" }}
-                title={c.plegada ? "Expandir bloque" : "Contraer bloque"}
+                title={c.plegada ? t.ed_fold_expand : t.ed_fold_collapse}
+                aria-label={c.plegada ? t.ed_fold_expand : t.ed_fold_collapse}
                 onMouseDown={(ev) => ev.preventDefault()}
                 onClick={() => toggleFold(c.ini)}
               >

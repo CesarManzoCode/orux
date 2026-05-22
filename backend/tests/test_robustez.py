@@ -119,6 +119,29 @@ def test_ip_cliente_prefiere_x_forwarded_for():
     assert _ip_cliente(_SinProxy()) == "127.0.0.1"
 
 
+def test_throttle_login_corta_la_fuerza_bruta(monkeypatch):
+    """Una IP puede intentar login hasta el tope; el siguiente se rechaza.
+    El backoff por-conexión se reinicia al reconectar — este tope no."""
+    monkeypatch.setenv("ORUX_LOGIN_MAX_POR_IP", "3")
+    server = SyncServer()
+    assert server._throttle_login("9.9.9.9") is True
+    assert server._throttle_login("9.9.9.9") is True
+    assert server._throttle_login("9.9.9.9") is True
+    assert server._throttle_login("9.9.9.9") is False
+
+
+def test_throttle_login_y_registro_no_comparten_cupo(monkeypatch):
+    """Login y registro tienen buckets separados — agotar uno no afecta al
+    otro (acciones distintas, con ritmos legítimos distintos)."""
+    monkeypatch.setenv("ORUX_LOGIN_MAX_POR_IP", "1")
+    monkeypatch.setenv("ORUX_REGISTRO_MAX_POR_IP", "1")
+    server = SyncServer()
+    assert server._throttle_login("ip-x") is True
+    assert server._throttle_login("ip-x") is False    # login agotado
+    assert server._throttle_registro("ip-x") is True  # registro intacto
+    assert server._throttle_registro("ip-x") is False
+
+
 @pytest.mark.parametrize(
     "bueno",
     ["a.py", "src/auth.py", "a/b/c/d.ts", "Carpeta Con Espacios/x.go",

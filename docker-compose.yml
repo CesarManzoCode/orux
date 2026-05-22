@@ -7,6 +7,9 @@
 # sobrevive a recrear los contenedores.
 services:
   orux:
+    # Endurecimiento: ningún proceso del contenedor puede ganar privilegios
+    # vía binarios setuid (no los necesita). Aplica a los 4 servicios.
+    security_opt: ["no-new-privileges:true"]
     build: .
     restart: unless-stopped
     depends_on:
@@ -38,6 +41,7 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+    security_opt: ["no-new-privileges:true"]
     command: ["uvicorn", "orux.api.app:app",
               "--host", "0.0.0.0", "--port", "8800"]
     expose:
@@ -81,6 +85,7 @@ services:
     # No publica puertos: sólo alcanzable dentro de la red de compose, como
     # el server. El estado vive en su propio volumen (durabilidad real).
     image: postgres:16-alpine
+    security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     environment:
       - POSTGRES_USER=orux
@@ -103,6 +108,7 @@ services:
       context: .
       dockerfile: Dockerfile.web
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       - orux
       - api

@@ -5,6 +5,20 @@
 {$ORUX_SITE_ADDRESS:localhost} {
 	encode zstd gzip
 
+	# Cabeceras de seguridad en TODAS las respuestas — el frontend estático
+	# (SPA, landing, panel de operador) no tenía ninguna; la API ya pone las
+	# suyas. nosniff corta el MIME-sniffing, DENY corta el clickjacking, HSTS
+	# fuerza HTTPS, y se quita el banner Server. Sin CSP a propósito: una CSP
+	# mal puesta rompe el SPA y no se puede verificar desde acá — eso queda
+	# para una pasada con el navegador.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
 	# El WebSocket del server va por /ws. Caddy pasa el upgrade solo.
 	@ws path /ws /ws/*
 	handle @ws {
