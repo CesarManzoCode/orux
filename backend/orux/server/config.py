@@ -1,0 +1,71 @@
+"""Topes y perillas de runtime del servidor de sincronización.
+
+Todo lo que el operador puede ajustar por variable de entorno vive acá,
+aislado de la lógica del server (`sync.py`) y del estado de equipo
+(`runtime.py`). Son límites defensivos: sin ellos un mensaje gigante o un
+cliente que spamea pueden saturar a un equipo entero. Cada valor se lee una
+vez al importar el módulo y se *clampa* a un rango sano — un env tipo `-1` o
+`999999999` no rompe nada.
+"""
+
+from __future__ import annotations
+
+import os
+import time
+
+
+# Topes y constantes de runtime ajustables por env (con clamp defensivo).
+# Sin esto, un mensaje gigante (BACKEND-AUDIT-0222 / -0272) o un cliente que
+# spamea pueden saturar el equipo entero. Los defaults son holgados.
+def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
+    try:
+        v = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        v = default
+    return max(minimo, min(maximo, v))
+
+
+def _env_float(name: str, default: float, minimo: float, maximo: float) -> float:
+    try:
+        v = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        v = default
+    return max(minimo, min(maximo, v))
+
+
+# Tope HARD del frame WS recibido. websockets.serve() lo aplica antes de
+# entregar el frame al handler — protege ANTES de `decode` (que también
+# valida, defensa en profundidad).
+WS_MAX_SIZE = _env_int("ORUX_WS_MAX_SIZE", 2 * 1024 * 1024, 64 * 1024, 16 * 1024 * 1024)
+# Cola por conexión: cuántos frames sin leer se aceptan antes de cerrar.
+WS_MAX_QUEUE = _env_int("ORUX_WS_MAX_QUEUE", 32, 4, 1024)
+# Rate-limit por conexión: token bucket. Sin esto, un cliente puede saturar al
+# equipo entero con miles de mensajes/s (BACKEND-AUDIT-0272). 50/s sostenido
+# con burst 100 cubre tecleo humano agresivo + ráfagas legítimas (commit,
+# admin_assign_many) y mata el spam.
+RATE_TASA = _env_float("ORUX_RATE_PER_SEC", 50.0, 1.0, 1000.0)
+RATE_BURST = _env_float("ORUX_RATE_BURST", 100.0, 1.0, 10_000.0)
+
+
+class _RateLimiter:
+    """Token bucket simple por conexión. No usa lock: cada conexión vive en
+    una sola corutina, así que el acceso es serial. `permitir()` devuelve
+    True si hay token; False si hay que tirar el mensaje."""
+
+    __slots__ = ("_tokens", "_tasa", "_burst", "_t")
+
+    def __init__(self, tasa: float, burst: float) -> None:
+        self._tokens = float(burst)
+        self._tasa = float(tasa)
+        self._burst = float(burst)
+        self._t = time.monotonic()
+
+    def permitir(self) -> bool:
+        ahora = time.monotonic()
+        elapsed = ahora - self._t
+        self._t = ahora
+        self._tokens = min(self._burst, self._tokens + elapsed * self._tasa)
+        if self._tokens >= 1.0:
+            self._tokens -= 1.0
+            return True
+        return False
