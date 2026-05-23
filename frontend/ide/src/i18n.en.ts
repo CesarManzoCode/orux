@@ -244,6 +244,15 @@ export const en = {
     ews_invite_t: "Invite your team",
     ews_invite_d: "Coordination shows once someone else is here. Add them with a link.",
     ews_foot: "Once there's code and your team is in, you'll see presence, ownership and impact live in the right-hand panel.",
+    // Inline mini-demo in the empty-state: loops through the four
+    // differentiators so the first view of an empty workspace explains
+    // — wordlessly — what's going to happen once there is code.
+    ews_demo_tag: "live example",
+    ews_demo_aria: "Example view: this is how Orux shows team presence, semantic impact, ownership and proposals over code.",
+    ews_demo_pres: "@ana editing",
+    ews_demo_imp: "impact · 3 files",
+    ews_demo_own: "owner · @luis",
+    ews_demo_prop: "+1 proposal · @luis",
     // Browser notifications
     notif_prop_title: "A proposal for you",
     notif_prop_body: (actor: string, file: string) =>

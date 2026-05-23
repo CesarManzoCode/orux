@@ -418,3 +418,127 @@
   font-family: var(--font-ui); font-size: 0.78rem;
   color: var(--muted); line-height: 1.5;
 }
+
+/* ── Mini-demo del empty-state ───────────────────────────────────────────
+   Loop de ~10s con 4 overlays anclados al fragmento de código simulado:
+   enseña presencia → impacto → ownership → propuesta en secuencia. La
+   pieza es deliberadamente más sobria que los step buttons tutoriales
+   (sin fondo verde, borde hairline) — los CTAs siguen siendo jerarquía 1.
+   Pausable en hover; respeta prefers-reduced-motion (muestra los 4 fijos
+   en esquinas separadas para que no se superpongan). */
+.ews-demo {
+  position: relative;
+  margin: 0 0 1.1rem;
+  padding: 0.6rem 0.85rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.ews-demo-tag {
+  position: absolute;
+  top: 0.55rem; right: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--faint);
+  pointer-events: none;
+}
+.ews-demo-code {
+  margin: 1.05rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px; line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre;
+}
+.ews-demo-ln { display: block; }
+.ews-demo-n {
+  display: inline-block; width: 1.8em;
+  margin-right: 0.85em; text-align: right;
+  color: var(--faint); opacity: 0.75;
+}
+/* Paleta espejo del syntax del editor real (editor.css :460+). */
+.ews-demo-code .dm-kw  { color: #c79ce0; }
+.ews-demo-code .dm-fn  { color: #5cc8a2; }
+.ews-demo-code .dm-cls { color: #4fc4c9; }
+.ews-demo-code .dm-num { color: #dd9266; }
+
+/* Overlays — pills chicas. Cada uno con su semántica de color: el verde
+   queda exclusivo para "presencia" (que ES estado vivo); los otros tres
+   usan ámbar (aviso), neutro (metadato) y cian (info) para no saturar la
+   demo de un solo color y para que cada señal se distinga del resto. */
+.ews-demo-ev {
+  position: absolute;
+  display: inline-flex; align-items: center; gap: 0.4em;
+  padding: 0.18rem 0.5rem;
+  font-family: var(--font-ui);
+  font-size: 10.5px; font-weight: 620;
+  letter-spacing: -0.005em;
+  border-radius: var(--r-pill);
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  backdrop-filter: blur(2px);
+}
+.ews-demo:hover .ews-demo-ev { animation-play-state: paused; }
+
+.ews-demo-pres {
+  top: 3.55rem; right: 0.7rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  animation: ews-demo-pres 10s infinite;
+}
+.ews-demo-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+.ews-demo-imp {
+  top: 1.95rem; right: 4.4rem;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid rgba(216, 169, 62, 0.35);
+  animation: ews-demo-imp 10s infinite;
+}
+.ews-demo-own {
+  top: 1.95rem; left: 3rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  animation: ews-demo-own 10s infinite;
+}
+.ews-demo-prop {
+  bottom: 0.6rem; right: 0.7rem;
+  color: var(--info);
+  background: var(--info-bg);
+  border: 1px solid rgba(98, 168, 240, 0.35);
+  animation: ews-demo-prop 10s infinite;
+}
+
+/* Cada overlay vive ~2.2s en pantalla con fade-in/out; cuatro turnos =
+   ciclo de 10s. Los porcentajes están separados para que nunca queden
+   dos overlays a la vez (evita lectura encimada). */
+@keyframes ews-demo-pres {
+  0%, 1%    { opacity: 0; transform: translateY(2px); }
+  4%, 22%   { opacity: 1; transform: translateY(0); }
+  26%, 100% { opacity: 0; }
+}
+@keyframes ews-demo-imp {
+  0%, 24%   { opacity: 0; transform: translateY(2px); }
+  27%, 47%  { opacity: 1; transform: translateY(0); }
+  51%, 100% { opacity: 0; }
+}
+@keyframes ews-demo-own {
+  0%, 49%   { opacity: 0; transform: translateY(2px); }
+  52%, 72%  { opacity: 1; transform: translateY(0); }
+  76%, 100% { opacity: 0; }
+}
+@keyframes ews-demo-prop {
+  0%, 74%   { opacity: 0; transform: translateY(2px); }
+  77%, 97%  { opacity: 1; transform: translateY(0); }
+  100%      { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ews-demo-ev { animation: none !important; opacity: 1; transform: none; }
+}

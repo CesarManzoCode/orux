@@ -249,6 +249,15 @@ export const es = {
     ews_invite_t: "Invitar a tu equipo",
     ews_invite_d: "La coordinación se nota cuando hay alguien más. Sumalos con un link.",
     ews_foot: "Apenas haya código y tu equipo esté dentro, vas a ver presencia, ownership e impacto en vivo en el panel de la derecha.",
+    // Mini-demo embebida en el empty-state: muestra los 4 diferenciadores
+    // en loop para que la primera vista del workspace vacío explique
+    // — sin texto — qué va a pasar cuando haya código.
+    ews_demo_tag: "ejemplo en vivo",
+    ews_demo_aria: "Vista de ejemplo: así se ven en Orux la presencia del equipo, el impacto semántico, el ownership y las propuestas sobre el código.",
+    ews_demo_pres: "@ana editando",
+    ews_demo_imp: "impacto · 3 archivos",
+    ews_demo_own: "dueño · @luis",
+    ews_demo_prop: "+1 propuesta · @luis",
     // Avisos del navegador (notificaciones)
     notif_prop_title: "Propuesta para vos",
     notif_prop_body: (actor: string, archivo: string) =>

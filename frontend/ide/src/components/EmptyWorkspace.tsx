@@ -14,6 +14,7 @@ import { crearInvite } from "../store";
 import { useI18n } from "../i18n";
 import { NuevoArchivoModal } from "./NuevoArchivoModal";
 import { InviteModal } from "./InviteModal";
+import { DemoMiniatura } from "./DemoMiniatura";
 
 export function EmptyWorkspace({ onIrAGit }: { onIrAGit: () => void }) {
   const s = useStore();
@@ -38,6 +39,8 @@ export function EmptyWorkspace({ onIrAGit }: { onIrAGit: () => void }) {
       <div className="ews-card">
         <h2 className="ews-h">{t.ews_title}</h2>
         <p className="ews-sub">{t.ews_sub}</p>
+
+        <DemoMiniatura />
 
         <div className="ews-steps">
           <button className="ews-step ews-primary" onClick={onIrAGit}>
