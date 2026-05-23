@@ -30,10 +30,10 @@ export function OruxBot({
   ctaLabel?: string;
   onCta?: () => void;
 }) {
-  // Typewriter — revela char por char. Velocidad ~42 chars/s: rápido para
-  // no aburrir, lento como para que el ojo lo siga. La key del setState
-  // depende de `text`: cuando el orquestador cambia el paso, el efecto se
-  // recrea y empieza el typewriter de cero (no se mezclan textos).
+  // Typewriter — revela char por char. ~30 chars/s: rápido para no aburrir,
+  // pero le da al ojo tiempo de seguir el texto. La key del setState depende
+  // de `text`: cuando el orquestador cambia el paso, el efecto se recrea y
+  // empieza el typewriter de cero (no se mezclan textos).
   const [shown, setShown] = useState(0);
   useEffect(() => {
     setShown(0);
@@ -43,7 +43,7 @@ export function OruxBot({
       i++;
       setShown(i);
       if (i >= text.length) window.clearInterval(id);
-    }, 24);
+    }, 33);
     return () => window.clearInterval(id);
   }, [text]);
 

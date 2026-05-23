@@ -37,18 +37,26 @@ export function Spotlight({
     function loop() {
       if (!alive) return;
       const el = document.querySelector(`[data-tour-id="${targetId}"]`);
+      // Aceptamos el target sólo si tiene tamaño real (>8px) y cae dentro
+      // del viewport. Esto evita que un target colapsado (cabecera de
+      // sección plegada con altura ~32 pero contenido oculto) o fuera
+      // de pantalla deje la UI en estado "todo oscuro sin foco visible".
+      let next: Rect | null = null;
       if (el) {
-        const next = leerBBox(el);
-        setRect((prev) => {
-          if (
-            prev && prev.x === next.x && prev.y === next.y &&
-            prev.w === next.w && prev.h === next.h
-          ) return prev;
-          return next;
-        });
-      } else {
-        setRect(null);
+        const r = el.getBoundingClientRect();
+        if (r.width >= 8 && r.height >= 8 &&
+            r.bottom > 0 && r.right > 0 &&
+            r.top < window.innerHeight && r.left < window.innerWidth) {
+          next = { x: r.left, y: r.top, w: r.width, h: r.height };
+        }
       }
+      setRect((prev) => {
+        if (prev === next) return prev;
+        if (prev && next &&
+            prev.x === next.x && prev.y === next.y &&
+            prev.w === next.w && prev.h === next.h) return prev;
+        return next;
+      });
       raf = requestAnimationFrame(loop);
     }
     raf = requestAnimationFrame(loop);

@@ -68,14 +68,18 @@ export function Tutorial({
   const isLast = idx === steps.length - 1;
   const [botPos, setBotPos] = useState<BotPos>(posCentral);
 
-  // Mount-only: el tutorial necesita el inspector abierto (sus pasos
-  // apuntan a secciones del Inspector) y todas las secciones del
-  // inspector expandidas (el spotlight no puede leer bbox de algo con
-  // height 0). Reseteamos la persistencia de colapso para esa sesión.
+  // Mount-only: el tutorial necesita el inspector abierto y todas sus
+  // secciones EXPANDIDAS (apunta a inspector-presencia / -propuestas /
+  // -impacto y necesita que el spotlight reciba un bbox real, no la
+  // cabecera plegada de 32px que casi no se ve). Disparamos un custom
+  // event porque el state de `colapsadas` se hidrata de localStorage al
+  // MONTAR el Inspector — un removeItem desde acá llega tarde. El
+  // listener del Inspector limpia su set local y nos garantiza que las
+  // secciones queden visibles.
   useEffect(() => {
     api.setInspectorOpen(true);
     try { localStorage.removeItem("orux_insp_colapso"); } catch {}
-    // Solo al mount.
+    window.dispatchEvent(new CustomEvent("orux:reset-inspector-colapso"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -105,12 +109,22 @@ export function Tutorial({
     let alive = true;
     function tick() {
       if (!alive) return;
-      let next: BotPos;
+      let next: BotPos = posCentral();
       if (step.target) {
         const el = document.querySelector(`[data-tour-id="${step.target}"]`);
-        next = el ? posJuntoA(el, step.side ?? "der") : posCentral();
-      } else {
-        next = posCentral();
+        if (el) {
+          const r = el.getBoundingClientRect();
+          // Si el target existe pero es prácticamente invisible (bbox
+          // colapsado / display:none / off-screen) tratamos como "no
+          // target": el bot va al centro y el spotlight muestra backdrop
+          // pleno. Sin esto el bot quedaba pegado a una zona invisible y
+          // la pantalla se veía sólo oscura.
+          if (r.width >= 8 && r.height >= 8 &&
+              r.bottom > 0 && r.right > 0 &&
+              r.top < window.innerHeight && r.left < window.innerWidth) {
+            next = posJuntoA(el, step.side ?? "der");
+          }
+        }
       }
       setBotPos((prev) => (posSame(prev, next) ? prev : next));
       raf = requestAnimationFrame(tick);

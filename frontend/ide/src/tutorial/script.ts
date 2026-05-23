@@ -49,19 +49,19 @@ export function construirGuion(api: TutorialAPI): Step[] {
       id: "hello",
       mode: "say",
       text: (t) => t.tut_hello,
-      wait: 2400,
+      wait: 3600,
     },
     {
       id: "intro",
       mode: "say",
       text: (t) => t.tut_intro,
-      wait: 5200,
+      wait: 7000,
     },
     {
       id: "skip-hint",
       mode: "say",
       text: (t) => t.tut_skip_hint,
-      wait: 4800,
+      wait: 6500,
     },
     // ── Paso 4: abrir el panel git desde el rail. SIN `after`: el click se
     // propaga al botón real y `setVista("git")` corre desde el Rail. ──
@@ -91,7 +91,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       text: (t) => t.tut_code_here,
       target: "files-tree",
       side: "der",
-      wait: 3200,
+      wait: 4500,
     },
     // ── Paso 7: abrir el archivo principal. CON `after`: no propagamos
     // el click al <li> real (que dispararía `seleccionar` al WebSocket). ──
@@ -110,7 +110,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       text: (t) => t.tut_ana_joins,
       target: "inspector-presencia",
       side: "izq",
-      wait: 4400,
+      wait: 6000,
       before: () => { mockAnaEntra("procesar_pago.py", 4); },
     },
     // ── Paso 9: propuesta de Ana llega al inspector. ──
@@ -120,7 +120,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       text: (t) => t.tut_ana_proposes,
       target: "inspector-propuestas",
       side: "izq",
-      wait: 4400,
+      wait: 6000,
       before: () => { propAna = mockPropuestaDeAna(); },
     },
     // ── Paso 10: usuario aprueba. ──
@@ -142,7 +142,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       text: (t) => t.tut_impact,
       target: "inspector-impacto",
       side: "izq",
-      wait: 5800,
+      wait: 7500,
       before: () => {
         mockImpactoCascada();
         mockOpenFile("api/cobros.py");
@@ -155,7 +155,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       text: (t) => t.tut_autofix,
       target: "inspector-propuestas",
       side: "izq",
-      wait: 4800,
+      wait: 6500,
       before: () => { propAutoFix = mockAutoFixPremium(); },
     },
     // ── Paso 13: aprobar el auto-fix → limpia impactos. ──
@@ -175,7 +175,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       id: "close",
       mode: "say",
       text: (t) => t.tut_close,
-      wait: 6200,
+      wait: 8000,
     },
   ];
 }

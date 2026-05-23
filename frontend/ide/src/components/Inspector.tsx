@@ -259,6 +259,18 @@ export function Inspector({
   const c = path ? chipDe(path) : null;
 
   const [colapsadas, setColapsadas] = useState<Set<string>>(leerColapso);
+  // Listener para el tutorial: cuando arranca, despliega TODAS las
+  // secciones del inspector. Se necesita porque `colapsadas` se hidrata
+  // de localStorage al montar — un `removeItem` desde el Tutorial llega
+  // tarde si el Inspector ya se montó con secciones plegadas.
+  useEffect(() => {
+    function onReset() {
+      setColapsadas(new Set());
+      try { localStorage.removeItem(COLAPSO_KEY); } catch {}
+    }
+    window.addEventListener("orux:reset-inspector-colapso", onReset);
+    return () => window.removeEventListener("orux:reset-inspector-colapso", onReset);
+  }, []);
   // Confirmación de "descartar borrador" — antes era window.confirm(): roto
   // visualmente vs el resto del IDE (gramática única ConfirmDialog), no
   // estilable, sin foco gestionado. Tono danger: descartar borra trabajo
