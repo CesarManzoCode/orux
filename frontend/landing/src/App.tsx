@@ -260,11 +260,16 @@ function Faq({ items }: { items: readonly FaqItem[] }) {
  * ───────────────────────────────────────────────────────────────────── */
 type StagePhase = "edit" | "detect" | "propose" | "synced";
 const PHASE_ORDER: readonly StagePhase[] = ["edit", "detect", "propose", "synced"];
+// Tiempos del loop del hero. Antes 12s totales — se sentía cinematográfico
+// pero "lento" en el primer scroll: el visitante leía el titular y entendía
+// el pitch antes de que la fase 1 (edit) terminara. Bajamos ~17% manteniendo
+// el ritmo dramático (cada fase respeta su acto), pero ahora el ciclo entero
+// cabe mejor en el tiempo de lectura del lead/sub: 10s totales.
 const PHASE_MS: Record<StagePhase, number> = {
-  edit:    3200,
-  detect:  2800,
-  propose: 3400,
-  synced:  2600,
+  edit:    2600,
+  detect:  2400,
+  propose: 2800,
+  synced:  2200,
 };
 const TYPE_TARGET = ", user";
 

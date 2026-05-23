@@ -238,10 +238,10 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* ── 8) Empty states del Inspector — borde dashed ya estaba bien,
-   añadimos espacio de respiración entre `.in-empty + .in-explain`
-   para que la nota no se pegue al cuadro de empty. Detalle de
-   maquetación: el ojo separa la caja del texto explicativo. */
+/* ── 8) Empty states del Inspector — refinados en CAPA 34: el dashed
+   se leía como "roto/borrador" en un panel ya denso; pasamos a hairline
+   sólido con respiración. Conservamos el aire `.in-empty + .in-explain`
+   para que el texto no se pegue al cuadro. */
 .in-empty + .in-explain { margin-top: 0.55rem; }
 
 /* ── 9) Foco visible: refuerzo de la regla global ────────────────────
@@ -380,42 +380,61 @@
    Botón "Continuar con GitHub" + separador, dentro del login-card. Bloque
    aditivo: no toca :root ni la geometría sagrada del editor. El botón es
    oscuro a propósito: es la convención universal de "Sign in with GitHub"
-   y distingue el acceso de terceros del botón primario de acero. */
+   y distingue el acceso de terceros del botón primario de acero.
+
+   CAPA 34 — el separador era visualmente pesado (línea continua + texto
+   12px); ahora el text es micro mono (mismo idioma que .cue y eyebrows)
+   y las líneas son hairlines del border-soft. Menos peso, más jerarquía:
+   el primario manda, el "o entra con GitHub" es alternativa sobria. */
 .gh-sep {
-  display: flex; align-items: center; gap: 0.6rem;
-  margin: 0.9rem 0 0.7rem;
+  display: flex; align-items: center; gap: 0.7rem;
+  margin: 1rem 0 0.6rem;
 }
 .gh-sep-line {
   flex: 1; height: 1px;
-  /* Un separador estructural va en hairline neutro: en este sistema el
-     color es ESTADO, no decoración — el acero es la marca, no una línea. */
-  background: var(--border);
+  background: var(--border-soft);
 }
 .gh-sep-tx {
-  font-family: var(--font-ui); font-size: 0.72rem;
-  color: var(--muted);
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint);
 }
 .gh-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: 8px; width: 100%;
-  padding: 0.62rem 0.8rem; border-radius: var(--r);
+  gap: 9px; width: 100%;
+  padding: 0.65rem 0.8rem; border-radius: var(--r);
   font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
   letter-spacing: -0.005em; cursor: pointer;
   color: #ffffff;
   background: #1f2328;
   border: 1px solid #3a4048;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.35);
   transition: background var(--tr), border-color var(--tr),
-    transform var(--tr), filter var(--tr);
+    transform var(--tr), box-shadow var(--tr), filter var(--tr);
 }
 .gh-btn:hover {
   background: #2c333b; border-color: #4a525c;
   transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 4px 12px -6px rgba(0, 0, 0, 0.55);
 }
-.gh-btn:active { transform: translateY(0); }
+.gh-btn:active { transform: translateY(0); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35); }
 .gh-btn:disabled {
   opacity: 0.55; cursor: not-allowed; transform: none; filter: saturate(0.6);
 }
 .gh-btn svg { display: block; flex: none; }
+/* Focus visible específico para el botón de OAuth (sobre fondo oscuro
+   propio, el ring blanco se ve mejor que el acento del sistema). */
+.gh-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
 
 /* ── Empty-state del workspace (primera sesión guiada) ───────────────────
    Se muestra en el área central cuando el equipo no tiene archivos: orienta
@@ -591,4 +610,177 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ews-demo-ev { animation: none !important; opacity: 1; transform: none; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 34 · Pulido sistémico (2026-05-23)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico. Refina detalles que mueven la sensación
+   "premium/instrumento" sin tocar tokens, sin features. Atiende:
+
+   1) Inspector empty: dashed→solid + bg hundido + padding. El dashed
+      sugiere "borrador/roto" en un panel ya denso; el solid se lee como
+      "sí, esto es intencional".
+   2) Modal botón secundario: más cuerpo (border-strong + hairline inset).
+      El primario CAPA 32 ganó gradiente + multi-shadow; el secundario
+      quedó plano y el par estaba desbalanceado.
+   3) StatusBar dividers: opacidad más baja. Eran "rejas" rítmicas; ahora
+      "guías discretas" — los segmentos se siguen distinguiendo, pero el
+      ojo se posa en el dato, no en la línea.
+   4) Peers overflow chip "+N": peso visual claramente "otros, no persona".
+      Antes se confundía con un avatar más en el cluster.
+   5) ContextBar — last touch del agrupado: gap rítmico en pantallas
+      medianas, divisores ya tenues.
+   6) Tooltips nativos para .tb-insp y .tb-hub (a11y discoverabilidad).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 1) Inspector empty — solid hairline + fondo hundido + respiración */
+.in-empty {
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+}
+/* En el contexto "alarma" la caja toma el lenguaje de aviso (igual que
+   .insec.alarma cambia eyebrow/iconos): es coherente cuando el estado
+   vacío vive bajo una sección que ya está advirtiendo. */
+.insec.alarma .in-empty {
+  background: var(--bad-bg);
+  border-color: color-mix(in srgb, var(--bad) 26%, transparent);
+  color: var(--text-2);
+}
+
+/* 2) Modal botón secundario — par equilibrado con el primario CAPA 32 */
+.modal-foot button.secundario {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 1px 0 var(--hl);
+}
+.modal-foot button.secundario:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.modal-foot button.secundario:active {
+  transform: translateY(0);
+}
+
+/* 3) StatusBar dividers — guías, no rejillas */
+.statusbar .sb-div {
+  opacity: 0.5;
+}
+
+/* 4) Peers overflow chip "+N" — distinción de "otros" vs "persona" */
+.peers .av.mas {
+  background: var(--bg);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: -0.02em;
+}
+.peers .av.mas:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* 5) ContextBar — gap rítmico en pantallas medianas (≤1280px). Los
+   chips se aprietan justo cuando el inspector está abierto + tabs; el
+   gap base subió a 0.7rem (CAPA 32); en medianas mantenemos algo más
+   ajustado para no perder densidad. */
+@media (max-width: 1280px) {
+  .ctxbar { gap: 0.6rem; }
+}
+
+/* 6) Chevron de carpeta del file-tree — transición suave en TODOS los
+   navegadores. Antes la regla del tree usaba un cubic-bezier inline;
+   reasentamos con --ease-in para coherencia + safety: si el navegador
+   no entiende el transform de rotación animado en algún caso, al menos
+   el color y opacity se sienten. */
+.row .twist {
+  transition: transform 220ms var(--ease-in), color var(--tr);
+}
+@media (prefers-reduced-motion: reduce) {
+  .row .twist { transition: color var(--tr); }
+}
+
+/* 7) Tabs — afordancia más sutil al focus del close-button. El patrón
+   actual lo deja translúcido en reposo y al 0.5+ con hover; cuando el
+   usuario navega por teclado y el close gana foco, el sistema global
+   pinta el ring del :focus-visible. Aquí sólo aseguramos que el ícono
+   también se vuelve totalmente opaco al ganar foco (afordancia clara
+   antes de pulsar Enter). */
+.tab .tabx:focus-visible {
+  opacity: 1;
+}
+
+/* 8) Modal head — micro: el chip del título (modal-h svg) gana un
+   tinte acento muy sutil cuando es informativo. No tocamos la
+   variante .am-modal que ya lo hace explícitamente. Skip — el patrón
+   actual deja al componente decidir. */
+
+/* 9) Inspector .insec header — chevron rotación coherente con el
+   plegado animado (CAPA 32 ya define `.insec-chev` transition). El
+   `.insec.plegada .insec-chev` rota -90deg; en algunos navegadores el
+   `transform-origin` por defecto no centra perfecto el icono lucide.
+   Forzamos el origen al centro. */
+.insec-chev {
+  transform-origin: center;
+}
+
+/* 10) Inputs — refinamiento del focus state. La regla global ya pinta
+   el anillo doble del sistema; aquí ampliamos para campos del modal
+   `nf-modal` que tenían su propia regla con un box-shadow personal
+   (1 stop). Sumamos el ring del sistema para coherencia. */
+.nf-modal input:focus-visible,
+.inv-code:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px var(--accent-soft);
+}
+
+/* 11) Hub team card — refinar la sensación de "card de dos pisos"
+   cuando hay upgrade footer. La transición del hover de la fila
+   superior no debe propagarse al footer (que es estático). El selector
+   actual `.hub-team-card.with-upgrade .hub-team:hover` ya está bien;
+   sólo aseguramos que la card padre no tenga overflow visible (la
+   sombra del hover de hub-team se "asienta" en su contenedor). */
+.hub-team-card { isolation: isolate; }
+
+/* 12) Logomark mark de cabina — la luz superior interior estaba
+   levemente opaca en pantallas con poco contraste. Subimos 1 punto
+   sin que cante. Cosmético. */
+.mark { box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.05); }
+
+/* 13) Botón "invitar" / "salir" en TopBar — hover sutil pero notorio.
+   El patrón actual subía surface-3; añadimos shadow-sm al hover para
+   "elevar" un punto sin que cambie de tamaño. */
+.salir:hover, .invitar:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* 14) ContextBar `.ctx-mode` — el chip de modo lleva su propio hairline.
+   En su variante "prop" (proponer a otra persona) el border puede
+   quedar muy tenue sobre fondos hundidos. Lo reforzamos sin tocar el
+   color de fondo. */
+.ctx-mode.prop {
+  border-color: color-mix(in srgb, var(--info) 38%, transparent);
+}
+.ctx-mode.live {
+  border-color: color-mix(in srgb, var(--ok) 38%, transparent);
+}
+
+/* 15) Inspector — peer-pulse animation pause cuando el panel no es
+   visible (reduce CPU y respeta intent). La regla existe para los
+   ews-demo; la extendemos a in-hero y peer-pulse del inspector. */
+@media (prefers-reduced-motion: reduce) {
+  .in-hero-live-dot,
+  .inav-pulse,
+  .statusbar .sb-live,
+  .status.ok::before {
+    animation: none !important;
+  }
 }
