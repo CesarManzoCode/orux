@@ -48,22 +48,32 @@
 
   /* ── ACERO: identidad. Mate, frío, desaturado. El relleno del CTA es
        un 2-stop de ~6% de luminancia (NO un gradiente de hue): se lee
-       sólido. Los trazos funcionales finos usan --steel-line. ── */
+       sólido. Los trazos funcionales finos usan --steel-line. Cada token
+       de color expone su canal *-rgb para que composiciones puntuales
+       (sombras, anillos) mezclen opacidad sin re-hardcodear el hex. ── */
   --steel: #5d7fa6;            /* trazo/acento de acero            */
   --steel-fill-top: #4c6f97;   /* relleno CTA, borde superior      */
   --steel-fill-bot: #3c5a7e;   /* relleno CTA, borde inferior      */
   --steel-ink: #eef4fb;        /* texto sobre el relleno (AA)      */
-  --steel-weak: rgba(93, 127, 166, 0.13);
-  --steel-soft: rgba(93, 127, 166, 0.20);
-  --steel-line: rgba(123, 156, 195, 0.50);
+  --steel-rgb: 93, 127, 166;
+  --steel-line-rgb: 123, 156, 195;
+  --steel-shadow-rgb: 60, 90, 126;   /* tono profundo: usado SOLO en sombras
+                                        del CTA acero (.btn.primary). */
+  --steel-weak: rgba(var(--steel-rgb), 0.13);
+  --steel-soft: rgba(var(--steel-rgb), 0.20);
+  --steel-line: rgba(var(--steel-line-rgb), 0.50);
   --steel-fill: linear-gradient(180deg, var(--steel-fill-top), var(--steel-fill-bot));
 
   /* ── Estado (color = significado, + tinte que se posa sobre cualquier
        superficie sin romper la profundidad) ── */
-  --live: #43b98a; --live-bg: rgba(67, 185, 138, 0.13); --live-line: rgba(67, 185, 138, 0.5);  /* vivo/coordinado */
-  --risk: #d6a341; --risk-bg: rgba(214, 163, 65, 0.13); --risk-line: rgba(214, 163, 65, 0.42); /* riesgo/impacto */
-  --peer: #6ea8e6; --peer-bg: rgba(110, 168, 230, 0.14); --peer-line: rgba(110, 168, 230, 0.48); /* otra persona */
-  --bad:  #e0606c; --bad-bg:  rgba(224, 96, 108, 0.13);
+  --live-rgb: 67, 185, 138;
+  --risk-rgb: 214, 163, 65;
+  --peer-rgb: 110, 168, 230;
+  --bad-rgb:  224, 96, 108;
+  --live: #43b98a; --live-bg: rgba(var(--live-rgb), 0.13); --live-line: rgba(var(--live-rgb), 0.5);  /* vivo/coordinado */
+  --risk: #d6a341; --risk-bg: rgba(var(--risk-rgb), 0.13); --risk-line: rgba(var(--risk-rgb), 0.42); /* riesgo/impacto */
+  --peer: #6ea8e6; --peer-bg: rgba(var(--peer-rgb), 0.14); --peer-line: rgba(var(--peer-rgb), 0.48); /* otra persona */
+  --bad:  #e0606c; --bad-bg:  rgba(var(--bad-rgb),  0.13);
 
   /* ── Elevación: sombra real + hairline = objeto táctil. Sin neón. ── */
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.45);
@@ -105,7 +115,7 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 .mono, code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-::selection { background: rgba(123, 156, 195, 0.30); color: #fff; }
+::selection { background: rgba(var(--steel-line-rgb), 0.30); color: #fff; }
 :focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--steel-line);
@@ -135,8 +145,8 @@ a { color: inherit; text-decoration: none; }
 .traces {
   position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background-image:
-    linear-gradient(118deg, transparent 0 49.9%, rgba(123, 156, 195, 0.05) 50%, transparent 50.1% 100%),
-    linear-gradient(64deg, transparent 0 41.9%, rgba(123, 156, 195, 0.035) 42%, transparent 42.1% 100%);
+    linear-gradient(118deg, transparent 0 49.9%, rgba(var(--steel-line-rgb), 0.05) 50%, transparent 50.1% 100%),
+    linear-gradient(64deg, transparent 0 41.9%, rgba(var(--steel-line-rgb), 0.035) 42%, transparent 42.1% 100%);
   background-repeat: no-repeat;
   -webkit-mask-image: radial-gradient(120% 80% at 78% 4%, #000, transparent 70%);
   mask-image: radial-gradient(120% 80% at 78% 4%, #000, transparent 70%);
@@ -251,7 +261,7 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
   color: var(--steel-ink); background: var(--steel-fill);
   border-color: var(--steel-line);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -16px rgba(60, 90, 126, 0.7);
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 26px -16px rgba(var(--steel-shadow-rgb), 0.7);
 }
 .btn.primary:hover { transform: translateY(-1px); filter: brightness(1.09); }
 .btn.ghost {
@@ -293,11 +303,11 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
 }
 .eyebrow .live {
   width: 7px; height: 7px; border-radius: 50%; background: var(--live);
-  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55); animation: pulse 2.8s ease-out infinite;
+  box-shadow: 0 0 0 0 rgba(var(--live-rgb), 0.55); animation: pulse 2.8s ease-out infinite;
 }
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.5); }
-  70%, 100% { box-shadow: 0 0 0 9px rgba(67, 185, 138, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(var(--live-rgb), 0.5); }
+  70%, 100% { box-shadow: 0 0 0 9px rgba(var(--live-rgb), 0); }
 }
 h1 {
   margin-top: 30px;
@@ -336,7 +346,7 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
 .hero-time-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--live);
-  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55);
+  box-shadow: 0 0 0 0 rgba(var(--live-rgb), 0.55);
   animation: pulse 2.8s ease-out infinite;
 }
 .signals {
@@ -375,8 +385,8 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
   content: ""; position: absolute; z-index: 0; pointer-events: none;
   inset: -100px -120px -130px -40px;
   background:
-    radial-gradient(58% 52% at 46% 40%, rgba(93, 127, 166, 0.22), transparent 65%),
-    radial-gradient(40% 38% at 62% 72%, rgba(110, 168, 230, 0.10), transparent 70%);
+    radial-gradient(58% 52% at 46% 40%, rgba(var(--steel-rgb), 0.22), transparent 65%),
+    radial-gradient(40% 38% at 62% 72%, rgba(var(--peer-rgb), 0.10), transparent 70%);
   filter: blur(40px);
 }
 .stage-back, .stage-back2 {
@@ -469,12 +479,12 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
    de la firma, sin highlight propio — la animación es la información, no el
    color. En fases 2-4 queda fijo como parte normal de la firma. */
 .ln .typed { color: #c2c8d2; }
-.ln.me { background: rgba(67, 185, 138, 0.10); box-shadow: inset 2px 0 0 var(--live); }
-.ln.peer { background: rgba(110, 168, 230, 0.09); box-shadow: inset 2px 0 0 var(--peer); }
+.ln.me { background: rgba(var(--live-rgb), 0.10); box-shadow: inset 2px 0 0 var(--live); }
+.ln.peer { background: rgba(var(--peer-rgb), 0.09); box-shadow: inset 2px 0 0 var(--peer); }
 /* Riesgo: la firma de claim cambió → halo ámbar en la línea. Coexiste con
    .peer mientras Ana sigue editando (fase 1 → 2 traslapan visualmente). */
-.ln.risk { background: rgba(214, 163, 65, 0.12); box-shadow: inset 2px 0 0 var(--risk); }
-.ln.risk.peer { background: linear-gradient(90deg, rgba(110, 168, 230, 0.10), rgba(214, 163, 65, 0.14));
+.ln.risk { background: rgba(var(--risk-rgb), 0.12); box-shadow: inset 2px 0 0 var(--risk); }
+.ln.risk.peer { background: linear-gradient(90deg, rgba(var(--peer-rgb), 0.10), rgba(var(--risk-rgb), 0.14));
   box-shadow: inset 2px 0 0 var(--risk); }
 .ln .cursor {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
@@ -548,7 +558,7 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
 }
 .card-impact .auto::before {
   content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--live);
-  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55);
+  box-shadow: 0 0 0 0 rgba(var(--live-rgb), 0.55);
   animation: pulse 2.8s ease-out infinite;
 }
 .card-prop .ic { color: var(--peer); background: var(--peer-bg); border: 1px solid var(--peer-line); }

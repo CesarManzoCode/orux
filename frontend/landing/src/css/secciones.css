@@ -455,7 +455,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   left: 22px; top: 50%; transform: translateY(-50%);
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--bad);
-  box-shadow: 0 0 0 3px rgba(224, 96, 108, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--bad-rgb), 0.12);
 }
 .cmp-right {
   color: var(--ink);
@@ -488,7 +488,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   display: grid; place-items: center;
   color: var(--bad); font-weight: 800;
   background: var(--bad-bg);
-  border: 1px solid rgba(224, 96, 108, 0.3);
+  border: 1px solid rgba(var(--bad-rgb), 0.3);
 }
 .cmp-foot b { color: var(--ink); font-weight: 600; }
 

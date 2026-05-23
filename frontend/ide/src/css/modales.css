@@ -97,23 +97,13 @@
   cursor: pointer; transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr), filter var(--tr);
   display: inline-flex; align-items: center; gap: 0.4rem;
 }
-.modal-foot button.primario {
-  background: var(--accent-fill, var(--accent));
-  color: var(--accent-ink, #0c1410);
-  border: 1px solid var(--accent);
-}
-.modal-foot button.primario:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
+/* .modal-foot button.primario y .secundario: el estilo base vive en
+   pulido.css (CAPA 32/34) — gradient + multi-shadow para el primario,
+   border-strong + hairline inset para el secundario. Aquí solo cubrimos
+   el estado disabled compartido. */
 .modal-foot button.primario:disabled {
   opacity: 0.5; cursor: not-allowed; filter: grayscale(0.4);
 }
-.modal-foot button.secundario {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.modal-foot button.secundario:hover { background: var(--surface-2); }
 
 /* ── Modal invitación ──
    Capa 33: se comparten DOS opciones (link y código) en bloques separados,
@@ -290,12 +280,14 @@
   line-height: 1.5;
 }
 
-/* ── Hub: toast inline, back-to-team, ajustes responsive ── */
+/* ── Hub: toast inline, back-to-team, ajustes responsive ──
+   `.hub-back` vive en hub.css con su look acero (pill mono). Aquí sólo el
+   toast y el botón "hub" del TopBar. */
 .hub-toast {
   position: relative;
   margin: 0.6rem 1.2rem 0;
   padding: 0.55rem 0.85rem;
-  background: var(--ok-bg, color-mix(in srgb, var(--ok) 12%, transparent));
+  background: var(--ok-bg);
   color: var(--ok);
   border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
   border-radius: var(--r-sm);
@@ -306,22 +298,6 @@
 @keyframes hub-toast-in {
   from { opacity: 0; transform: translateY(-4px) }
   to { opacity: 1; transform: none }
-}
-.hub-back {
-  display: inline-flex; align-items: center; gap: 0.25rem;
-  font: 600 11px/1 var(--font-base);
-  color: var(--muted);
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-sm);
-  padding: 0.4rem 0.6rem;
-  margin-right: 0.5rem;
-  cursor: pointer;
-  transition: color var(--tr), background var(--tr), border-color var(--tr);
-}
-.hub-back:hover {
-  color: var(--text); background: var(--surface);
-  border-color: var(--border);
 }
 /* TopBar — botón "hub" para volver desde dentro del equipo */
 .tb-hub {
@@ -374,7 +350,7 @@
 }
 .in-draft-acc .in-act.primario {
   background: var(--accent-fill, var(--accent));
-  color: var(--accent-ink, #0c1410);
+  color: var(--accent-ink);
   border-color: var(--accent);
 }
 .in-draft-acc .in-act.primario:hover { filter: brightness(1.06); }
@@ -438,25 +414,35 @@
   color: #fff;
   border-color: var(--bad);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.12),
-    0 8px 22px -14px rgba(232, 99, 111, 0.7);
+    0 8px 22px -14px rgba(var(--bad-rgb), 0.7);
 }
-.modal-foot button.primario.danger:hover:not(:disabled) { filter: brightness(1.06); }
+.modal-foot button.primario.danger:hover:not(:disabled) {
+  filter: brightness(1.06); transform: translateY(-1px);
+}
+.modal-foot button.primario.danger:active:not(:disabled) {
+  transform: translateY(1px); filter: brightness(0.96);
+}
 .modal-foot button.primario.danger:focus-visible {
   outline: none;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.12),
     0 0 0 2px var(--bg-deep),
-    0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
+    0 0 0 3.5px rgba(var(--bad-rgb), 0.55);
 }
 /* Tono "warn" (clonar y reemplazar workspace). Ambar sobrio. */
 .modal-foot button.primario.warn {
   background: var(--warn); color: #14110a; border-color: var(--warn);
 }
-.modal-foot button.primario.warn:hover:not(:disabled) { filter: brightness(1.05); }
+.modal-foot button.primario.warn:hover:not(:disabled) {
+  filter: brightness(1.05); transform: translateY(-1px);
+}
+.modal-foot button.primario.warn:active:not(:disabled) {
+  transform: translateY(1px); filter: brightness(0.96);
+}
 .modal-foot button.primario.warn:focus-visible {
   outline: none;
   box-shadow:
     0 0 0 2px var(--bg-deep),
-    0 0 0 3.5px color-mix(in srgb, var(--warn) 55%, transparent);
+    0 0 0 3.5px rgba(var(--warn-rgb), 0.55);
 }
 

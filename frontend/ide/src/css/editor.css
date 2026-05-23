@@ -134,9 +134,9 @@
   position: absolute; left: 0; width: 1.7rem; text-align: center;
   color: inherit; opacity: 0.7;
 }
-.diff .add { background: rgba(76, 201, 138, 0.1); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
+.diff .add { background: rgba(var(--ok-rgb), 0.1); color: var(--ok); box-shadow: inset 2px 0 0 var(--ok); }
 .diff .add::before { content: "+"; }
-.diff .del { background: rgba(232, 99, 111, 0.1); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
+.diff .del { background: rgba(var(--bad-rgb), 0.1); color: var(--bad); box-shadow: inset 2px 0 0 var(--bad); }
 .diff .del::before { content: "\2212"; }
 .diff .eq { color: var(--faint); }
 .imp-row {
@@ -251,18 +251,18 @@
 .ed-empty-cta {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 0.55rem 1rem; border-radius: var(--r);
-  background: var(--grad); color: var(--accent-ink, var(--bg-deep));
+  background: var(--grad); color: var(--accent-ink);
   border: 1px solid var(--accent-line); cursor: pointer;
   font: 700 var(--t-sm)/1 var(--font-ui); letter-spacing: -0.005em;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.18),
-    0 10px 22px -14px rgba(76,195,138,0.55);
+    0 10px 22px -14px rgba(var(--accent-rgb), 0.55);
   transition: filter var(--tr), transform var(--tr);
 }
 .ed-empty-cta:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .ed-empty-cta:active { transform: translateY(0); }
 .ed-empty-cta:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent);
+  box-shadow: var(--ring);
 }
 /* Ejemplos típicos — chips no clicables, pista del lenguaje del producto. */
 .ed-empty-ex {
@@ -302,7 +302,7 @@
   position: absolute; left: 52px; right: 0; height: 22px;
   z-index: 0; pointer-events: none;
   background: linear-gradient(90deg,
-    rgba(76, 195, 138, 0.05), var(--ed-line) 96px, var(--ed-line));
+    rgba(var(--accent-rgb), 0.05), var(--ed-line) 96px, var(--ed-line));
   box-shadow:
     inset 2px 0 0 var(--ed-line-edge),
     inset 0 1px 0 rgba(255, 255, 255, 0.022),
@@ -425,7 +425,7 @@
   font-size: 14px; line-height: 22px; padding: 20px 24px 20px 64px;
   resize: none; outline: none; white-space: pre; overflow: auto; tab-size: 4;
 }
-.ed-ta::selection { background: rgba(76, 195, 138, 0.26); }
+.ed-ta::selection { background: rgba(var(--accent-rgb), 0.26); }
 .ed-ta::placeholder { color: var(--faint); -webkit-text-fill-color: var(--faint); }
 .ed-gutter {
   position: absolute; left: 0; top: 0; bottom: 0; width: 52px;

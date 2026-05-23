@@ -80,7 +80,7 @@
 .landing .lg-legal input[type="checkbox"]:checked::after {
   content: ""; position: absolute; left: 4px; top: 1px;
   width: 5px; height: 9px;
-  border: solid var(--steel-ink, #fff);
+  border: solid var(--steel-ink);
   border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 .landing .lg-legal input[type="checkbox"]:focus-visible {
@@ -314,9 +314,17 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--r-sm);
   background: var(--surface-2);
-  transition: border-color var(--tr), background var(--tr);
+  transition: border-color var(--tr), background var(--tr),
+    box-shadow var(--tr), transform var(--tr);
 }
-.in-atn-item:hover { border-color: var(--border); }
+/* Hover de atención: micro-elevación + hairline más nítido = afordancia
+   táctil sin gritar. Los callouts del inspector son lecturas, no acciones
+   primarias — el realce debe quedarse en "esto es algo que puedo mirar". */
+.in-atn-item:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
 .in-atn-ic {
   display: flex; flex-shrink: 0; margin-top: 1px;
   color: var(--muted);

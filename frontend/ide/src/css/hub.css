@@ -18,22 +18,23 @@
  * ───────────────────────────────────────────────────────────────────── */
 .hub {
   /* Mismos tokens Acero que .landing/.login: no se toca el :root global
-     (el IDE conserva su verde) y la consola de hub queda coherente. */
-  --steel: #5d7fa6;
+     (el IDE conserva su verde) y la consola de hub queda coherente. Las
+     variantes rgba derivan del canal --steel-rgb del :root, así un cambio
+     del acero mueve toda la cabina del hub sin re-hardcodear hex. */
   --steel-fill: linear-gradient(180deg, #4c6f97, #3c5a7e);
-  --steel-ink: #eef4fb;
   --accent: #5d7fa6;
   --accent-2: #7b9cc3;
-  --accent-weak: rgba(93, 127, 166, 0.13);
-  --accent-soft: rgba(93, 127, 166, 0.20);
-  --accent-line: rgba(123, 156, 195, 0.50);
+  --accent-rgb: var(--steel-rgb);
+  --accent-weak: rgba(var(--steel-rgb), 0.13);
+  --accent-soft: rgba(var(--steel-rgb), 0.20);
+  --accent-line: rgba(var(--steel-line-rgb), 0.50);
   --grad: var(--steel-fill);
 
   position: fixed; inset: 0; z-index: 50;
   display: grid; grid-template-rows: auto 1fr;
   background:
-    radial-gradient(80vw 60vh at 100% -10%, rgba(123, 156, 195, 0.06), transparent 60%),
-    radial-gradient(60vw 50vh at 0% 100%, rgba(123, 156, 195, 0.04), transparent 60%),
+    radial-gradient(80vw 60vh at 100% -10%, rgba(var(--steel-line-rgb), 0.06), transparent 60%),
+    radial-gradient(60vw 50vh at 0% 100%, rgba(var(--steel-line-rgb), 0.04), transparent 60%),
     var(--bg-deep);
   overflow: auto;
 }
@@ -89,7 +90,7 @@
 }
 .hub-conn i {
   width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
-  box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.55);
+  box-shadow: 0 0 0 0 rgba(var(--ok-rgb), 0.55);
   animation: lp-ping 2.6s ease-out infinite;
 }
 .hub-conn.st-wt i { background: var(--warn); animation: none; }
@@ -288,7 +289,7 @@
      La a11y queda cubierta por aria-label de la tarjeta. */
 }
 .hub-team:hover .ht-go {
-  color: var(--accent-ink, var(--bg-deep));
+  color: var(--steel-ink);
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -338,7 +339,8 @@
 }
 .hub-empty-join:hover { color: var(--text); }
 .hub-empty-join:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
+  outline: none; border-radius: 2px;
+  box-shadow: var(--ring);
 }
 @media (max-width: 600px) {
   .hub-empty { grid-template-columns: auto 1fr; }
@@ -512,7 +514,7 @@
   transition: background var(--tr), color var(--tr), transform var(--tr), border-color var(--tr);
 }
 .hub-pick-card:hover .hpc-go {
-  background: var(--accent); color: var(--steel-ink, var(--bg-deep));
+  background: var(--accent); color: var(--steel-ink);
   border-color: var(--accent); transform: translateX(2px);
 }
 
@@ -566,7 +568,7 @@
   background: var(--grad); color: var(--steel-ink);
   border-color: var(--accent-line);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -14px rgba(60, 90, 126, 0.7);
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -14px rgba(var(--steel-rgb), 0.7);
 }
 .hub-row .primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .hub-row .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
@@ -595,7 +597,7 @@
 }
 .hc-dot.ok {
   background: var(--ok);
-  box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.5);
+  box-shadow: 0 0 0 0 rgba(var(--ok-rgb), 0.5);
   animation: lp-ping 2.6s ease-out infinite;
 }
 

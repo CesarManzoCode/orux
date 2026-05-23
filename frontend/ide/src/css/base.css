@@ -53,27 +53,47 @@
        CTA primario; el resto usa el sólido o un tinte neutro. ── */
   --accent: #4cc38a;
   --accent-2: #34d9bf;
-  --accent-weak: rgba(76, 195, 138, 0.10);
-  --accent-soft: rgba(76, 195, 138, 0.16);
-  --accent-line: rgba(76, 195, 138, 0.55);  /* indicadores finos, sin glow */
+  --accent-rgb: 76, 195, 138;             /* canal RGB del --accent          */
+  --accent-2-rgb: 52, 217, 191;           /* canal RGB del --accent-2        */
+  --accent-weak: rgba(var(--accent-rgb), 0.10);
+  --accent-soft: rgba(var(--accent-rgb), 0.16);
+  --accent-line: rgba(var(--accent-rgb), 0.55);  /* indicadores finos        */
   --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
 
   /* ── Semántica: color + tinte translúcido (se posa bien sobre cualquier
-       superficie, no es un bloque opaco que rompe la profundidad). ── */
-  --ok: #4cc98a;   --ok-bg: rgba(76, 201, 138, 0.13);
-  --warn: #d8a93e; --warn-bg: rgba(216, 169, 62, 0.13);
-  --bad: #e8636f;  --bad-bg: rgba(232, 99, 111, 0.13);
-  --info: #62a8f0; --info-bg: rgba(98, 168, 240, 0.13);
-  --vio: #a98bf0;  --vio-bg: rgba(169, 139, 240, 0.13);
+       superficie, no es un bloque opaco que rompe la profundidad). Cada uno
+       expone *-rgb para que composiciones puntuales (sombras, anillos,
+       gradientes) puedan mezclar opacidad sin re-hardcodear hex. ── */
+  --ok-rgb: 76, 201, 138;
+  --warn-rgb: 216, 169, 62;
+  --bad-rgb: 232, 99, 111;
+  --info-rgb: 98, 168, 240;
+  --vio-rgb: 169, 139, 240;
+  --ok: #4cc98a;   --ok-bg: rgba(var(--ok-rgb), 0.13);
+  --warn: #d8a93e; --warn-bg: rgba(var(--warn-rgb), 0.13);
+  --bad: #e8636f;  --bad-bg: rgba(var(--bad-rgb), 0.13);
+  --info: #62a8f0; --info-bg: rgba(var(--info-rgb), 0.13);
+  --vio: #a98bf0;  --vio-bg: rgba(var(--vio-rgb), 0.13);
+
+  /* ── Acero: identidad de la landing/login/hub. El IDE no la usa para
+       marca (el verde manda dentro), pero los componentes scoped Hub/Login
+       sobrescriben --accent al acero y referencian --steel-ink como tinta
+       sobre relleno acero (botón, pill, badge). Lo definimos acá para que
+       todos los `var(--steel-ink, fallback)` colapsen al token real. ── */
+  --steel-rgb: 93, 127, 166;
+  --steel-line-rgb: 123, 156, 195;
+  --steel-shadow-rgb: 60, 90, 126;   /* tono profundo: usado SOLO en sombras
+                                        del CTA acero (login/hub/landing). */
+  --steel-ink: #eef4fb;
 
   /* ── Superficie de código: tokens NUEVOS y aislados (no tocan la
        geometría sagrada, sólo el aspecto del "pozo" donde se escribe).
        Las guías de indentación son la firma de un IDE de verdad: muy
        tenues en reposo, una más visible para la columna activa. ── */
   --ed-line: rgba(255, 255, 255, 0.032);     /* banda de línea activa    */
-  --ed-line-edge: rgba(76, 195, 138, 0.55);  /* filo izq. de esa banda   */
+  --ed-line-edge: rgba(var(--accent-rgb), 0.55);  /* filo izq. de esa banda */
   --ed-guide: rgba(255, 255, 255, 0.085);    /* guía de indentación      */
-  --ed-guide-activa: rgba(76, 195, 138, 0.5);/* guía del scope activo    */
+  --ed-guide-activa: rgba(var(--accent-rgb), 0.5);/* guía del scope activo  */
   --ed-gutter-bg: #08090c;                   /* canaleta, un punto + honda */
   --ed-blueprint: rgba(255, 255, 255, 0.016);/* trama del vacío          */
 
@@ -147,7 +167,7 @@ body::before {
   background: radial-gradient(130vw 80vh at 50% -25%,
     rgba(255, 255, 255, 0.014), transparent 62%);
 }
-::selection { background: rgba(76, 195, 138, 0.24); }
+::selection { background: rgba(var(--accent-rgb), 0.24); }
 
 /* Scrollbars: finas, casi invisibles en reposo, despiertan al pasar. El
    detalle que separa "app" de "herramienta". El thumb en reposo usa
@@ -189,7 +209,7 @@ button:active { transform: translateY(1px); }
 .btn-primario {
   background: var(--grad); color: var(--accent-ink); font-weight: 700;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 4px 14px -8px rgba(52, 217, 191, 0.5);
+    0 4px 14px -8px rgba(var(--accent-2-rgb), 0.5);
 }
 .btn-primario:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .btn-primario:active { transform: translateY(1px); filter: brightness(.98); }
