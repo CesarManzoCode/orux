@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "./useStore";
 import {
   getState, guardar, contarDrafts, resolver, seleccionar,
@@ -110,6 +110,16 @@ export function App() {
     // queremos re-evaluar el trigger en cada update del store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.fase, s.esAdmin]);
+  // Estabilizar la API que pasa al Tutorial: si la pasamos como objeto
+  // literal `{...}` en cada render, su referencia cambia, el useMemo del
+  // guión re-construye los pasos, el useEffect de `before` ve un step
+  // "nuevo", lo re-ejecuta — y como `before` muta el store, se cae en
+  // loop infinito (React: Maximum update depth exceeded). Los setters
+  // de useState ya son estables, así que con useMemo basta.
+  const tutorialApi = useMemo(
+    () => ({ setVista, setInspectorOpen: setInspOpen }),
+    [],
+  );
 
   // Capa 19: Ctrl+S / Cmd+S global = checkpoint del archivo abierto. El
   // Editor ya lo captura cuando el textarea tiene foco; este handler cubre
@@ -401,10 +411,7 @@ export function App() {
       {adminOpen && s.esAdmin && <AdminModal onClose={() => setAdminOpen(false)} />}
       {kbdOpen && <KbdHelp onClose={() => setKbdOpen(false)} />}
       {tutorialOn && (
-        <Tutorial
-          api={{ setVista, setInspectorOpen: setInspOpen }}
-          onDone={() => setTutorialOn(false)}
-        />
+        <Tutorial api={tutorialApi} onDone={() => setTutorialOn(false)} />
       )}
       {toast && (
         <div

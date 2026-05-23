@@ -14,7 +14,7 @@
 // a Esc. Cualquier salida llama a `onDone`, que: limpia el mock (deja
 // el workspace vacío otra vez) y persiste el flag para no volver a
 // disparar el tutorial en esa sesión / navegador.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { OruxBot, type BotPos } from "./OruxBot";
 import { Spotlight } from "./Spotlight";
@@ -92,10 +92,17 @@ export function Tutorial({
   }, [onDone]);
 
   // ── before-effect del paso ─────────────────────────────────────────────
-  // Cada vez que entramos a un paso, corremos su `before` (típicamente,
-  // mutar el mock para que la UI muestre el estado que el bot va a narrar).
+  // Cada vez que entramos a un paso, corremos su `before` UNA sola vez
+  // (típicamente, mutar el mock para que la UI muestre el estado que el
+  // bot va a narrar). El guard por step.id es defensa: si la referencia
+  // de `step` cambia por un re-render del padre, el useEffect dispara
+  // otra vez — sin guard, `before` mutaría el store en loop infinito.
+  const beforeRun = useRef<Set<string>>(new Set());
   useEffect(() => {
-    step?.before?.();
+    if (!step) return;
+    if (beforeRun.current.has(step.id)) return;
+    beforeRun.current.add(step.id);
+    step.before?.();
   }, [step]);
 
   // ── posicionamiento del bot ────────────────────────────────────────────
