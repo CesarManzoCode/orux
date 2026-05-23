@@ -547,6 +547,16 @@
   transition: background var(--tr), color var(--tr);
 }
 .inimp-x:hover { background: var(--surface-2); color: var(--text); }
+/* Capa 35: chip de "análisis sin LSP". Discreto a propósito: no es un error,
+   es honestidad sobre la profundidad del análisis. Mismo tamaño/peso que el
+   código inline para que se sienta parte de la línea, no una alarma. */
+.inimp-analiz {
+  display: inline-block; margin-left: 0.4rem;
+  padding: 1px 6px; border-radius: var(--r-sm);
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.4;
+  color: var(--faint); background: var(--surface-2);
+  border: 1px solid var(--border-soft); cursor: help; vertical-align: baseline;
+}
 .infeed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .infeed-i {
   display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.32rem 0;

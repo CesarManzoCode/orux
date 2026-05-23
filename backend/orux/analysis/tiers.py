@@ -294,3 +294,37 @@ def tier_para(path: str) -> Tier | None:
         if tier.disponible():
             return tier
     return None
+
+
+# Etiquetas estables del nivel del Tier (1=ast, 2=tree-sitter, 3=regex). Las
+# usa `analizador_efectivo` para nombrar lo que de verdad corrió. Si entrara
+# un Tier nuevo con otro nivel, cae a "regex" honesto (no inventamos label).
+_LABEL_POR_NIVEL: dict[int, str] = {1: "ast", 2: "treesitter", 3: "regex"}
+
+
+def analizador_efectivo(path: str, sesion=None) -> str:
+    """El analizador real que corrió/correría para `path`. Es la señal HONESTA
+    al cliente de la profundidad del análisis — sin esto, si pyright cae en
+    el VPS el cliente sigue creyendo "tengo LSP" y confía en un fan-out que
+    en realidad es token-scan. Anti-degradación-silenciosa: el server etiqueta,
+    el cliente decide si avisa al usuario.
+
+    Valores (de más a menos profundo):
+      - "lsp"        Tier 0: pyright/tsserver/gopls/rust-analyzer vivo + lang
+                     con LSP soportado. Es lo óptimo: fan-out por resolución
+                     real de imports.
+      - "ast"        Tier 1 (Python `ast`): detección perfecta de la interfaz,
+                     fan-out por token-scan.
+      - "treesitter" Tier 2: detección fina multi-lenguaje (parser C),
+                     fan-out por token-scan.
+      - "regex"      Tier 3: heurístico (fallback honesto cuando tree-sitter
+                     no carga, p.ej. sandbox sin internet).
+      - ""           Lenguaje no analizado. El server NO debería mandar
+                     impacto en ese caso, pero el default vacío es seguro.
+    """
+    if _usar_lsp(sesion, path):
+        return "lsp"
+    tier = tier_para(path)
+    if tier is None:
+        return ""
+    return _LABEL_POR_NIVEL.get(getattr(tier, "nivel", 3), "regex")

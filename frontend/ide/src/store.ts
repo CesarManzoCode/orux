@@ -27,6 +27,12 @@ export interface Impact {
   // Capa 24d: severidad por símbolo (1:1 con symbols). Vacío en mensajes
   // viejos -> el cliente asume "media".
   severidades?: string[];
+  // Capa 35 (anti-degradación-silenciosa): el analizador que produjo este
+  // impacto en el server. "lsp" | "ast" | "treesitter" | "regex". Vacío =
+  // server viejo (no inventamos profundidad — no se muestra chip). Si llega
+  // algo distinto de "lsp", el Inspector muestra un chip discreto para que
+  // el dueño sepa que el fan-out fue token-scan, no resolución real.
+  analizador?: string;
 }
 export interface GitStatus {
   available: boolean; branch: string; changes: number; commits: string[];
@@ -219,6 +225,39 @@ function wsUrl(): string {
 
 let ws: WebSocket | null = null;
 let lastPresence = { path: "", line: 0 };
+
+// Reconnect automático: si la red parpadea (wifi, suspender el laptop, server
+// reiniciándose) el cliente intenta solo, con backoff exponencial. Sin esto el
+// usuario veía "desconectado" y quedaba paralizado — el bug más caro porque
+// cualquier hiccup = abandono. Empieza en 500 ms (hiccup chiquito, ni se nota)
+// y duplica hasta 30 s (techo: no martillar al server eternamente). El
+// `onopen` exitoso resetea el contador. `cierreIntencional` evita
+// reconectar cuando `salirEquipo()` cierra el WS a propósito para volver al
+// lobby —ese flujo ya llama a `connect()` explícito acto seguido.
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 30_000;
+let reconnectTimer: number | null = null;
+let reconnectIntento = 0;
+let cierreIntencional = false;
+
+function cancelarReconnect() {
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function programarReconnect() {
+  cancelarReconnect();
+  const delay = Math.min(
+    RECONNECT_BASE_MS * 2 ** reconnectIntento, RECONNECT_MAX_MS,
+  );
+  reconnectIntento += 1;
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null;
+    connect();
+  }, delay);
+}
 
 function send(obj: unknown) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -499,14 +538,28 @@ function absorberInviteDeURL() {
 export function connect() {
   absorberSesionDeURL();
   absorberInviteDeURL();
+  // Cualquier reintento pendiente queda invalidado: este connect() es la
+  // verdad. Y arrancamos limpios: el cierre que venga lo marcamos como NO
+  // intencional salvo que alguien (salirEquipo) lo pida explícito.
+  cancelarReconnect();
+  cierreIntencional = false;
+  set({ conn: "conectando" });
   ws = new WebSocket(wsUrl());
   ws.onopen = () => {
+    // Conexión viva: el backoff vuelve a cero. La próxima vez que se caiga
+    // arrancamos con 500 ms, no con el último delay acumulado.
+    reconnectIntento = 0;
     set({ conn: "conectado" });
     const sess = localStorage.getItem("orux_session");
     if (sess) send({ type: "session", token: sess });
     else set({ authed: false });
   };
-  ws.onclose = () => set({ conn: "desconectado" });
+  ws.onclose = () => {
+    set({ conn: "desconectado" });
+    // Cierre normal (cambio de equipo, salir): no reintentar. El cierre
+    // accidental sí dispara el backoff.
+    if (!cierreIntencional) programarReconnect();
+  };
   ws.onerror = () => set({ conn: "error" });
   ws.onmessage = (e) => onMessage(e.data as string);
 }
@@ -531,6 +584,10 @@ export function salir() {
 export function salirEquipo() {
   // 1) Suelta el WS viejo (su onclose ya marca conn=desconectado). El
   //    server libera la presencia del equipo y los demás verán "se fue".
+  //    Marcamos el cierre como INTENCIONAL para que el reconnect automático
+  //    no se dispare —el connect() de abajo es la reconexión que queremos,
+  //    no un reintento por caída de red.
+  cierreIntencional = true;
   try { ws?.close(); } catch { /* ya cerrado, da igual */ }
   ws = null;
   lastPresence = { path: "", line: 0 };

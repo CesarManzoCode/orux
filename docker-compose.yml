@@ -16,6 +16,20 @@ services:
       - postgres
     expose:
       - "8765"          # solo dentro de la red de compose, no al host
+    # Topes de recursos: el server WS arranca pyright/tsserver/gopls/
+    # rust-analyzer como subprocesos y un equipo con un repo grande puede
+    # disparar la RAM. Sin tope, un solo LSP "que se ahoga" puede tumbar
+    # el host entero y llevarse a postgres/caddy/api con él. 2 CPU/2G dan
+    # margen real para los 4 LSP corriendo a la vez y para el event loop.
+    # Reservation 256M = lo mínimo que el server pide aunque el host esté
+    # apretado. `docker compose up` respeta esto sin necesitar swarm.
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          memory: 256M
     environment:
       # Capa 15: DSN de Postgres. Mientras el server no esté cableado a la
       # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
@@ -52,6 +66,15 @@ services:
               "--host", "0.0.0.0", "--port", "8800"]
     expose:
       - "8800"
+    # API HTTP liviana: pocos endpoints, todos JSON cortos, sin LSP ni
+    # estado en memoria — Starlette + uvicorn corren cómodos en 512M.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 128M
     environment:
       - ORUX_DB_DSN=postgresql://orux:orux@postgres:5432/orux
       - ORUX_ADMIN_USER=${ORUX_ADMIN_USER:-}
@@ -93,6 +116,16 @@ services:
     image: postgres:16-alpine
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
+    # Postgres solo guarda metadatos (no archivos): tablas chicas, queries
+    # cortas. 1G alcanza con holgura para shared_buffers default + cache.
+    # Si el equipo crece a miles de teams subimos esto, no antes.
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          memory: 256M
     environment:
       - POSTGRES_USER=orux
       - POSTGRES_PASSWORD=orux
@@ -121,6 +154,15 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Caddy sirve estáticos + proxy + TLS: cómputo casi nulo, RAM mínima.
+    # 256M le sobra hasta picos de tráfico bestiales.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          memory: 32M
     environment:
       # Dominio real -> TLS automático. Sin dominio queda "localhost" (cert
       # local, el navegador avisa: ok para probar, no para producción real).

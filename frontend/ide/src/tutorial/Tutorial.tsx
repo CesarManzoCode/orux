@@ -67,6 +67,12 @@ export function Tutorial({
   const step = steps[idx];
   const isLast = idx === steps.length - 1;
   const [botPos, setBotPos] = useState<BotPos>(posCentral);
+  // Escape de paso click: cuando es true, el bot muestra un CTA "Continuar"
+  // que permite al usuario saltar al siguiente paso sin tener que clickear
+  // el target. Se activa por timeout duro (estamos atascados) o por target
+  // ausente (la sección del Inspector no se montó, el archivo no cargó, etc.).
+  // Reset al cambiar de paso — más abajo, en el efecto dedicado.
+  const [mostrarEscape, setMostrarEscape] = useState(false);
 
   // Mount-only: el tutorial necesita el inspector abierto y todas sus
   // secciones EXPANDIDAS (apunta a inspector-presencia / -propuestas /
@@ -167,6 +173,52 @@ export function Tutorial({
     return () => window.removeEventListener("keydown", onKey);
   }, [salir]);
 
+  // ── escape de paso click (guardrail anti-atasco) ───────────────────────
+  // Los pasos `say` se auto-avanzan; los `click` esperan a que el usuario
+  // clickee el target. Si el target NUNCA aparece (la sección del Inspector
+  // no se montó, el archivo no cargó por una race con el mock) o el usuario
+  // se queda sin saber qué hacer, queda atrapado. Acá montamos un watchdog:
+  //   • Si llevamos 18 s en un paso click, ofrecemos un CTA "Continuar" en
+  //     el bot —el usuario sale del atasco sin abortar todo el tutorial.
+  //   • Si tras 4 s el target sigue sin bbox válido, lo ofrecemos antes
+  //     (no hace falta esperar 18 s si ya sabemos que la UI no respondió).
+  // El último paso no entra acá: ya tiene su propio CTA "Empezar".
+  useEffect(() => {
+    setMostrarEscape(false);
+    if (!step || step.mode !== "click" || isLast) return;
+    const inicio = performance.now();
+    const id = window.setInterval(() => {
+      const transcurrido = performance.now() - inicio;
+      if (transcurrido > 18_000) {
+        setMostrarEscape(true);
+        window.clearInterval(id);
+        return;
+      }
+      if (step.target && transcurrido > 4_000) {
+        const el = document.querySelector(`[data-tour-id="${step.target}"]`);
+        const r = el?.getBoundingClientRect();
+        const valido = !!r && r.width >= 8 && r.height >= 8 &&
+          r.bottom > 0 && r.right > 0 &&
+          r.top < window.innerHeight && r.left < window.innerWidth;
+        if (!valido) {
+          setMostrarEscape(true);
+          window.clearInterval(id);
+        }
+      }
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [step, isLast]);
+
+  // Acción del escape: mismo efecto que clickear el target real — ejecuta
+  // el `after` del paso (si lo define) y avanza el índice. Si el paso no
+  // tiene `after` (open-git, que delega al setVista real del Rail) el paso
+  // queda incompleto, pero el usuario no queda atrapado: el siguiente paso
+  // ya ejecuta su propio `before` y reinicia la narrativa.
+  const onEscape = useCallback(() => {
+    if (step?.after) step.after();
+    setIdx((i) => i + 1);
+  }, [step]);
+
   if (!step) return null;
   const text = step.text(t);
 
@@ -197,8 +249,16 @@ export function Tutorial({
       <OruxBot
         text={text}
         pos={botPos}
-        ctaLabel={isLast ? t.tut_cta_start : undefined}
-        onCta={isLast ? salir : undefined}
+        ctaLabel={
+          isLast ? t.tut_cta_start
+          : mostrarEscape ? t.tut_cta_continuar
+          : undefined
+        }
+        onCta={
+          isLast ? salir
+          : mostrarEscape ? onEscape
+          : undefined
+        }
       />
       <button
         type="button"

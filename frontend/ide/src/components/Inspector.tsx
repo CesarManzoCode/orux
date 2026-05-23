@@ -106,6 +106,14 @@ function ImpactoMini({ im }: { im: Impact }) {
   // a llegar (porque otro Ctrl+S), reaparece. Sin eso la lista crece sin
   // forma de limpiarla.
   const key = im.source_path + "::" + im.affected_path;
+  // Capa 35: chip de analizador. Solo aparece si el server etiquetó algo
+  // que NO es "lsp" — es decir, si hubo degradación real (LSP cayó o el
+  // tier transitivo no usa LSP por diseño). "lsp" o vacío -> no se muestra
+  // (no inventamos chips para lo ideal). "treesitter" se rotula con guión
+  // porque es la forma común del nombre.
+  const mostrarAnaliz = !!im.analizador && im.analizador !== "lsp";
+  const labelAnaliz = im.analizador === "treesitter"
+    ? "tree-sitter" : im.analizador;
   return (
     <div className="inimp">
       <span className={"insev s-" + sev}>{t.tr_sev[sev] ?? sev}</span>
@@ -115,6 +123,11 @@ function ImpactoMini({ im }: { im: Impact }) {
           <code key={i}>{x}{i < im.symbols.length - 1 ? " " : ""}</code>
         ))}{" "}
         en <span className="inpath">{im.source_path}</span>
+        {mostrarAnaliz && (
+          <span className="inimp-analiz" title={t.ins_analiz_aviso}>
+            {labelAnaliz}
+          </span>
+        )}
       </span>
       <button
         type="button"

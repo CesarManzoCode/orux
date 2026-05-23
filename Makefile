@@ -1,6 +1,6 @@
 # Atajos de deploy y desarrollo. `make` o `make help` lista todo.
 .DEFAULT_GOAL := help
-.PHONY: help build up down restart logs ps sh test dev
+.PHONY: help build up down restart logs ps sh test dev db-backup db-restore
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) \
@@ -32,3 +32,10 @@ test: ## Corre la suite de tests en local (no en docker)
 
 dev: ## Server en local para desarrollo (sin docker)
 	cd backend && python -m orux.server
+
+db-backup: ## Backup de Postgres (local en ./backups; off-site a DO Spaces si DO_SPACES_* está seteado)
+	./scripts/backup-db.sh
+
+db-restore: ## Restaurar DB desde backup. Uso: make db-restore FILE=./backups/orux-XXX.sql.gz CONFIRM=yes
+	@if [ -z "$(FILE)" ]; then echo "uso: make db-restore FILE=./backups/orux-XXXX.sql.gz CONFIRM=yes"; exit 2; fi
+	CONFIRM=$(CONFIRM) ./scripts/restore-db.sh "$(FILE)"

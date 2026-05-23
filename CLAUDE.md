@@ -18,9 +18,9 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 ## Estado actual
 
-> **Este documento envejece rápido** — el proyecto avanza muy rápido. Ante cualquier duda, **el código y `git log` son la autoridad**, no este archivo. Última actualización: 2026-05-22.
+> **Este documento envejece rápido** — el proyecto avanza muy rápido. Ante cualquier duda, **el código y `git log` son la autoridad**, no este archivo. Última actualización: 2026-05-23.
 
-Orux está **desplegado y en uso** en `orux.space`. Construido por capas (**33** hasta hoy). **429 tests** en el backend.
+Orux está **desplegado y en uso** en `orux.space`. Construido por capas (**33** + pulido). **472 tests** en el backend.
 
 **Es un producto multi-equipo.** Cada equipo está completamente aislado:
 
@@ -50,8 +50,12 @@ Orux está **desplegado y en uso** en `orux.space`. Construido por capas (**33**
 
 **Modelo freemium** (`plans.py`): plan `free` permanente y de verdad usable (5 devs, 2 lenguajes LSP, impacto directo) frente a `premium` (sin tope, impacto transitivo, rename automático). El cobro con Stripe es **por asiento** (capa 31): un asiento por miembro del equipo, factura `precio × miembros`, la cantidad se ajusta sola cuando entra gente. Está cerrado por defecto: sin credenciales, `/api/v1/billing/*` responde 503.
 
+**Cambios pre-anuncio del 2026-05-23** (tres P0 cerrados antes del freeze):
+- **WS reconnect automático con backoff exponencial** en `frontend/ide/src/store.ts`: si la conexión se cae (wifi, server reiniciándose) el cliente reintenta solo (500ms→30s, reset al onopen). Bandera `cierreIntencional` evita doble-reconexión cuando `salirEquipo()` lo cierra a propósito. Antes: cualquier parpadeo de red = abandono.
+- **Tutorial OruxBot con CTA de escape** en `frontend/ide/src/tutorial/Tutorial.tsx`: pasos `click` ofrecen "Continuar" tras 18s O 4s con target sin bbox válido — cubre el caso de Inspector no montado o race del mock. Skip total y Esc ya existían; esto es el guardrail intermedio.
+- **Tier del análisis expuesto al cliente:** `tiers.analizador_efectivo(path, sesion)` etiqueta cada análisis (`"lsp"|"ast"|"treesitter"|"regex"`); viaja en `ImpactMessage.analizador` (default vacío = byte-compat); el Inspector muestra un chip discreto `.inimp-analiz` cuando no es `"lsp"`. Transitivo NO usa LSP por diseño → siempre muestra chip.
+
 **Pendientes conocidos:**
-- **El tier del análisis no se expone en la UI.** El backend ya elige el tier más profundo disponible (LSP → ast → tree-sitter → regex) por archivo, pero el `ImpactMessage` no lleva ese dato y el Inspector no lo renderiza. Cuando LSP cae y degradamos a regex, el usuario no se entera — degradación silenciosa hacia el cliente, no solo a los logs.
 - **Stripe en VPS:** el backend está listo pero falta config + validación en el VPS.
 
 ## Trampas operativas ya vistas

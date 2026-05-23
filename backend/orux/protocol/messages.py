@@ -300,6 +300,13 @@ class ImpactMessage:
     # "baja". El dueño prioriza el triage. Vacío = byte-compat con
     # clientes/tests viejos (el cliente cae a "media").
     severidades: list[str] = field(default_factory=list)
+    # Capa 35 (anti-degradación silenciosa): el ANALIZADOR efectivo que
+    # produjo este impacto. Cuando LSP cae en el VPS (pyright/tsserver no
+    # levantan) el análisis degrada solo a tree-sitter/regex; sin esto, el
+    # cliente cree que tiene LSP y confía en un fan-out que es token-scan.
+    # Valores: "lsp" | "ast" | "treesitter" | "regex". Vacío = compat con
+    # server viejo (el cliente no muestra nada — no inventa profundidad).
+    analizador: str = ""
     type: Literal["impact"] = "impact"
 
 

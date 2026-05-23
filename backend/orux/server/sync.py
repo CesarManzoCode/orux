@@ -576,14 +576,22 @@ class SyncServer:
         # `return` ANTES de esto y solo mandaba la onda transitiva: te dejaba
         # SIN el aviso bueno y encima mal etiquetado. Bug arreglado: premium
         # = free + cadena (la cadena se agrega DESPUÉS, sin reemplazar nada).
-        def _analizar() -> tuple[dict, dict]:
+        def _analizar() -> tuple[dict, dict, str]:
             ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
             af = impacto(snap, path, viejo, nuevo, ses)
             if not af:
-                return {}, {}
-            return af, motivos_de(path, viejo, nuevo, ses)
+                return {}, {}, ""
+            # Capa 35: el analizador efectivo se decide ACÁ, con la misma
+            # sesión LSP que se intentó usar. Etiquetar afuera, recalculando,
+            # se desincronizaría con el resultado real (un retry/cache de la
+            # sesión podría diferir). Acá es la verdad.
+            return (
+                af,
+                motivos_de(path, viejo, nuevo, ses),
+                tiers.analizador_efectivo(path, ses),
+            )
 
-        afectados, razones = await asyncio.to_thread(_analizar)
+        afectados, razones, analiz_directo = await asyncio.to_thread(_analizar)
         if not afectados:
             return
         # Capa 26 (free): el cambio ES un rename confiable pero el plan no
@@ -617,6 +625,7 @@ class SyncServer:
                         severidades=[
                             severidad_de(razones.get(s, "")) for s in syms
                         ],
+                        analizador=analiz_directo,
                     )
                 ),
             )
@@ -632,6 +641,11 @@ class SyncServer:
         if limites(plan)["impacto"] != "transitivo":
             return
         directos = set(por_archivo)
+        # Capa 35: el transitivo NO usa LSP a propósito (decisión de costo:
+        # un símbolo aguas-abajo no justifica el round-trip a pyright). Su
+        # analizador efectivo es el del tier de detección sin LSP — el chip
+        # del cliente refleja eso.
+        analiz_trans = tiers.analizador_efectivo(path, None)
 
         def _trans():
             lang = lenguaje_de(path)
@@ -705,6 +719,7 @@ class SyncServer:
                             severidad_de(d["motivo"]) for d in props
                         ],
                         cadena=props[0]["cadena"],
+                        analizador=analiz_trans,
                     )
                 ),
             )

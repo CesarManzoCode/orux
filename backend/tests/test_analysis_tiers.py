@@ -132,3 +132,49 @@ def test_jsts_fino_type_interface_enum() -> None:
     }
     # Sin la coletilla "sin parser de TS": tree-sitter SÍ tiene parser.
     assert "sin parser" not in cambios_que_importan_modelo(a, d)["T"]
+
+
+# --- Capa 35: anti-degradación silenciosa ----------------------------------
+# El server etiqueta el análisis con `analizador_efectivo(path, sesion)` para
+# que el cliente sepa si hubo degradación (LSP cayó, tree-sitter no cargó).
+# Se prueba el contrato: nombres estables, byte-compat ("" cuando no aplica),
+# y respeto a la sesión LSP (presente/ausente).
+
+
+class _SesionLSPViva:
+    """Mock minimal de sesión LSP: dice `disponible()=True`. Es lo único
+    que `_usar_lsp` mira (la fan-out real no se ejerce acá)."""
+
+    def disponible(self) -> bool:
+        return True
+
+
+def test_analizador_sin_lsp_python_es_ast() -> None:
+    # Python siempre tiene `ast` disponible (stdlib): nunca cae a regex.
+    assert tiers.analizador_efectivo("m.py", None) == "ast"
+
+
+def test_analizador_sin_lsp_jsts_segun_treesitter() -> None:
+    # Sandbox sin internet: tree-sitter no carga -> regex (Tier 3).
+    # VPS con tree-sitter: treesitter (Tier 2). Ambas son honestas.
+    assert tiers.analizador_efectivo("m.ts", None) in ("treesitter", "regex")
+
+
+def test_analizador_lenguaje_no_soportado_es_vacio() -> None:
+    # Lenguaje fuera del registro: cadena vacía (NO inventamos un label).
+    # El server no debería estar mandando impacto en ese caso, pero el
+    # default vacío es la posición segura — el cliente no muestra chip.
+    assert tiers.analizador_efectivo("m.rb", None) == ""
+    assert tiers.analizador_efectivo("README", None) == ""
+
+
+def test_analizador_con_sesion_lsp_viva_es_lsp() -> None:
+    # La sesión LSP "viva" gana sobre cualquier tier inferior: el server
+    # informa "lsp" para que el cliente no avise degradación falsa.
+    ses = _SesionLSPViva()
+    assert tiers.analizador_efectivo("m.py", ses) == "lsp"
+    assert tiers.analizador_efectivo("m.ts", ses) == "lsp"
+    assert tiers.analizador_efectivo("m.go", ses) == "lsp"
+    assert tiers.analizador_efectivo("m.rs", ses) == "lsp"
+    # Lenguaje sin LSP soportado, aunque haya sesión: igual vacío.
+    assert tiers.analizador_efectivo("m.rb", ses) == ""

@@ -223,6 +223,11 @@ def decode(raw: str | bytes) -> Message:
                 motivos=_list_str(data.get("motivos"), campo="motivos"),
                 cadena=_list_str(data.get("cadena"), campo="cadena"),
                 severidades=_list_str(data.get("severidades"), campo="severidades"),
+                # Capa 35: ver ImpactMessage.analizador. Cap chico (32) porque
+                # son labels cerrados ("lsp"|"ast"|"treesitter"|"regex"|""):
+                # cualquier cosa mayor es ruido o ataque.
+                analizador=_str(data.get("analizador"), max_len=32,
+                                campo="analizador"),
             )
         if kind == "register":
             return RegisterMessage(
