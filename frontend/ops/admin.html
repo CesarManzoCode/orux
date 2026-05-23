@@ -940,19 +940,32 @@ async function cargar() {
         const esPremium = team.plan === "premium";
         const tr = document.createElement("tr");
 
+        // textContent (no innerHTML) en todo lo que viene del backend:
+        // team.nombre ya filtra <> en `validar_nombre_equipo`, pero defensa
+        // en profundidad — si mañana se relaja el validador, esto sigue sano.
         const tdNombre = document.createElement("td");
-        tdNombre.innerHTML = `<span class="team-name">${team.nombre}</span>`;
+        const spanNombre = document.createElement("span");
+        spanNombre.className = "team-name";
+        spanNombre.textContent = team.nombre;
+        tdNombre.appendChild(spanNombre);
 
         const tdId = document.createElement("td");
-        tdId.innerHTML = `<span class="team-id">${team.id}</span>`;
+        const spanId = document.createElement("span");
+        spanId.className = "team-id";
+        spanId.textContent = team.id;
+        tdId.appendChild(spanId);
 
         const tdPlan = document.createElement("td");
-        tdPlan.innerHTML = esPremium
-          ? `<span class="badge badge-premium">Premium</span>`
-          : `<span class="badge badge-free">Free</span>`;
+        const spanPlan = document.createElement("span");
+        spanPlan.className = esPremium ? "badge badge-premium" : "badge badge-free";
+        spanPlan.textContent = esPremium ? "Premium" : "Free";
+        tdPlan.appendChild(spanPlan);
 
         const tdMiembros = document.createElement("td");
-        tdMiembros.innerHTML = `<span class="members-count">${team.miembros}</span>`;
+        const spanMiembros = document.createElement("span");
+        spanMiembros.className = "members-count";
+        spanMiembros.textContent = team.miembros;
+        tdMiembros.appendChild(spanMiembros);
 
         const tdAccion = document.createElement("td");
         const b = document.createElement("button");
@@ -981,8 +994,19 @@ async function cargar() {
         <p>${tx.no_users}</p>
       </div>`;
     } else {
-      const chips = us.map(u => `<span class="user-chip">${u}</span>`).join("");
-      usersDiv.innerHTML = `<div class="users-chips">${chips}</div>`;
+      // username ya está limitado a `a-z0-9._-` o `gh:<github-login>` en
+      // backend — XSS imposible por charset. textContent igual, por consistencia
+      // con la regla "nada del backend va por innerHTML" del resto de la consola.
+      usersDiv.innerHTML = "";
+      const wrap = document.createElement("div");
+      wrap.className = "users-chips";
+      for (const u of us) {
+        const chip = document.createElement("span");
+        chip.className = "user-chip";
+        chip.textContent = u;
+        wrap.appendChild(chip);
+      }
+      usersDiv.appendChild(wrap);
     }
 
   } catch (e) { flash(tx.err_load + e.message, false); }
