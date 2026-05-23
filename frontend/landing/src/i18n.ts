@@ -27,7 +27,7 @@ export const T = {
     hero_eyebrow: "En producción · equipos reales coordinando en vivo",
     hero_audience: "Para equipos de 2 a 50 devs · self-host con Docker · gratis hasta 5",
     hero_h1_1: "Quién toca qué. De quién es. Qué rompe.",
-    hero_h1_2: "En tiempo real, sobre el Git que ya usás.",
+    hero_h1_2: "En tiempo real, sobre el Git que ya usas.",
     hero_sub: "Orux es la capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto resueltos antes del merge — sin reemplazar GitHub, GitLab ni tu IDE.",
     hero_cta_primary: "Crear tu workspace",
     hero_cta_secondary: "Cómo funciona",
@@ -38,18 +38,18 @@ export const T = {
     hero_sig2: "Ownership ·",
     hero_sig2_b: "sabe de quién es sin preguntar",
     hero_sig3: "Impacto ·",
-    hero_sig3_b: "muestra qué rompés al cambiar una firma",
+    hero_sig3_b: "muestra qué rompes al cambiar una firma",
 
     // Stage caption (microcopy bajo el IDE mock)
     stage_cap_aria: "Resumen de lo que se ve en el editor de ejemplo",
     stage_cap_1: "4 devs en vivo.",
-    stage_cap_2: "Ana edita sync.py · vos editás roster.py.",
+    stage_cap_2: "Ana edita sync.py · tú editas roster.py.",
     stage_cap_3: "claim() cambió de firma:",
     stage_cap_4: "Orux detectó 4 usos · propuesta de Ana lista para aprobar.",
 
     // Stage interno (IDE mock — aria-hidden)
     stage_live: "4 en vivo",
-    stage_mine: "vos",
+    stage_mine: "tú",
     stage_clean: "sin colisiones",
     stage_impact_title: "Análisis de impacto",
     stage_impact_body1: "Cambiar",
@@ -86,7 +86,7 @@ export const T = {
     cmp_rows: [
       { topic: "Conflictos", left: "Aparecen al merge, cuando ya cuesta caro deshacer.", right: "Se previenen en vivo: nadie pisa la misma línea." },
       { topic: "Ownership",  left: "Convención oral o CODEOWNERS desactualizado.",       right: "El sistema sabe quién toca qué, sin pedir permiso." },
-      { topic: "Impacto",    left: "Lo descubre el CI roto o el reviewer atento.",        right: "Cambiás una firma y avisa solo a quien la usa." },
+      { topic: "Impacto",    left: "Lo descubre el CI roto o el reviewer atento.",        right: "Cambias una firma y avisa solo a quien la usa." },
       { topic: "Negociación", left: "Rama → PR → review → ida y vuelta → merge.",         right: "Propuesta dentro del editor, un clic la aplica." },
       { topic: "Conocimiento", left: "Vive en la cabeza del líder. Cuello de botella.",    right: "Se distribuye solo: cada quien ve qué depende de qué." },
     ],
@@ -103,18 +103,18 @@ export const T = {
     mod1_h3: "Quién toca qué, en vivo",
     mod1_what: "Presencia por línea, no por archivo. El cursor de cada quien queda visible.",
     mod1_why: "Que dos personas editen la misma zona sin saberlo y choquen en el merge.",
-    mod1_benefit: "Editás con la certeza de que nadie está pisando lo mismo en otra pestaña.",
+    mod1_benefit: "Editas con la certeza de que nadie está pisando lo mismo en otra pestaña.",
     mod2_title: "Ownership",
     mod2_h3: "De quién es cada zona",
     mod2_what: "Cada archivo tiene dueño implícito, derivado del uso real. Persistido y reasignable.",
     mod2_why: "La pregunta '¿puedo tocar esto?' en Slack o el CODEOWNERS que nadie actualiza.",
     mod2_benefit: "Tu cambio sobre código ajeno viaja como propuesta — no te frena ni invade al dueño.",
     mod3_title: "Impacto",
-    mod3_h3: "Qué se rompe si cambiás esto",
+    mod3_h3: "Qué se rompe si cambias esto",
     mod3_what: "Análisis semántico real: AST y resolución de referencias, no coincidencia de texto.",
     mod3_why: "Romper a un tercero y enterarse en el CI, en review o en producción.",
     mod3_benefit: "Solo los afectados reciben el aviso, en el momento. Sin spamear al equipo.",
-    mod_own_me: "vos",
+    mod_own_me: "tú",
     mod_own_free: "libre",
     mod_impact_ok: "avisado automáticamente",
 
@@ -125,9 +125,9 @@ export const T = {
     s03_sub: "Lo que antes era rama → PR → review → merge ahora es proponer → aprobar → aplicar. Misma seguridad, sin ceremonia.",
     flow: [
       {
-        n: "01 · EDITÁS",
-        t: "Abrís el archivo y escribís",
-        d: "Sin pedir permiso, sin esperar una rama. La presencia en vivo te muestra dónde está cada quien — si te acercás a una zona ocupada, lo ves antes de tocarla.",
+        n: "01 · EDITAS",
+        t: "Abre el archivo y escribe",
+        d: "Sin pedir permiso, sin esperar una rama. La presencia en vivo te muestra dónde está cada quien — si te acercas a una zona ocupada, lo ves antes de tocarla.",
         chip: { txt: "sin rama · sin PR", cls: "" },
       },
       {
@@ -151,7 +151,7 @@ export const T = {
     nots: [
       "No es governance corporativo, permisos ni vigilancia del código.",
       "No reemplaza Git, GitHub ni tu IDE: es una capa encima.",
-      "No te bloquea antes de intentar — editás primero, siempre.",
+      "No te bloquea antes de intentar — editas primero, siempre.",
       "No es un chatbot pegado a un editor.",
     ],
 
@@ -159,7 +159,7 @@ export const T = {
     s05_k: "05 · Preguntas frecuentes",
     s05_h_1: "Lo que el equipo pregunta",
     s05_h_2: "antes de probarlo.",
-    s05_sub: "Respuestas directas, sin humo. Si falta una, escribinos.",
+    s05_sub: "Respuestas directas, sin humo. Si falta una, escríbenos.",
     faq: [
       {
         q: "¿Orux reemplaza Git o GitHub?",
@@ -171,7 +171,7 @@ export const T = {
       },
       {
         q: "¿Cómo funciona el ownership? ¿Me bloquea?",
-        a: "Nunca te bloquea. Si tocás zona con dueño, tu cambio viaja como propuesta con el impacto ya calculado. El dueño aprueba con un clic. Editás primero, se negocia después. El primero que toca un archivo se vuelve su dueño; un admin del workspace puede reasignar cuando hace falta.",
+        a: "Nunca te bloquea. Si tocas una zona con dueño, tu cambio viaja como propuesta con el impacto ya calculado. El dueño aprueba con un clic. Edita primero, negocia después. El primero que toca un archivo se vuelve su dueño; un admin del workspace puede reasignar cuando hace falta.",
       },
       {
         q: "¿Qué pasa si dos personas editan la misma línea?",
@@ -191,7 +191,7 @@ export const T = {
       },
       {
         q: "¿Puedo usarlo offline?",
-        a: "No. La tesis depende del estado compartido en tiempo real. Si te quedás sin red el editor te lo avisa y para los cambios destructivos hasta reconectar.",
+        a: "No. La tesis depende del estado compartido en tiempo real. Si te quedas sin red el editor te lo avisa y para los cambios destructivos hasta reconectar.",
       },
       {
         q: "¿Hay plan gratuito de verdad?",
@@ -234,7 +234,7 @@ export const T = {
       },
       {
         t: "Token Git efímero, jamás guardado",
-        d: "Cuando hacés push, tu token pasa solo por el env del subprocess. Nunca en disco, ni en logs, ni en la URL, ni en .git/config. Salida scrubeada.",
+        d: "Cuando haces push, tu token pasa solo por el env del subprocess. Nunca en disco, ni en logs, ni en la URL, ni en .git/config. Salida scrubeada.",
       },
       {
         t: "Capa sobre Git, no rehén",
@@ -257,7 +257,7 @@ export const T = {
     // Pricing
     s06_k: "06 · Precio",
     s06_h_1: "Empezar es gratis.",
-    s06_h_2: "Pagás cuando el equipo crece.",
+    s06_h_2: "Pagas cuando el equipo crece.",
     s06_sub: "Sin trial, sin tarjeta. El core completo de coordinación está en Free para siempre. Lo que se paga es escala y profundidad, no la funcionalidad básica.",
     free_tier: "Free · para siempre",
     free_h4: "Para el equipo que arranca",

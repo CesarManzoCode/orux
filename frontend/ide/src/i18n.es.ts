@@ -47,9 +47,9 @@ export const es = {
     login_github: "Continuar con GitHub",
     login_oauth_sep: "o",
     oauth_err_cancel: "Cancelaste el acceso con GitHub.",
-    oauth_err_state: "El enlace de acceso con GitHub venció. Probá de nuevo.",
-    oauth_err_github: "GitHub no pudo completar el acceso. Probá de nuevo.",
-    oauth_err_generic: "No se pudo entrar con GitHub. Probá de nuevo.",
+    oauth_err_state: "El enlace de acceso con GitHub venció. Intenta de nuevo.",
+    oauth_err_github: "GitHub no pudo completar el acceso. Intenta de nuevo.",
+    oauth_err_generic: "No se pudo entrar con GitHub. Intenta de nuevo.",
 
     // Login — switch entre formularios (capa 29+)
     login_tab_signin: "Entrar",
@@ -245,7 +245,7 @@ export const es = {
 
     // Invite modal
     inv_title: "invitar a este equipo",
-    inv_intro: "Comparte el link (un clic y entran) o el código (lo escriben en el hub). Cualquiera de los dos vale; son de un solo uso.",
+    inv_intro: "Comparte el link (un clic y entran) o el código (lo escriben en el hub). Cualquiera de los dos funciona; son de un solo uso.",
     inv_copy: "copiar",
     inv_copied: "copiado",
     inv_copy_failed: "no se pudo copiar — selecciónalo a mano",
@@ -265,13 +265,13 @@ export const es = {
     inv_code_copied: "código copiado",
     // Empty-state del workspace (primera sesión guiada)
     ews_title: "Tu equipo está listo — falta el código.",
-    ews_sub: "Orux trabaja sobre tu repositorio de Git. Traé tu código para arrancar, o creá un archivo si solo querés probar.",
+    ews_sub: "Orux trabaja sobre tu repositorio de Git. Trae tu código para arrancar, o crea un archivo si solo quieres probar.",
     ews_clone_t: "Clonar tu repositorio",
-    ews_clone_d: "El camino habitual: traé tu proyecto de GitHub y empezá a coordinar sobre él.",
+    ews_clone_d: "El camino habitual: trae tu proyecto de GitHub y empieza a coordinar sobre él.",
     ews_new_t: "Crear un archivo",
-    ews_new_d: "¿Solo querés probar? Empezá con un archivo en blanco.",
+    ews_new_d: "¿Solo quieres probar? Empieza con un archivo en blanco.",
     ews_invite_t: "Invitar a tu equipo",
-    ews_invite_d: "La coordinación se nota cuando hay alguien más. Sumalos con un link.",
+    ews_invite_d: "La coordinación se nota cuando hay alguien más. Súmalos con un link.",
     ews_foot: "Apenas haya código y tu equipo esté dentro, vas a ver presencia, ownership e impacto en vivo en el panel de la derecha.",
     // Mini-demo embebida en el empty-state: muestra los 4 diferenciadores
     // en loop para que la primera vista del workspace vacío explique
@@ -283,7 +283,7 @@ export const es = {
     ews_demo_own: "dueño · @luis",
     ews_demo_prop: "+1 propuesta · @luis",
     // Avisos del navegador (notificaciones)
-    notif_prop_title: "Propuesta para vos",
+    notif_prop_title: "Propuesta para ti",
     notif_prop_body: (actor: string, archivo: string) =>
       `${actor} te propone cambios en ${archivo}`,
     notif_imp_title: "Impacto en tu código",
@@ -630,7 +630,7 @@ export const es = {
     confirm_clone_ok: "clonar y reemplazar",
     confirm_discard_title: "descartar borrador",
     confirm_discard_msg:
-      "Vas a descartar tu borrador local. Lo que escribiste no se enviará a la dueña del archivo y se pierde. Esta acción no se puede deshacer.",
+      "Vas a descartar tu borrador local. Lo que escribiste no se enviará al dueño del archivo y se pierde. Esta acción no se puede deshacer.",
     confirm_discard_ok: "descartar",
     // ── Tutorial guiado (OruxBot) ────────────────────────────────────────
     // Onboarding cinematográfico: la primera vez que un admin entra a un
@@ -642,16 +642,16 @@ export const es = {
     tut_cta_start: "Empezar",
     tut_hello: "Hola. Soy Orux.",
     tut_intro: "Trabajo encima de Git. No lo reemplazo: coordino lo que tu equipo hace sobre él.",
-    tut_skip_hint: "Te muestro lo importante en menos de un minuto. Podés saltar cuando quieras.",
-    tut_open_git: "Acá traés tu repo. Clic.",
-    tut_clone: "Clicá clonar — traigo un repo de muestra.",
-    tut_code_here: "Tu código está acá.",
-    tut_open_file: "Abrí cualquier archivo.",
+    tut_skip_hint: "Te muestro lo importante en menos de un minuto. Puedes saltar cuando quieras.",
+    tut_open_git: "Aquí traes tu repo. Haz clic.",
+    tut_clone: "Presiona clonar — traigo un repo de muestra.",
+    tut_code_here: "Tu código está aquí.",
+    tut_open_file: "Abre cualquier archivo.",
     tut_ana_joins: "Ana entra al mismo archivo. La ves en vivo en presencia.",
     tut_ana_proposes: "Te propone un cambio. Aparece en cambios propuestos.",
-    tut_accept_prop: "Aceptás con un clic.",
+    tut_accept_prop: "Aceptas con un clic.",
     tut_impact: "El cambio renombró una función. Orux detectó que impacta otros archivos.",
     tut_autofix: "Orux Premium te propone el rename en cascada.",
-    tut_accept_fix: "Aceptás también.",
+    tut_accept_fix: "También la aceptas.",
     tut_close: "Listo. Mismo Git, sin colisiones. Coordinación viva sobre tu repo de verdad.",
 } as const;

@@ -36,7 +36,7 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Orux — capa de coordinación en tiempo real sobre Git" />
-    <meta property="og:locale" content="es_ES" />
+    <meta property="og:locale" content="es_419" />
     <meta property="og:locale:alternate" content="en_US" />
 
     <!-- Twitter -->
@@ -79,9 +79,9 @@
         "@context": "https://schema.org",
         "@type": "FAQPage",
         "mainEntity": [
-          { "@type": "Question", "name": "¿Orux reemplaza Git o GitHub?", "acceptedAnswer": { "@type": "Answer", "text": "No. Orux es una capa encima de Git. Cada workspace es un repo Git real: commit, push y git clone funcionan como siempre. GitHub o GitLab siguen siendo el origen — tus PRs, issues y Actions viven ahí. Si dejás Orux mañana, el repo queda intacto." }},
+          { "@type": "Question", "name": "¿Orux reemplaza Git o GitHub?", "acceptedAnswer": { "@type": "Answer", "text": "No. Orux es una capa encima de Git. Cada workspace es un repo Git real: commit, push y git clone funcionan como siempre. GitHub o GitLab siguen siendo el origen — tus PRs, issues y Actions viven ahí. Si dejas Orux mañana, el repo queda intacto." }},
           { "@type": "Question", "name": "¿Tengo que cambiar de IDE?", "acceptedAnswer": { "@type": "Answer", "text": "Para empezar, sí: la versión actual es una web app. Plugins para VSCode y JetBrains están en el roadmap — la idea es llevar la coordinación a tu IDE, no obligarte a abandonarlo." }},
-          { "@type": "Question", "name": "¿Cómo funciona el ownership? ¿Me bloquea?", "acceptedAnswer": { "@type": "Answer", "text": "Nunca te bloquea. Si tocás zona con dueño, tu cambio viaja como propuesta con el impacto ya calculado. El dueño aprueba con un clic. Editás primero, se negocia después." }},
+          { "@type": "Question", "name": "¿Cómo funciona el ownership? ¿Me bloquea?", "acceptedAnswer": { "@type": "Answer", "text": "Nunca te bloquea. Si tocas una zona con dueño, tu cambio viaja como propuesta con el impacto ya calculado. El dueño aprueba con un clic. Edita primero, negocia después." }},
           { "@type": "Question", "name": "¿Qué pasa si dos personas editan la misma línea?", "acceptedAnswer": { "@type": "Answer", "text": "No pasa. La presencia por línea se reserva en cuanto la primera persona la toca: la segunda lo ve antes de escribir. No usamos CRDT — la tesis es prevenir, no fusionar." }},
           { "@type": "Question", "name": "¿Qué lenguajes entiende el análisis de impacto?", "acceptedAnswer": { "@type": "Answer", "text": "Hoy: Python y JavaScript/TypeScript. El análisis es real (AST y resolución de referencias), no coincidencia de texto." }},
           { "@type": "Question", "name": "¿Qué pasa con la privacidad del código?", "acceptedAnswer": { "@type": "Answer", "text": "Orux es self-hostable: tu código nunca sale de tu infraestructura. La versión hospedada clona tu repo bajo demanda y el token de Git es efímero — pasa por env del subprocess, nunca se guarda en disco, en logs ni en la URL." }},
