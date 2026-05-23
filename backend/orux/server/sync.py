@@ -37,60 +37,32 @@ from secrets import token_hex
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 
-from ..analysis import tiers
-from ..analysis.rename import Rename, detectar_rename
-from ..plans import permite_rename
+from ..analysis.rename import Rename
 from ..git import GitRepo
-from ..identity import (
-    UserStore,
-    crear_token,
-    normalizar,
-    usuario_de_token,
-)
+from ..identity import UserStore, crear_token
 from ..protocol import (
     AdminAssignManyMessage,
     AdminAssignMessage,
     AdminInfoMessage,
-    AuthErrorMessage,
     AuthOkMessage,
     ClaimMessage,
-    CloneMessage,
-    CommitMessage,
-    CreateInviteMessage,
-    CreateTeamMessage,
     DeleteMessage,
-    SaveMessage,
-    GitRefreshMessage,
-    GitResultMessage,
     GitStatusMessage,
     InitMessage,
-    InviteCreatedMessage,
     LeaveMessage,
-    LobbyMessage,
-    LoginMessage,
     OwnershipMessage,
     PresenceMessage,
     ProposalMessage,
-    PushMessage,
-    RedeemInviteMessage,
-    RegisterMessage,
     ResolveMessage,
-    SelectTeamMessage,
-    SessionMessage,
+    SaveMessage,
     TeamReadyMessage,
     UpdateMessage,
     WelcomeMessage,
     decode,
     encode,
 )
-from ..state import (
-    DiskStorage,
-    Ownership,
-    Proposals,
-    lineas_tocadas,
-    path_seguro,
-)
-from ..teams import MemTeamStore, TeamError
+from ..state import DiskStorage, Ownership, Proposals, path_seguro
+from ..teams import MemTeamStore
 from .config import (
     RATE_BURST,
     RATE_TASA,
@@ -101,8 +73,9 @@ from .config import (
     _env_float,
     _env_int,
 )
-from . import eviction, seats
+from . import auth_handshake, dispatch, eviction, seats
 from . import impacto as impacto_mod
+from . import lobby as lobby_mod
 from .runtime import TeamRuntime
 from .util import autor_git, ip_cliente, wrap_users
 
@@ -520,258 +493,20 @@ class SyncServer:
         if payload is not None:
             await websocket.send(payload)
 
-    async def _autenticar(self, websocket: ServerConnection) -> str | None:
-        """Compuerta de la capa 7: nada de app hasta autenticarse.
-
-        Lee mensajes hasta que uno autentique (register/login/session) y
-        devuelve el usuario normalizado. Mientras no lo logre responde
-        `auth_error` y sigue escuchando en la MISMA conexión. None si la
-        conexión se cierra sin autenticarse.
-
-        Robustez (auditoría seguridad A1): la compuerta es la única
-        superficie de fuerza bruta / DoS de almacenamiento. PBKDF2 240k
-        limita el rate pero no lo impide. Defensa por-conexión (sin store
-        compartido — eso sería otra capa): cada fallo suma un backoff
-        creciente ANTES de volver a escuchar (un atacante que prueba miles
-        de contraseñas sobre UN socket se vuelve lentísimo), y pasado un
-        tope de fallos se corta el socket (lo obliga a re-hacer el handshake
-        TCP/WS cada N intentos — fricción real, sin castigar al usuario que
-        se equivoca un par de veces). El register exitoso retorna ya: el
-        tope de fallos también acota el DoS de cuentas basura por conexión.
-        """
-        fallos = 0
-        # Tan alto que un humano que se equivoca tecleando jamás lo alcanza,
-        # tan bajo que el atacante re-paga el handshake muy seguido.
-        MAX_FALLOS = 12
-
-        async def _fallo(reason: str, code: str = "") -> bool:
-            """Responde el error, aplica el backoff y dice si hay que cortar
-            (tope alcanzado). El sleep va DESPUÉS de enviar el error: el
-            cliente legítimo ve el mensaje al instante; el costo es del que
-            sigue intentando.
-
-            `code` (capa 35) es un label estable en inglés que el cliente
-            traduce a su idioma. `reason` sigue viajando como fallback
-            legible para clientes viejos o casos sin code definido.
-            """
-            nonlocal fallos
-            fallos += 1
-            await websocket.send(
-                encode(AuthErrorMessage(reason=reason, code=code))
-            )
-            if fallos >= MAX_FALLOS:
-                logger.warning(
-                    "auth: %d fallos en una conexión, se corta", fallos
-                )
-                return True
-            # Lineal y modesto (0.3s, 0.6s, ...) tope 3s: invisible para un
-            # error humano aislado, asfixiante para miles automatizados.
-            await asyncio.sleep(min(3.0, 0.3 * fallos))
-            return False
-
-        async for raw in websocket:
-            try:
-                msg = decode(raw)
-            except ValueError:
-                if await _fallo("mensaje inválido", "invalid_message"):
-                    return None
-                continue
-            if isinstance(msg, RegisterMessage):
-                # Anti-abuso: tope de registros por IP en ventana deslizante.
-                # El registro es público; el backoff por-conexión no frena un
-                # bot que hace connect -> register en bucle. Ver
-                # `_throttle_registro`.
-                if not self._throttle_registro(_ip_cliente(websocket)):
-                    logger.warning("registro: tope por IP alcanzado")
-                    if await _fallo(
-                        "demasiados registros desde tu red, esperá unos minutos",
-                        "rate_limited_register",
-                    ):
-                        return None
-                    continue
-                # Cierre de registro tras N usuarios (BACKEND-AUDIT-0224).
-                # Default 0 = sin tope (modo prototipo). En producción, el
-                # operador setea ORUX_REGISTRO_CERRADO_TRAS=N para fijar el
-                # primer N como cuentas legítimas y a partir de ahí solo se
-                # entra por OAuth o invitación admin. NO mitiga el caso de
-                # un atacante que se registra ANTES del admin real — eso
-                # requiere bootstrap controlado (Day 0); el cierre evita la
-                # segunda fase (atacante crea cuentas en serie post-bootstrap).
-                cap = _env_int("ORUX_REGISTRO_CERRADO_TRAS", 0, 0, 1_000_000)
-                if cap > 0:
-                    listar = getattr(self.users, "usuarios", None)
-                    if listar is not None:
-                        try:
-                            actuales = await listar() if inspect.iscoroutinefunction(listar) else listar()
-                        except Exception as e:  # noqa: BLE001
-                            # Si no podemos enumerar (p.ej. DB caída), tratamos
-                            # como "no hay cap aplicable" — registro abierto
-                            # antes que bloquear la plataforma. Pero NUNCA
-                            # silencioso: el operador debe enterarse.
-                            logger.warning(
-                                "ORUX_REGISTRO_CERRADO_TRAS=%d activo pero "
-                                "no puedo enumerar usuarios (%r); permito "
-                                "registro este intento",
-                                cap, e,
-                            )
-                            actuales = []
-                        if len(actuales) >= cap:
-                            if await _fallo(
-                                "registro cerrado", "closed_registration"
-                            ):
-                                return None
-                            continue
-                try:
-                    return await self.users.registrar(msg.username, msg.password)
-                except ValueError as e:
-                    # BACKEND-AUDIT-0004: 'ese usuario ya existe' filtra
-                    # info de enumeración. Detrás de un registro abierto el
-                    # atacante puede sondear cuentas. Reportamos un mensaje
-                    # genérico EXCEPTO para errores de FORMATO (charset,
-                    # longitud) que no filtran existencia y que el cliente
-                    # legítimo necesita para corregir su input.
-                    motivo_real = str(e)
-                    # El sub-caso "ya existe" lo enmascaramos para no
-                    # filtrar enumeración (BACKEND-AUDIT-0004); le ponemos
-                    # code para que el cliente lo traduzca. Los demás
-                    # errores de FORMATO (charset, longitud) viajan con
-                    # texto libre y SIN code — el cliente cae al `reason`
-                    # literal (que ya es legible para el usuario).
-                    if "ya existe" in motivo_real.lower():
-                        razon, code_err = "no se pudo registrar", "register_failed"
-                    else:
-                        razon, code_err = motivo_real, ""
-                    if await _fallo(razon, code_err):
-                        return None
-            elif isinstance(msg, LoginMessage):
-                # Anti-fuerza-bruta: tope de logins por IP. El backoff
-                # por-conexión se reinicia al reconectar; este tope no. Ver
-                # `_throttle_login`.
-                if not self._throttle_login(_ip_cliente(websocket)):
-                    logger.warning("login: tope por IP alcanzado")
-                    if await _fallo(
-                        "demasiados intentos desde tu red, esperá unos minutos",
-                        "rate_limited",
-                    ):
-                        return None
-                    continue
-                if await self.users.verificar(msg.username, msg.password):
-                    return normalizar(msg.username)
-                if await _fallo(
-                    "usuario o contraseña incorrectos", "bad_credentials"
-                ):
-                    return None
-            elif isinstance(msg, SessionMessage):
-                # Epoch del usuario al verificar: tokens emitidos antes de
-                # revocar (cambio de pwd / logout-all) dejan de valer
-                # quirúrgicamente sin tirar todas las sesiones del server
-                # (BACKEND-AUDIT-0002).
-                user = None
-                try:
-                    _ud = usuario_de_token(
-                        msg.token, self._secret,
-                        epoch_de=lambda u: 0,  # placeholder síncrono
-                    )
-                    if _ud is not None:
-                        # Re-verifica el epoch contra el store async real.
-                        epoch_actual = await self.users.epoch(_ud)
-                        # Re-decodifica con un callable que devuelve el epoch
-                        # ya consultado (un solo await; barato).
-                        user = usuario_de_token(
-                            msg.token, self._secret,
-                            epoch_de=lambda u, _e=epoch_actual: _e,
-                        )
-                except Exception as e:
-                    logger.warning("error verificando sesión: %s", e)
-                if user is not None and await self.users.existe(user):
-                    return user
-                if await _fallo(
-                    "sesión inválida, inicia sesión", "invalid_session"
-                ):
-                    return None
-            else:
-                if await _fallo(
-                    "debes autenticarte primero", "must_auth_first"
-                ):
-                    return None
-        return None
+    async def _autenticar(
+        self, websocket: ServerConnection
+    ) -> str | None:
+        """Cable a `auth_handshake.autenticar` (modularizado 2026-05-23).
+        La compuerta de la capa 7 (register/login/session, backoff,
+        anti-fuerza-bruta) vive en `server/auth_handshake.py`."""
+        return await auth_handshake.autenticar(self, websocket)
 
     async def _lobby(
-        self, websocket: ServerConnection, usuario: str
+        self, websocket: ServerConnection, usuario: str,
     ) -> str | None:
-        """Compuerta de equipo (capa 15). Autenticado pero sin equipo: NO ve
-        nada. Le mandamos sus equipos y esperamos que cree uno, redima un
-        código, o elija uno suyo. Devuelve el team_id elegido, o None si la
-        conexión se cierra sin elegir.
-
-        Throttle (BACKEND-AUDIT-0218): mismo mecanismo que `_autenticar`. Un
-        cliente que manda basura infinita en el lobby no debe consumir CPU/IO
-        del server sin coste. MAX_FALLOS de mensajes inválidos cierra el socket.
-        """
-        async def _mandar_lobby(error: str = "") -> None:
-            equipos = await self.teams.equipos_de(usuario)
-            await websocket.send(
-                encode(LobbyMessage(teams=equipos, error=error))
-            )
-
-        fallos = 0
-        MAX_FALLOS = 16  # más holgado que auth (lobby tiene UX legítima de retry)
-
-        async def _fallo(reason: str) -> bool:
-            nonlocal fallos
-            fallos += 1
-            await _mandar_lobby(reason)
-            if fallos >= MAX_FALLOS:
-                logger.warning(
-                    "lobby: %d fallos del usuario %s, se corta", fallos, usuario
-                )
-                return True
-            await asyncio.sleep(min(2.0, 0.2 * fallos))
-            return False
-
-        await _mandar_lobby()
-        async for raw in websocket:
-            try:
-                msg = decode(raw)
-            except ValueError:
-                if await _fallo("mensaje inválido"):
-                    return None
-                continue
-            if isinstance(msg, CreateTeamMessage):
-                try:
-                    eq = await self.teams.crear_equipo(msg.nombre, usuario)
-                    return eq["id"]
-                except TeamError as e:
-                    if await _fallo(str(e)):
-                        return None
-            elif isinstance(msg, RedeemInviteMessage):
-                try:
-                    eq = await self.teams.redimir(msg.code, usuario)
-                except TeamError as e:
-                    # Capa 22: tope de plan (equipo lleno). Mensaje de
-                    # upgrade, NO "código inválido": el código sigue vivo.
-                    if await _fallo(str(e)):
-                        return None
-                    continue
-                if eq is not None:
-                    # Capa 31: entró un miembro nuevo. Si el equipo es
-                    # premium, ajustá los asientos de su suscripción de
-                    # Stripe (en segundo plano: no bloquea el lobby).
-                    self._ajustar_asientos_bg(eq["id"])
-                    return eq["id"]
-                if await _fallo("código inválido o ya usado"):
-                    return None
-            elif isinstance(msg, SelectTeamMessage):
-                if await self.teams.es_miembro(msg.team_id, usuario):
-                    return msg.team_id
-                if await _fallo("no sos miembro de ese equipo"):
-                    return None
-            else:
-                # Cualquier mensaje de app antes de tener equipo: recordale
-                # que primero hay que elegir/crear uno (la app sigue cerrada).
-                if await _fallo("hay que crear/elegir equipo primero"):
-                    return None
-        return None
+        """Cable a `lobby.lobby` (modularizado 2026-05-23). La compuerta
+        de equipo (crear/redimir/seleccionar) vive en `server/lobby.py`."""
+        return await lobby_mod.lobby(self, websocket, usuario)
 
     async def handle(self, websocket: ServerConnection) -> None:
         """Una conexión: autenticar -> lobby (elegir equipo) -> sesión del
@@ -1021,405 +756,13 @@ class SyncServer:
         team_id: str,
         message,
     ) -> None:
-        """Procesa UN mensaje ya decodificado de la sesion de equipo.
-
-        Extraido del bucle (capa de robustez): aislado para que una
-        excepcion aqui la capture el llamador y NO mate la conexion. El
-        antiguo `continue` de capa 5 (rebote del lock) es ahora `return`:
-        en un metodo, "saltar este mensaje" = volver. Cuando lo invoca
-        `_despachar` para un mensaje que muta estado, corre bajo
-        `rt._estado_lock` (los helpers que llama NO re-toman el lock: se
-        adquiere una sola vez por mensaje, no es reentrante).
-        """
-        if isinstance(message, UpdateMessage):
-            dueño = rt.ownership.owner(message.path)
-            if dueño is not None and dueño != yo.client_id:
-                # Archivo con dueño y no sos vos: edición tentativa.
-                # No se aplica ni difunde — se guarda como propuesta
-                # y se le avisa al dueño. "Editar primero, negociar
-                # después."
-                prop = rt.proposals.put(
-                    path=message.path,
-                    author_id=yo.client_id,
-                    author_name=yo.name,
-                    content=message.content,
-                )
-                await self._persistir_prop(rt, prop)
-                await self._enviar_a(
-                    rt, dueño, encode(ProposalMessage(proposal=prop))
-                )
-            else:
-                # Sin dueño, o sos el dueño: se aplica directo.
-                # Capa 5 (colisiones por línea): si NO tiene dueño y
-                # pisás una línea ocupada por otro presente, se
-                # rechaza el update entero. El dueño tiene preferencia.
-                viejo = rt.workspace.snapshot().get(message.path, "")
-                if dueño is None:
-                    tocadas = lineas_tocadas(viejo, message.content)
-                    ocupadas = rt.roster.lineas_ocupadas(
-                        message.path, excepto=yo.client_id
-                    )
-                    if tocadas & ocupadas:
-                        await websocket.send(
-                            encode(
-                                UpdateMessage(
-                                    path=message.path, content=viejo
-                                )
-                            )
-                        )
-                        return
-                # Primera vez que se ve el path = lo está creando:
-                # quien crea un archivo es su dueño, sin botón.
-                es_nuevo = not rt.workspace.exists(message.path)
-                # Capa 19: el impacto NO corre por tecla. Acá solo
-                # se siembra el baseline del checkpoint la 1ª vez
-                # que se toca el path (contenido PREVIO a editar);
-                # el análisis espera al `save` (Ctrl+S). El
-                # contenido sí sigue viajando en vivo (abajo).
-                rt._analizado.setdefault(message.path, viejo)
-                rt.workspace.update(message.path, message.content)
-                await self._broadcast(
-                    rt,
-                    websocket,
-                    encode(
-                        UpdateMessage(
-                            path=message.path,
-                            content=message.content,
-                        )
-                    ),
-                )
-                if es_nuevo and dueño is None:
-                    rt.ownership.claim(message.path, yo.client_id)
-                    await self._persistir_own(rt)
-                    await self._broadcast_todos(
-                        rt,
-                        encode(
-                            OwnershipMessage(
-                                owners=rt.ownership.snapshot()
-                            )
-                        ),
-                    )
-        elif isinstance(message, SaveMessage):
-            # Capa 19: el checkpoint del dev (Ctrl+S). NO guarda
-            # nada (el contenido ya está sincronizado); es el
-            # disparo del análisis. Diff baseline->ahora; el autor
-            # del aviso es quien marca el checkpoint. El baseline
-            # avanza siempre (haya o no impacto): el próximo Ctrl+S
-            # mide desde acá. No se retransmite (es un disparador,
-            # no estado a converger).
-            actual = rt.workspace.snapshot().get(message.path)
-            if actual is not None:
-                base = rt._analizado.get(message.path, "")
-                rt._analizado[message.path] = actual
-
-                # Capa 26: ¿este checkpoint ES un rename de miembro
-                # confiable? La detección usa los Simbolo del tier
-                # (parseo) -> a un hilo (no bloquear el loop).
-                def _det(b=base, a=actual, p=message.path):
-                    t = tiers.tier_para(p)
-                    if t is None:
-                        return None
-                    sa = t.simbolos(b)
-                    sd = t.simbolos(a)
-                    if sa is None or sd is None:
-                        return None
-                    return detectar_rename(sa, sd)
-
-                ren = await asyncio.to_thread(_det)
-                plan = await self.teams.plan(rt.team_id)
-                if ren is not None and permite_rename(plan):
-                    # Premium: se propaga como propuesta capa 4. El
-                    # aviso genérico de ese símbolo lo reemplaza la
-                    # propuesta accionable (no se manda además).
-                    await self._propagar_rename(
-                        rt, message.path, base, actual,
-                        ren, yo.client_id, yo.name,
-                    )
-                else:
-                    # Free (o sin rename): impacto normal; si hubo
-                    # rename confiable, el "por qué" se vuelve el
-                    # texto accionable (premium lo aplica por vos).
-                    await self._notificar_impacto(
-                        rt, message.path, base, actual,
-                        yo.client_id, yo.name, rename=ren,
-                    )
-        elif isinstance(message, DeleteMessage):
-            # Sólo borra el dueño, o cualquiera si no tiene dueño.
-            dueño = rt.ownership.owner(message.path)
-            if dueño is None or dueño == yo.client_id:
-                if rt.workspace.delete(message.path):
-                    logger.info(
-                        "delete: %s borró %r en equipo %s",
-                        yo.client_id, message.path, team_id,
-                    )
-                    rt.proposals.drop_path(message.path)
-                    await self._borrar_props_path(rt, message.path)
-                    # Capa 19: si se recrea, re-basea desde cero.
-                    rt._analizado.pop(message.path, None)
-                    cambio_owner = rt.ownership.liberar(message.path)
-                    if cambio_owner:
-                        await self._persistir_own(rt)
-                    await self._broadcast_todos(
-                        rt, encode(DeleteMessage(path=message.path))
-                    )
-                    if cambio_owner:
-                        await self._broadcast_todos(
-                            rt,
-                            encode(
-                                OwnershipMessage(
-                                    owners=rt.ownership.snapshot()
-                                )
-                            ),
-                        )
-        elif isinstance(message, ClaimMessage):
-            rt.ownership.claim(message.path, yo.client_id)
-            await self._persistir_own(rt)
-            await self._broadcast_todos(
-                rt,
-                encode(OwnershipMessage(owners=rt.ownership.snapshot())),
-            )
-        elif isinstance(message, AdminAssignMessage):
-            # Capa 12/15: el admin DEL EQUIPO reparte ownership. Sólo
-            # el admin del equipo; un no-admin se ignora (con audit log
-            # — un member intentando admin queda en el WARN para
-            # compliance + diagnóstico). `username` vacío = revocar. El
-            # destino debe ser miembro del equipo (asignar a alguien de
-            # afuera no tiene sentido y rompería el aislamiento).
-            if await self._es_admin_o_logear(
-                team_id, yo.client_id,
-                f"admin_assign(path={message.path!r}, "
-                f"username={message.username!r})",
-            ):
-                aplicado = False
-                if message.username:
-                    destino = normalizar(message.username)
-                    if await self.teams.es_miembro(team_id, destino):
-                        rt.ownership.asignar(message.path, destino)
-                        aplicado = True
-                else:
-                    aplicado = rt.ownership.liberar(message.path)
-                if aplicado:
-                    await self._persistir_own(rt)
-                    await self._broadcast_todos(
-                        rt,
-                        encode(
-                            OwnershipMessage(
-                                owners=rt.ownership.snapshot()
-                            )
-                        ),
-                    )
-        elif isinstance(message, AdminAssignManyMessage):
-            # Capa 13/15: reparto masivo, un solo broadcast. Misma
-            # compuerta (admin del equipo) y reglas que admin_assign.
-            if await self._es_admin_o_logear(
-                team_id, yo.client_id,
-                f"admin_assign_many(n={len(message.paths)}, "
-                f"username={message.username!r})",
-            ):
-                destino = (
-                    normalizar(message.username)
-                    if message.username else ""
-                )
-                valido = (
-                    not destino
-                    or await self.teams.es_miembro(team_id, destino)
-                )
-                aplicado = False
-                if valido:
-                    for p in message.paths:
-                        # Robustez M1: filtrá path-a-path (no el reparto
-                        # entero) — un path inseguro en la lista no debe
-                        # meter ownership fantasma ni anular el resto.
-                        if not path_seguro(p):
-                            continue
-                        if destino:
-                            rt.ownership.asignar(p, destino)
-                            aplicado = True
-                        elif rt.ownership.liberar(p):
-                            aplicado = True
-                if aplicado:
-                    await self._persistir_own(rt)
-                    await self._broadcast_todos(
-                        rt,
-                        encode(
-                            OwnershipMessage(
-                                owners=rt.ownership.snapshot()
-                            )
-                        ),
-                    )
-        elif isinstance(message, CreateInviteMessage):
-            # Capa 15: el admin del equipo genera un código para
-            # invitar. Sólo el admin; un no-admin se ignora pero
-            # queda en el audit log (un member sondeando "puedo invitar"
-            # es señal útil para diagnóstico).
-            if await self._es_admin_o_logear(
-                team_id, yo.client_id, "create_invite",
-            ):
-                try:
-                    code = await self.teams.crear_invitacion(
-                        team_id, yo.client_id
-                    )
-                    await self._enviar_a(
-                        rt, yo.client_id,
-                        encode(InviteCreatedMessage(code=code)),
-                    )
-                except TeamError:
-                    pass  # carrera benigna (dejó de ser admin, etc.)
-        elif isinstance(message, ResolveMessage):
-            prop = rt.proposals.get(message.proposal_id)
-            # Sólo el dueño actual resuelve. Si ya no existe o no sos
-            # el dueño, se ignora (carrera benigna).
-            if prop is not None and rt.ownership.owner(
-                prop.path
-            ) == yo.client_id:
-                rt.proposals.pop(message.proposal_id)
-                await self._borrar_prop(rt, message.proposal_id)
-                if message.accept:
-                    viejo = rt.workspace.snapshot().get(prop.path, "")
-                    rt.workspace.update(prop.path, prop.content)
-                    await self._broadcast_todos(
-                        rt,
-                        encode(
-                            UpdateMessage(
-                                path=prop.path, content=prop.content
-                            )
-                        ),
-                    )
-                    await self._notificar_impacto(
-                        rt, prop.path, viejo, prop.content,
-                        prop.author_id, prop.author_name,
-                    )
-                else:
-                    await self._enviar_a(
-                        rt,
-                        prop.author_id,
-                        encode(
-                            UpdateMessage(
-                                path=prop.path,
-                                content=rt.workspace.snapshot().get(
-                                    prop.path, ""
-                                ),
-                            )
-                        ),
-                    )
-        elif isinstance(message, PresenceMessage):
-            estado = rt.roster.mover(
-                yo.client_id, message.path, message.line
-            )
-            if estado is not None:
-                await self._broadcast(
-                    rt,
-                    websocket,
-                    encode(
-                        PresenceMessage(
-                            client_id=estado.client_id,
-                            name=estado.name,
-                            color=estado.color,
-                            path=estado.path,
-                            line=estado.line,
-                        )
-                    ),
-                )
-        elif isinstance(message, GitRefreshMessage):
-            await self._enviar_git_status(rt, websocket)
-        elif isinstance(message, CommitMessage):
-            if rt.git is None:
-                await self._enviar_a(
-                    rt, yo.client_id,
-                    encode(GitResultMessage(False, "git no disponible")),
-                )
-            else:
-                msg = (message.message or "").strip()[:500]
-                if not msg:
-                    await self._enviar_a(
-                        rt, yo.client_id,
-                        encode(GitResultMessage(
-                            False, "escribí un mensaje de commit")),
-                    )
-                else:
-                    nombre, email = _autor_git(yo.client_id)
-                    async with rt._git_lock:
-                        ok, detalle = await asyncio.to_thread(
-                            rt.git.commitear, msg, nombre, email
-                        )
-                    await self._enviar_a(
-                        rt, yo.client_id,
-                        encode(GitResultMessage(ok, detalle)),
-                    )
-                    if ok:
-                        payload = await self._git_status_encoded(rt)
-                        if payload is not None:
-                            await self._broadcast_todos(rt, payload)
-        elif isinstance(message, CloneMessage):
-            if rt.git is None:
-                await self._enviar_a(
-                    rt, yo.client_id,
-                    encode(GitResultMessage(False, "git no disponible")),
-                )
-            else:
-                # Destructivo: reemplaza el workspace del equipo entero.
-                # En producción tiene que quedar auditado quién y de dónde.
-                logger.info(
-                    "clone (DESTRUCTIVO) pedido por %s en equipo %s",
-                    yo.client_id, team_id,
-                )
-                async with rt._git_lock:
-                    ok, detalle = await asyncio.to_thread(
-                        rt.git.clonar,
-                        message.url, message.username, message.token,
-                    )
-                    if ok:
-                        # El clone reemplaza TODO el workspace/ownership:
-                        # tomá también el lock de estado para que un Update
-                        # concurrente no aplique sobre el árbol viejo justo
-                        # mientras se reinicia. Orden git->estado (nunca al
-                        # revés en ningún handler) => sin deadlock.
-                        async with rt._estado_lock:
-                            await self._reiniciar_para_todos(rt)
-                await self._enviar_a(
-                    rt, yo.client_id,
-                    encode(GitResultMessage(ok, detalle)),
-                )
-        elif isinstance(message, PushMessage):
-            if rt.git is None:
-                await self._enviar_a(
-                    rt, yo.client_id,
-                    encode(GitResultMessage(False, "git no disponible")),
-                )
-            else:
-                # Capa 21b: la rama destino la ELIGE el usuario.
-                # Vacío = la rama de publicación del equipo (default
-                # seguro: force-with-lease + PR; orux es su único
-                # escritor). Cualquier otra (p.ej. main) = push
-                # normal SIN forzar (capa 10: non-ff honesto, jamás
-                # pisa historia compartida). orux decide force-o-no
-                # por el destino; el usuario solo elige a dónde.
-                rama_eq = f"orux/{rt.team_id}"
-                destino = (message.rama or "").strip() or rama_eq
-                async with rt._git_lock:
-                    if destino == rama_eq:
-                        ok, detalle, pr_url = await asyncio.to_thread(
-                            rt.git.push_a_rama,
-                            message.username, message.token,
-                            rama_eq, message.url or None,
-                        )
-                    else:
-                        ok, detalle = await asyncio.to_thread(
-                            rt.git.push,
-                            message.username, message.token,
-                            message.url or None, destino,
-                        )
-                        pr_url = ""
-                await self._enviar_a(
-                    rt, yo.client_id,
-                    encode(GitResultMessage(ok, detalle, pr_url)),
-                )
-                if ok:
-                    payload = await self._git_status_encoded(rt)
-                    if payload is not None:
-                        await self._broadcast_todos(rt, payload)
-        # Init/Welcome/Leave del cliente se ignoran: los origina el
-        # server. Mensajes de lobby acá tampoco aplican (ya hay equipo).
+        """Cable a `dispatch.dispatch` (modularizado 2026-05-23). El
+        cuerpo entero del despachador (un handler por message type) vive
+        en `server/dispatch.py`. Aislado para que una excepción en un
+        handler la capture el llamador (`_sesion_equipo` -> `_despachar`)
+        sin matar la conexión. Sigue corriendo bajo `rt._estado_lock`
+        cuando muta estado (`_despachar` decide eso por mensaje)."""
+        await dispatch.dispatch(self, rt, websocket, yo, team_id, message)
 
     # --- Barridos de RAM (LSP + runtimes) -------------------------------
     #
