@@ -25,7 +25,7 @@ export const T = {
 
     // Hero
     hero_eyebrow: "En producción · equipos reales coordinando en vivo",
-    hero_audience: "Para equipos de 2 a 50 devs · self-host con Docker · gratis hasta 5",
+    hero_audience: "Para equipos de 2 a 50 devs · gratis hasta 5",
     hero_h1_1: "Quién toca qué. De quién es. Qué rompe.",
     hero_h1_2: "En tiempo real, sobre el Git que ya usas.",
     hero_sub: "Orux es la capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto resueltos antes del merge — sin reemplazar GitHub, GitLab ni tu IDE.",
@@ -183,7 +183,7 @@ export const T = {
       },
       {
         q: "¿Qué pasa con la privacidad del código?",
-        a: "Orux es self-hostable: corré tu propia instancia con Docker, tu código nunca sale de tu infraestructura. La versión hospedada en orux.space clona tu repo bajo demanda y el token de Git va efímero — pasa por env del subprocess, nunca se guarda en disco, en logs ni en la URL.",
+        a: "Orux clona tu repo bajo demanda cuando entrás y trabaja sobre esa copia aislada por equipo. El token de Git va efímero — pasa por env del subprocess, nunca se guarda en disco, en logs ni en la URL. Cuando cerrás sesión, las credenciales mueren con ella. No leemos el contenido para entrenar nada.",
       },
       {
         q: "¿Sirve para equipos pequeños o grandes?",
@@ -208,7 +208,7 @@ export const T = {
       {
         t: "Founder técnico · 2 a 5 devs",
         d: "Estás escribiendo el código y armando el equipo a la vez. Cada bloqueo cuesta una tarde tuya. Orux te quita el coste de coordinar sin meter governance corporativo.",
-        b: ["Workspace en minutos, sin governance", "Gratis para siempre hasta 5 devs", "Self-host opcional si el cliente lo exige"],
+        b: ["Workspace en minutos, sin governance", "Gratis para siempre hasta 5 devs", "Cobro por asiento, predecible"],
       },
       {
         t: "Open source que arranca",
@@ -225,12 +225,12 @@ export const T = {
     // Seguridad / privacidad
     s_sec_k: "Seguridad y privacidad",
     s_sec_h_1: "Tu código no se vuelve nuestro problema.",
-    s_sec_h_2: "Auditable, self-host y reversible.",
+    s_sec_h_2: "Credenciales efímeras y reversible.",
     s_sec_sub: "Orux se monta encima de Git: si te vas mañana, el repositorio queda intacto. La capa de coordinación es propiedad tuya, no rehén.",
     sec: [
       {
-        t: "Self-host con Docker",
-        d: "Una imagen, un docker compose up. Tu código nunca sale de tu infraestructura. Mismo binario que la versión hospedada.",
+        t: "Aislamiento por equipo",
+        d: "Cada equipo tiene su workspace separado: presencia, ownership, locks y broadcasts NUNCA cruzan entre equipos. Una conexión solo ve lo de su equipo.",
       },
       {
         t: "Token Git efímero, jamás guardado",
@@ -242,11 +242,11 @@ export const T = {
       },
       {
         t: "Sin telemetría del contenido",
-        d: "No leemos tu código para entrenar nada. El análisis de impacto corre local al server (tuyo si self-host). No hay LLM en el camino crítico.",
+        d: "No leemos tu código para entrenar nada. El análisis de impacto corre en nuestros servidores con tu sesión, no se persiste fuera de la vida de tu workspace. No hay LLM en el camino crítico.",
       },
       {
-        t: "Open core, auditable",
-        d: "El núcleo está en abierto. Podés leer cómo manejamos los tokens, el ownership y la propagación de cambios. Sin caja negra.",
+        t: "Sin trackers de terceros",
+        d: "Cero Google Analytics, cero Plausible, cero pixel. La landing y la app reportan a nuestro propio endpoint, con rate limit, sin cookies de tracking. Tu actividad no se vende ni se filtra a un proveedor externo.",
       },
       {
         t: "Reversible en un comando",
@@ -320,7 +320,7 @@ export const T = {
 
     // Hero
     hero_eyebrow: "In production · real teams coordinating live",
-    hero_audience: "For teams of 2 to 50 devs · self-host with Docker · free up to 5",
+    hero_audience: "For teams of 2 to 50 devs · free up to 5",
     hero_h1_1: "Who touches what. Who owns it. What breaks.",
     hero_h1_2: "In real time, on the Git you already use.",
     hero_sub: "Orux is the real-time coordination layer on top of Git for teams of 2 to 50 devs. Per-line presence, live ownership and impact analysis resolved before the merge — without replacing GitHub, GitLab or your IDE.",
@@ -478,7 +478,7 @@ export const T = {
       },
       {
         q: "What about code privacy?",
-        a: "Orux is self-hostable: run your own instance with Docker, your code never leaves your infrastructure. The hosted version on orux.space clones your repo on demand and the Git token is ephemeral — it passes through subprocess env, never stored on disk, in logs or in URLs.",
+        a: "Orux clones your repo on demand when you sign in and works on that copy, isolated per team. The Git token is ephemeral — it passes through subprocess env, never stored on disk, in logs or in URLs. When you sign out, credentials die with the session. We don't read content to train anything.",
       },
       {
         q: "Is it for small or large teams?",
@@ -503,7 +503,7 @@ export const T = {
       {
         t: "Technical founder · 2 to 5 devs",
         d: "You're writing the code and building the team at the same time. Every block costs you an afternoon. Orux removes coordination cost without adding corporate governance.",
-        b: ["Workspace in minutes, no governance", "Free forever up to 5 devs", "Optional self-host if the client requires it"],
+        b: ["Workspace in minutes, no governance", "Free forever up to 5 devs", "Per-seat billing, predictable"],
       },
       {
         t: "Open source starting out",
@@ -520,12 +520,12 @@ export const T = {
     // Security / privacy
     s_sec_k: "Security & privacy",
     s_sec_h_1: "Your code doesn't become our problem.",
-    s_sec_h_2: "Auditable, self-host and reversible.",
+    s_sec_h_2: "Ephemeral credentials and reversible.",
     s_sec_sub: "Orux mounts on top of Git: if you leave tomorrow, the repo is intact. The coordination layer is yours, not held hostage.",
     sec: [
       {
-        t: "Self-host with Docker",
-        d: "One image, one docker compose up. Your code never leaves your infrastructure. Same binary as the hosted version.",
+        t: "Per-team isolation",
+        d: "Each team has its own workspace: presence, ownership, locks and broadcasts NEVER cross between teams. A connection only sees its own team's data.",
       },
       {
         t: "Ephemeral Git token, never stored",
@@ -537,11 +537,11 @@ export const T = {
       },
       {
         t: "No content telemetry",
-        d: "We don't read your code to train anything. Impact analysis runs local to the server (yours if self-host). No LLM in the critical path.",
+        d: "We don't read your code to train anything. Impact analysis runs on our servers during your session and isn't persisted beyond your workspace's lifetime. No LLM in the critical path.",
       },
       {
-        t: "Open core, auditable",
-        d: "The core is open. You can read how we handle tokens, ownership and change propagation. No black box.",
+        t: "No third-party trackers",
+        d: "Zero Google Analytics, zero Plausible, zero tracking pixels. The landing and app report to our own endpoint, with rate limits, no tracking cookies. Your activity isn't sold or leaked to an external provider.",
       },
       {
         t: "Reversible in one command",

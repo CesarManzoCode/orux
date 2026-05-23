@@ -13,9 +13,9 @@
     <title>Orux — Coordinación en tiempo real sobre Git · para equipos de 2 a 50 devs</title>
     <meta
       name="description"
-      content="Orux es la capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto antes del merge — sin reemplazar GitHub, GitLab ni tu IDE. Self-host con Docker. Gratis hasta 5 devs."
+      content="Orux es la capa de coordinación en tiempo real sobre Git para equipos de 2 a 50 devs. Presencia por línea, ownership vivo y análisis de impacto antes del merge — sin reemplazar GitHub, GitLab ni tu IDE. Gratis hasta 5 devs."
     />
-    <meta name="keywords" content="coordinación en tiempo real, git colaborativo, editor multiplayer, ownership de código, análisis de impacto, alternativa a CODEOWNERS, prevención de conflictos, self-host, devtool, equipos de ingeniería" />
+    <meta name="keywords" content="coordinación en tiempo real, git colaborativo, editor multiplayer, ownership de código, análisis de impacto, alternativa a CODEOWNERS, prevención de conflictos, devtool, equipos de ingeniería" />
     <meta name="author" content="Orux" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://orux.space/" />
@@ -55,7 +55,7 @@
         "@type": "SoftwareApplication",
         "name": "Orux",
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Web, Docker (self-host)",
+        "operatingSystem": "Web",
         "description": "Capa de coordinación en tiempo real sobre Git para equipos de ingeniería: presencia por línea, ownership invisible y análisis de impacto antes del merge.",
         "url": "https://orux.space/",
         "featureList": [
@@ -64,7 +64,7 @@
           "Análisis de impacto con AST y resolución de referencias",
           "Propuestas dentro del editor, un clic las aplica",
           "Capa sobre Git: commit y push permanecen reales",
-          "Self-hostable con Docker"
+          "Aislamiento por equipo, sin trackers de terceros"
         ],
         "offers": [
           { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD", "description": "Hasta 5 devs, un workspace, core completo." },
@@ -84,7 +84,7 @@
           { "@type": "Question", "name": "¿Cómo funciona el ownership? ¿Me bloquea?", "acceptedAnswer": { "@type": "Answer", "text": "Nunca te bloquea. Si tocas una zona con dueño, tu cambio viaja como propuesta con el impacto ya calculado. El dueño aprueba con un clic. Edita primero, negocia después." }},
           { "@type": "Question", "name": "¿Qué pasa si dos personas editan la misma línea?", "acceptedAnswer": { "@type": "Answer", "text": "No pasa. La presencia por línea se reserva en cuanto la primera persona la toca: la segunda lo ve antes de escribir. No usamos CRDT — la tesis es prevenir, no fusionar." }},
           { "@type": "Question", "name": "¿Qué lenguajes entiende el análisis de impacto?", "acceptedAnswer": { "@type": "Answer", "text": "Hoy: Python y JavaScript/TypeScript. El análisis es real (AST y resolución de referencias), no coincidencia de texto." }},
-          { "@type": "Question", "name": "¿Qué pasa con la privacidad del código?", "acceptedAnswer": { "@type": "Answer", "text": "Orux es self-hostable: tu código nunca sale de tu infraestructura. La versión hospedada clona tu repo bajo demanda y el token de Git es efímero — pasa por env del subprocess, nunca se guarda en disco, en logs ni en la URL." }},
+          { "@type": "Question", "name": "¿Qué pasa con la privacidad del código?", "acceptedAnswer": { "@type": "Answer", "text": "Orux clona tu repo bajo demanda cuando entrás y trabaja sobre esa copia, aislada por equipo. El token de Git es efímero — pasa por env del subprocess, nunca se guarda en disco, en logs ni en la URL. Cuando cerrás sesión, las credenciales mueren con ella." }},
           { "@type": "Question", "name": "¿Sirve para equipos pequeños o grandes?", "acceptedAnswer": { "@type": "Answer", "text": "Diseñado para 2 a 50 devs por equipo. Free cubre hasta 5. Premium agrega multi-repo y análisis transitivo." }},
           { "@type": "Question", "name": "¿Puedo usarlo offline?", "acceptedAnswer": { "@type": "Answer", "text": "No. La tesis depende del estado compartido en tiempo real." }},
           { "@type": "Question", "name": "¿Hay plan gratuito de verdad?", "acceptedAnswer": { "@type": "Answer", "text": "Sí: hasta 5 devs, un workspace, core completo. Sin trial, sin tarjeta, sin asteriscos." }}

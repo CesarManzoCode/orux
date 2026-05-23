@@ -69,7 +69,7 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 *Pre-anuncio NO-código (D + E + og.png):*
 - **`og.png`** 1200×630 en `frontend/landing/public/` (generado por `scripts/build-og.sh` con magick puro). Source editable: `frontend/landing/og.svg`.
 - **Footer contacto** en landing: `mailto:hola@orux.space` + link al repo + copyright (clave i18n `foot_copy`).
-- **`LICENSE`** en raíz (MIT, "César Manzo").
+- ~~`LICENSE` (MIT)~~ — había creado uno asumiendo repo público; el usuario corrigió el 2026-05-23: **Orux es startup propietaria, repo privado**, NO open source. LICENSE eliminado, claims de "self-hostable" removidos de toda la landing (i18n + index.html + footer GitHub link). En sesiones futuras: no sugerir nada relacionado con open source / self-host / repo público / LICENSE sin que el usuario lo pida explícito.
 - **`robots.txt` + `sitemap.xml`** en `frontend/landing/public/`.
 - **Analytics propio**: `POST /api/v1/track` + `frontend/landing/src/analytics.ts` (pageview en `load`, keepalive, fire-and-forget). Sin cookies, sin IDs persistentes. Los datos están en `docker compose logs api | grep client_track`.
 - **Endpoint público `GET /api/v1/status`**: `{ok, uptime_s, version}`. Para UptimeRobot/cronjobs externos. Versión desde env var `ORUX_VERSION` (default `"dev"`).
