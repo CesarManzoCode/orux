@@ -323,10 +323,26 @@ export const es = {
     sg_commit_placeholder: "mensaje de commit…",
     sg_commit_btn: "commit",
     sg_remote_label: "remoto",
-    sg_url_placeholder: "URL del repo (https://…)",
-    sg_user_placeholder: "usuario",
-    sg_token_placeholder: "token (no se guarda)",
-    sg_branch_placeholder: "rama destino (vacío = rama del equipo + PR)",
+    // Modos del bloque REMOTO. Antes los 4 inputs estaban siempre visibles
+    // y los placeholders intentaban explicar el modo — confuso. Ahora el
+    // usuario elige primero PÚBLICO (sólo clonar, sin credenciales) o
+    // PRIVADO (clonar+push, con token), y sólo se muestran los campos de
+    // ese flujo. Placeholders = ejemplos concretos; las explicaciones van
+    // en labels y hints separados.
+    sg_mode_public: "público",
+    sg_mode_public_hint: "Sólo clonar. No se necesitan credenciales.",
+    sg_mode_private: "privado",
+    sg_mode_private_hint: "Clonar y pushear. Necesita un token de acceso.",
+    sg_lbl_url: "URL del repo",
+    sg_lbl_user: "Usuario",
+    sg_lbl_token: "Token de acceso",
+    sg_lbl_token_hint: "no se guarda en ningún lado",
+    sg_lbl_branch: "Rama destino",
+    sg_lbl_branch_hint: "vacío → la rama del equipo (abre PR)",
+    sg_url_placeholder: "https://github.com/usuario/repo.git",
+    sg_user_placeholder: "tu-usuario",
+    sg_token_placeholder: "ghp_…",
+    sg_branch_placeholder: "main",
     sg_clone_btn: "clonar",
     sg_push_btn: "push",
     sg_clone_confirm: "Clonar REEMPLAZA todo el workspace actual por ese repo. Lo no pusheado se pierde. ¿Seguro?",

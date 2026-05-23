@@ -318,10 +318,24 @@ export const en = {
     sg_commit_placeholder: "commit message…",
     sg_commit_btn: "commit",
     sg_remote_label: "remote",
-    sg_url_placeholder: "Repo URL (https://…)",
-    sg_user_placeholder: "username",
-    sg_token_placeholder: "token (not saved)",
-    sg_branch_placeholder: "target branch (empty = team branch + PR)",
+    // REMOTE block modes. User picks PUBLIC (clone only, no credentials)
+    // or PRIVATE (clone + push, with token); only that flow's fields are
+    // shown. Placeholders = concrete examples; explanations live in
+    // separate labels and hints.
+    sg_mode_public: "public",
+    sg_mode_public_hint: "Clone only. No credentials needed.",
+    sg_mode_private: "private",
+    sg_mode_private_hint: "Clone and push. Needs an access token.",
+    sg_lbl_url: "Repo URL",
+    sg_lbl_user: "Username",
+    sg_lbl_token: "Access token",
+    sg_lbl_token_hint: "never stored",
+    sg_lbl_branch: "Target branch",
+    sg_lbl_branch_hint: "empty → team branch (opens PR)",
+    sg_url_placeholder: "https://github.com/user/repo.git",
+    sg_user_placeholder: "your-user",
+    sg_token_placeholder: "ghp_…",
+    sg_branch_placeholder: "main",
     sg_clone_btn: "clone",
     sg_push_btn: "push",
     sg_clone_confirm: "Clone REPLACES the entire current workspace with that repo. Unpushed changes will be lost. Are you sure?",

@@ -41,6 +41,13 @@ function PanelGit() {
   const [user, setUser] = useState("");
   const [tok, setTok] = useState("");
   const [rama, setRama] = useState("");
+  // Modo del bloque REMOTO. Antes se mostraban los 4 inputs siempre y los
+  // placeholders intentaban explicar cuándo aplicaba cada uno — confuso y
+  // visualmente encimado. Ahora el usuario elige primero PÚBLICO (clone
+  // sin credenciales, único campo: URL) o PRIVADO (clone+push con token).
+  // Los datos se preservan al cambiar de modo: si alguien llenó URL en
+  // público y se cambia a privado, no pierde lo escrito.
+  const [modo, setModo] = useState<"publico" | "privado">("publico");
   // Reemplaza window.confirm() del clone — modal estilizado y accesible.
   const [pidiendoClone, setPidiendoClone] = useState(false);
 
@@ -107,35 +114,88 @@ function PanelGit() {
           )}
           <div className="remoto" role="group" aria-label={t.sg_remote_label}>
             <div className="remtit" id="git-remote-h">{t.sg_remote_label}</div>
-            <input
-              placeholder={t.sg_url_placeholder}
-              aria-label={t.sg_url_placeholder}
-              autoComplete="off" spellCheck={false}
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <input
-              placeholder={t.sg_user_placeholder}
-              aria-label={t.sg_user_placeholder}
-              autoComplete="username" spellCheck={false}
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-            />
-            <input
-              type="password"
-              placeholder={t.sg_token_placeholder}
-              aria-label={t.sg_token_placeholder}
-              autoComplete="off"
-              value={tok}
-              onChange={(e) => setTok(e.target.value)}
-            />
-            <input
-              placeholder={t.sg_branch_placeholder}
-              aria-label={t.sg_branch_placeholder}
-              autoComplete="off" spellCheck={false}
-              value={rama}
-              onChange={(e) => setRama(e.target.value)}
-            />
+
+            {/* Segmented control: público vs privado. Sólo se renderiza el
+                formulario del modo activo — eso es lo que descomprime la
+                vista (antes había 4 inputs amontonados todo el tiempo). */}
+            <div className="rem-tabs" role="tablist" aria-labelledby="git-remote-h">
+              <button
+                type="button" role="tab"
+                aria-selected={modo === "publico"}
+                className={"rem-tab" + (modo === "publico" ? " on" : "")}
+                onClick={() => setModo("publico")}
+              >
+                {t.sg_mode_public}
+              </button>
+              <button
+                type="button" role="tab"
+                aria-selected={modo === "privado"}
+                className={"rem-tab" + (modo === "privado" ? " on" : "")}
+                onClick={() => setModo("privado")}
+              >
+                {t.sg_mode_private}
+              </button>
+            </div>
+            <p className="rem-hint">
+              {modo === "publico" ? t.sg_mode_public_hint : t.sg_mode_private_hint}
+            </p>
+
+            {/* URL: común a los dos modos. Va siempre. */}
+            <label className="rem-field">
+              <span className="rem-lbl">{t.sg_lbl_url}</span>
+              <input
+                placeholder={t.sg_url_placeholder}
+                aria-label={t.sg_lbl_url}
+                autoComplete="off" spellCheck={false}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+            </label>
+
+            {/* Credenciales y rama destino — sólo modo privado.
+                En modo público no aplican (clone sin auth, sin push). */}
+            {modo === "privado" && (
+              <>
+                <label className="rem-field">
+                  <span className="rem-lbl">{t.sg_lbl_user}</span>
+                  <input
+                    placeholder={t.sg_user_placeholder}
+                    aria-label={t.sg_lbl_user}
+                    autoComplete="username" spellCheck={false}
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                  />
+                </label>
+                <label className="rem-field">
+                  <span className="rem-lbl">
+                    {t.sg_lbl_token}
+                    <span className="rem-lbl-hint"> · {t.sg_lbl_token_hint}</span>
+                  </span>
+                  <input
+                    type="password"
+                    placeholder={t.sg_token_placeholder}
+                    aria-label={t.sg_lbl_token}
+                    autoComplete="off"
+                    value={tok}
+                    onChange={(e) => setTok(e.target.value)}
+                  />
+                </label>
+                <label className="rem-field">
+                  <span className="rem-lbl">
+                    {t.sg_lbl_branch}
+                    <span className="rem-lbl-hint"> · {t.sg_lbl_branch_hint}</span>
+                  </span>
+                  <input
+                    placeholder={t.sg_branch_placeholder}
+                    aria-label={t.sg_lbl_branch}
+                    autoComplete="off" spellCheck={false}
+                    value={rama}
+                    onChange={(e) => setRama(e.target.value)}
+                  />
+                </label>
+              </>
+            )}
+
             <div className="remacc">
               <button
                 className="no"
@@ -144,12 +204,17 @@ function PanelGit() {
               >
                 <DownloadCloud size={12} /> {t.sg_clone_btn}
               </button>
-              <button
-                onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}
-                aria-label={t.sg_push_btn}
-              >
-                <UploadCloud size={12} /> {t.sg_push_btn}
-              </button>
+              {/* Push sólo en privado: pushear sin auth no funciona contra
+                  ningún remote real. Si el usuario está en público y quiere
+                  pushear, cambia a privado y los datos del URL se preservan. */}
+              {modo === "privado" && (
+                <button
+                  onClick={() => { pushear(user.trim(), tok, url.trim(), rama.trim()); setTok(""); }}
+                  aria-label={t.sg_push_btn}
+                >
+                  <UploadCloud size={12} /> {t.sg_push_btn}
+                </button>
+              )}
             </div>
           </div>
           {pidiendoClone && (
@@ -162,8 +227,15 @@ function PanelGit() {
               onCancel={() => setPidiendoClone(false)}
               onConfirm={() => {
                 setPidiendoClone(false);
-                clonar(url.trim(), user.trim(), tok);
-                setTok("");
+                // Modo público manda credenciales vacías (clone anónimo).
+                // Si el usuario rellenó user/token en privado y luego se
+                // cambió a público, no queremos enviar esos restos.
+                if (modo === "publico") {
+                  clonar(url.trim(), "", "");
+                } else {
+                  clonar(url.trim(), user.trim(), tok);
+                  setTok("");
+                }
                 emitToast(t.toast_clone_started, "ok");
               }}
             />
