@@ -298,7 +298,71 @@ docker system prune -af                  # limpieza agresiva (ojo: borra
 
 ---
 
-## 8. Antes de anunciar / ir a producción real (checklist)
+## 8. Durante el spike de promoción (monitoreo en vivo)
+
+VPS actual: **4 vCPU · 8 GB RAM** (DigitalOcean Basic Regular, $48/mo, resize en caliente desde el panel).
+
+Topes del `docker-compose.yml` configurados:
+| Servicio | CPU tope | RAM tope |
+|---|---|---|
+| `orux` | 3.0 | 4 G |
+| `api` | 0.5 | 768 M |
+| `postgres` | 1.0 | 1.5 G |
+| `caddy` | 0.5 | 256 M |
+| **Total cap** | **5.0** (125% del físico, oversubscription OK) | **6.5 G** (82%, deja 1.4 G para OS) |
+
+### Comandos para mirar en vivo
+
+```bash
+# 1) Top en el host: visión global (CPU, RAM, swap)
+htop                                      # si no está: apt install htop
+
+# 2) Uso real POR contenedor (en vivo, refresh cada 2s)
+docker stats
+
+# 3) Logs combinados con tail corto (no inunda terminal)
+docker compose logs -f --tail=100
+
+# 4) Errores reportados desde el cliente (capa 35)
+docker compose logs api | grep client_error
+
+# 5) Pageviews que están llegando (analytics propio)
+docker compose logs api | grep client_track | tail -20
+
+# 6) Salud de cada container
+make ps                                    # busca "(healthy)" en los 4
+```
+
+### Criterios numéricos para resize (no opinión: número)
+
+**Subir a 8 vCPU/16 GB ($96/mo)** si CUALQUIERA de estos se sostiene >10 minutos:
+- CPU del host (en `htop`) > **75%** sostenido
+- RAM del host > **85%** sostenida (o aparece **swap usage**)
+- `docker stats` muestra que `orux` está al **>90% de su tope** (3.7+ CPU o 3.6+ G RAM)
+- `make ps` reporta `(unhealthy)` recurrente
+
+**Bajar a 2vCPU/4GB** si tras 7-14 días el uso sostenido del host está <30% CPU y <50% RAM en horas pico.
+
+**Resize en caliente desde DO**: panel del droplet → Resize → elegí plan → "Resize Disk and CPU". Tarda ~5 min; volúmenes y red persisten; el container va a reiniciar (downtime ~30-60s; el reconnect WS del cliente lo absorbe). Tras el resize, NO hay que tocar nada del compose si subís — los límites son topes; si bajás a 2vCPU/4GB, revisar/reducir topes del `docker-compose.yml` antes del próximo `make restart`.
+
+### Qué mirar en los primeros 30 minutos del anuncio
+
+```bash
+# Terminal A: monitor de recursos
+watch -n 5 'docker stats --no-stream'
+
+# Terminal B: errores del cliente (si algo se rompe en vivo, acá lo ves)
+docker compose logs -f api | grep --line-buffered "client_error\|ERROR\|WARN"
+
+# Terminal C: tráfico de la landing
+docker compose logs -f api | grep --line-buffered client_track
+```
+
+Si algo se ve mal y no es obvio el por qué: `docker compose logs --tail=300 orux > /tmp/orux.log` (para revisar tranquilo). Los logs de api y orux NO se rotan automáticamente — si crecen mucho durante el spike, `docker compose logs api > /var/log/orux-api.log && docker compose restart api` (el archivo de log del container es transitorio).
+
+---
+
+## 9. Antes de anunciar / ir a producción real (checklist)
 
 - [ ] `.env` completo con todos los secretos reales (no defaults).
 - [ ] `ORUX_SITE_ADDRESS` apunta al dominio real (no `localhost`).

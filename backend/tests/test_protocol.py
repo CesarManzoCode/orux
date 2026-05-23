@@ -18,6 +18,7 @@ from orux.protocol import (
     GitResultMessage,
     GitStatusMessage,
     ImpactMessage,
+    LobbyMessage,
     LoginMessage,
     RegisterMessage,
     SessionMessage,
@@ -34,6 +35,7 @@ from orux.protocol import (
     decode,
     encode,
 )
+from orux.protocol.validation import ProtocolError
 
 
 def test_encode_decode_init_roundtrip() -> None:
@@ -185,3 +187,49 @@ def test_encode_decode_delete_roundtrip() -> None:
 def test_encode_decode_commit_y_gitresult_roundtrip() -> None:
     assert decode(encode(CommitMessage("primer commit"))) == CommitMessage("primer commit")
     assert decode(encode(GitResultMessage(True, "commit creado"))) == GitResultMessage(True, "commit creado")
+
+
+# --- Capa 36 (G.1): lobby con teams validado por elemento -----------------
+# Antes decode aceptaba `teams=[<lo que sea>]` y un payload malformado podía
+# romper el render del Hub al deserializar. Ahora cada team pasa por tipos.
+
+
+def test_lobby_roundtrip_con_y_sin_extras() -> None:
+    # Forma estándar (campos extras: plan + miembros) — server emite así.
+    msg = LobbyMessage(
+        teams=[
+            {"id": "abc123", "nombre": "Alpha", "rol": "admin",
+             "plan": "free", "miembros": 3},
+            {"id": "def456", "nombre": "Beta", "rol": "member"},
+        ],
+        error="",
+    )
+    assert decode(encode(msg)) == msg
+
+
+def test_lobby_decode_rechaza_team_no_objeto() -> None:
+    # Lista con un elemento que no es dict — antes pasaba.
+    payload = '{"type":"lobby","teams":["soy-string"],"error":""}'
+    with pytest.raises(ProtocolError):
+        decode(payload)
+
+
+def test_lobby_decode_rechaza_id_vacio() -> None:
+    payload = '{"type":"lobby","teams":[{"id":"","nombre":"X","rol":"admin"}],"error":""}'
+    with pytest.raises(ProtocolError):
+        decode(payload)
+
+
+def test_lobby_decode_rechaza_miembros_no_entero() -> None:
+    payload = (
+        '{"type":"lobby","teams":[{"id":"a","nombre":"X","rol":"admin",'
+        '"miembros":"tres"}],"error":""}'
+    )
+    with pytest.raises(ProtocolError):
+        decode(payload)
+
+
+def test_lobby_decode_rechaza_teams_no_lista() -> None:
+    payload = '{"type":"lobby","teams":"no-soy-lista","error":""}'
+    with pytest.raises(ProtocolError):
+        decode(payload)

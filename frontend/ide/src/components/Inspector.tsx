@@ -9,6 +9,7 @@ import { useStore } from "../useStore";
 import {
   reclamar, seleccionar, resolver, nombreDe, guardar, descartarDraft,
   descartarImpacto, impactosQueAfectan, propuestasDe, severidadMax, presentesEn,
+  emitToast,
   type ActItem, type Impact, type Proposal,
 } from "../store";
 import { chipDe, diffLineas, inicial } from "../lang";
@@ -376,8 +377,19 @@ export function Inspector({
     if (!path) return;
     setClaimingPath(path);
     reclamar(path);
+    // Capa 36 (G.2): si en 3s el server no confirmó el ownership, el spinner
+    // se apaga Y avisamos. Antes apagaba en silencio y el usuario veía "se
+    // quedó pensando y nada cambió" — confusión sin diagnóstico. Causas
+    // típicas: el archivo YA tiene dueño (server ignora el claim) o el WS
+    // se cortó. Si el ownership SÍ llegó antes, el useEffect ya limpió
+    // claimingPath y este timeout es no-op.
     setTimeout(() => {
-      setClaimingPath((p) => (p === path ? null : p));
+      setClaimingPath((p) => {
+        if (p === path) {
+          emitToast(t.ins_claim_timeout, "warn");
+        }
+        return p === path ? null : p;
+      });
     }, 3000);
   }
 

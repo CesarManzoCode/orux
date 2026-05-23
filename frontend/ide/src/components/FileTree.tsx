@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FolderOpen, KeyRound, ChevronRight, Trash2 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
-  seleccionar, borrar, emitToast,
+  seleccionar, borrar,
   impactosQueAfectan, propuestasDe, severidadMax,
   type Peer,
 } from "../store";
@@ -177,8 +177,13 @@ export function FileTree() {
           onConfirm={() => {
             const p = confirmDel;
             setConfirmDel(null);
-            borrar(p);
-            emitToast(t.toast_delete_done(p), "ok");
+            // Capa 36 (G.2): el toast de éxito sale CUANDO el server
+            // confirma el delete (broadcast `delete`), no antes. Pasamos
+            // el texto i18n al store para que lo emita en el momento
+            // correcto. Si el server rechaza, simplemente no llega el
+            // toast (la actividad del Inspector tampoco registra el
+            // delete que no ocurrió).
+            borrar(p, t.toast_delete_done(p));
           }}
         />
       )}

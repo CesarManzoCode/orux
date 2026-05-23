@@ -744,8 +744,14 @@ export function App() {
           <motion.div className="nots" variants={stagger}
             initial={reduce ? "show" : "hidden"}
             whileInView="show" viewport={{ once: true, amount: 0.3 }}>
-            {t.nots.map((n) => (
-              <motion.div className="not" key={n} variants={fadeUp}>
+            {t.nots.map((n, i) => (
+              // Key por ÍNDICE, no por contenido — al cambiar idioma el
+              // texto entero cambia y `key={n}` desmontaba/remontaba cada
+              // item. Como el padre tiene `viewport={{ once: true }}`, la
+              // animación ya disparó: los items remontados nacen en estado
+              // `hidden` y nunca vuelven a `show`, quedando invisibles
+              // permanentes hasta refrescar (BUG-G3-001).
+              <motion.div className="not" key={i} variants={fadeUp}>
                 <span aria-hidden>✕</span>
                 <div>{n}</div>
               </motion.div>

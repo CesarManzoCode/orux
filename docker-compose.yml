@@ -16,20 +16,19 @@ services:
       - postgres
     expose:
       - "8765"          # solo dentro de la red de compose, no al host
-    # Topes de recursos: el server WS arranca pyright/tsserver/gopls/
-    # rust-analyzer como subprocesos y un equipo con un repo grande puede
-    # disparar la RAM. Sin tope, un solo LSP "que se ahoga" puede tumbar
-    # el host entero y llevarse a postgres/caddy/api con él. 2 CPU/2G dan
-    # margen real para los 4 LSP corriendo a la vez y para el event loop.
-    # Reservation 256M = lo mínimo que el server pide aunque el host esté
-    # apretado. `docker compose up` respeta esto sin necesitar swarm.
+    # Topes de recursos calibrados al VPS de 4vCPU/8GB. orux es el más
+    # pesado del cuarteto: arranca pyright/tsserver/gopls/rust-analyzer
+    # como subprocesos (~500-800 MB cada uno cuando indexan un repo
+    # grande). 4 GB dan margen para los 4 LSP simultáneos + event loop
+    # + locks + buffers. 3 CPU permite que LSP+broadcasts no se peleen.
+    # `docker compose up` respeta esto sin necesitar swarm.
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '3.0'
+          memory: 4G
         reservations:
-          memory: 256M
+          memory: 512M
     environment:
       # Capa 15: DSN de Postgres. Mientras el server no esté cableado a la
       # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
@@ -66,13 +65,14 @@ services:
               "--host", "0.0.0.0", "--port", "8800"]
     expose:
       - "8800"
-    # API HTTP liviana: pocos endpoints, todos JSON cortos, sin LSP ni
-    # estado en memoria — Starlette + uvicorn corren cómodos en 512M.
+    # API HTTP liviana (Starlette + uvicorn). En picos hace POST a Stripe
+    # checkout y webhooks de vuelta — 768M le da margen para el JSON
+    # blob de eventos sin estresarse.
     deploy:
       resources:
         limits:
           cpus: '0.5'
-          memory: 512M
+          memory: 768M
         reservations:
           memory: 128M
     environment:
@@ -117,15 +117,15 @@ services:
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     # Postgres solo guarda metadatos (no archivos): tablas chicas, queries
-    # cortas. 1G alcanza con holgura para shared_buffers default + cache.
-    # Si el equipo crece a miles de teams subimos esto, no antes.
+    # cortas. 1.5G permite un shared_buffers más generoso (mejor cache hit
+    # ratio) y aguanta picos de signup/login concurrentes en lanzamiento.
     deploy:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1G
+          memory: 1500M
         reservations:
-          memory: 256M
+          memory: 384M
     environment:
       - POSTGRES_USER=orux
       - POSTGRES_PASSWORD=orux
@@ -154,15 +154,16 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    # Caddy sirve estáticos + proxy + TLS: cómputo casi nulo, RAM mínima.
-    # 256M le sobra hasta picos de tráfico bestiales.
+    # Caddy sirve estáticos + proxy + TLS. En el primer pico de promo es
+    # la cara que más req/s ve (cada visitante a la landing pasa por acá);
+    # 0.5 CPU le da margen para encode zstd/gzip sin pelearse con orux.
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '0.5'
           memory: 256M
         reservations:
-          memory: 32M
+          memory: 64M
     environment:
       # Dominio real -> TLS automático. Sin dominio queda "localhost" (cert
       # local, el navegador avisa: ok para probar, no para producción real).

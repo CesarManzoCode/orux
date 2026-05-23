@@ -417,6 +417,7 @@ export const es = {
     ins_no_owner_sub: "Nadie reclamó este archivo. Reclamarlo te deja editarlo en vivo.",
     ins_claim: "reclamar",
     ins_claim_busy: "reclamando…",
+    ins_claim_timeout: "No se pudo reclamar. ¿Ya tiene dueño, o se cortó la conexión?",
     ins_mine: "tuyo",
     ins_mine_sub: "lo editas directo — Ctrl+S analiza el impacto",
     ins_of: (name: string) => "de " + name,

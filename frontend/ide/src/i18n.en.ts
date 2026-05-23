@@ -400,6 +400,7 @@ export const en = {
     ins_no_owner_sub: "Nobody claimed this file. Claiming lets you edit it live.",
     ins_claim: "claim",
     ins_claim_busy: "claiming…",
+    ins_claim_timeout: "Couldn't claim. Already taken, or connection dropped?",
     ins_mine: "yours",
     ins_mine_sub: "you edit directly — Ctrl+S analyses the impact",
     ins_of: (name: string) => name + "'s",

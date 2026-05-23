@@ -44,7 +44,15 @@ def _str(v: object, *, max_len: int = _MAX_STRING_FIELD,
          campo: str = "campo", permitir_vacio: bool = True) -> str:
     """Lee un campo string del dict, valida tipo y tope. Devuelve "" si falta
     o es None y `permitir_vacio` (default). Levanta `ProtocolError` con un
-    mensaje legible si el tipo o el tamaño no cuadran."""
+    mensaje legible si el tipo o el tamaño no cuadran.
+
+    `permitir_vacio=False` rechaza TANTO `None` como `""` (capa 36, G.1):
+    antes solo rechazaba None y un payload con `path=""` pasaba a través
+    de campos marcados como obligatorios (UpdateMessage, DeleteMessage,
+    SaveMessage, ClaimMessage, LoginMessage, RegisterMessage, etc.). El
+    nombre del param sugiere "no aceptar vacío"; ahora la implementación
+    coincide con la semántica.
+    """
     if v is None:
         if permitir_vacio:
             return ""
@@ -55,6 +63,8 @@ def _str(v: object, *, max_len: int = _MAX_STRING_FIELD,
         raise ProtocolError(
             f"'{campo}' excede el tope ({len(v)} > {max_len} bytes)"
         )
+    if not v and not permitir_vacio:
+        raise ProtocolError(f"'{campo}' no puede estar vacío")
     return v
 
 

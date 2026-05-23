@@ -59,6 +59,7 @@ from .validation import (
     MAX_FRAME_BYTES,
     ProtocolError,
     _MAX_CONTENT,
+    _MAX_LIST_ITEMS,
     _MAX_MESSAGE,
     _MAX_PASSWORD,
     _MAX_PATH,
@@ -103,6 +104,33 @@ def _proposal(d: object) -> "Proposal":
         author_name=_str(d.get("author_name"), campo="author_name", max_len=_MAX_USERNAME),
         content=_str(d.get("content"), campo="content", max_len=_MAX_CONTENT),
     )
+
+
+def _lobby_team(d: object) -> dict:
+    """Capa 36: valida UN team del payload `lobby.teams` (server→cliente).
+    Antes el decode aceptaba la lista cruda y un payload mal formado podía
+    romper el render del Hub. Ahora cada team pasa por tipos/topes igual
+    que cualquier otro mensaje. `plan` y `miembros` son opcionales (compat
+    con clientes/server viejos: `equipos_de` del server los rellena
+    siempre, pero un test puede mandar sin ellos)."""
+    if not isinstance(d, dict):
+        raise ProtocolError("team de lobby debe ser objeto")
+    out: dict = {
+        "id": _str(d.get("id"), campo="team.id", max_len=128,
+                   permitir_vacio=False),
+        "nombre": _str(d.get("nombre"), campo="team.nombre", max_len=128,
+                       permitir_vacio=False),
+        "rol": _str(d.get("rol"), campo="team.rol", max_len=32,
+                    permitir_vacio=False),
+    }
+    if "plan" in d:
+        out["plan"] = _str(d.get("plan"), campo="team.plan", max_len=32)
+    if "miembros" in d:
+        out["miembros"] = _int(
+            d.get("miembros"), default=0, minimo=0,
+            maximo=10_000_000, campo="team.miembros",
+        )
+    return out
 
 
 def encode(message: Message) -> str:
@@ -322,8 +350,15 @@ def decode(raw: str | bytes) -> Message:
                               campo="username"),
             )
         if kind == "lobby":
+            crudos = data.get("teams") or []
+            if not isinstance(crudos, list):
+                raise ProtocolError("'teams' de lobby debe ser lista")
+            if len(crudos) > _MAX_LIST_ITEMS:
+                raise ProtocolError(
+                    f"'teams' de lobby excede {_MAX_LIST_ITEMS} elementos"
+                )
             return LobbyMessage(
-                teams=list(data.get("teams") or []),
+                teams=[_lobby_team(t) for t in crudos],
                 error=_str(data.get("error"), max_len=_MAX_MESSAGE, campo="error"),
             )
         if kind == "create_team":

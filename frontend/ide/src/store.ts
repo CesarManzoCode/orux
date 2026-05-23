@@ -399,6 +399,15 @@ function onMessage(raw: string) {
       let cur = state.currentPath;
       if (cur === m.path) cur = Object.keys(files).sort()[0] ?? null;
       act("delete", "", "se eliminó", m.path);
+      // Toast SOLO al autor que pidió el borrado. Si otro miembro del
+      // equipo borró, no spameamos a todos con "✓ borrado X" — la
+      // actividad del Inspector ya lo registra. El texto viene
+      // pre-traducido del caller (FileTree.tsx).
+      const toastOk = _deletePedidos.get(m.path);
+      if (toastOk !== undefined) {
+        _deletePedidos.delete(m.path);
+        if (toastOk) emitToast(toastOk, "ok");
+      }
       set({ files, dirty, drafts, currentPath: cur });
       break;
     }
@@ -761,7 +770,17 @@ export function resolver(proposal_id: string, accept: boolean) {
   set({ proposals: props });
   send({ type: "resolve", proposal_id, accept });
 }
-export function borrar(path: string) { send({ type: "delete", path }); }
+// Capa 36 (G.2): trackeo local de "yo pedí borrar X" para mostrar el toast
+// de éxito CUANDO el server confirma el delete (broadcast `delete`), no
+// antes. Sin esto, el usuario veía "✓ borrado X" al confirmar el diálogo
+// aunque el server pudiera rechazar — falso positivo cosmético. Map por
+// path → texto ya traducido (el store no tiene acceso al hook `useI18n`,
+// así que el caller pasa el string i18n-resuelto).
+const _deletePedidos = new Map<string, string>();
+export function borrar(path: string, toastOk: string = ""): void {
+  _deletePedidos.set(path, toastOk);
+  send({ type: "delete", path });
+}
 export function commitear(message: string) { send({ type: "commit", message }); }
 export function gitRefresh() { send({ type: "git_refresh" }); }
 export function clonar(url: string, username: string, token: string) {
