@@ -204,6 +204,23 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
 .foot-r a { color: var(--ink-2); transition: color var(--tr); }
 .foot-r a:hover { color: var(--ink); }
 
+/* Sub-fila: contacto + repo a la izquierda, copyright a la derecha. Cruza
+   las dos columnas (grid-column: 1 / -1 dentro de un flex con wrap → un
+   ancho 100% que se ubica abajo de todo). Mono pequeño porque es info
+   secundaria; el border-top la separa de la nav primaria sin gritar. */
+.foot-bottom {
+  width: 100%; margin-top: 28px; padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 18px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--mut); letter-spacing: 0.02em;
+}
+.foot-bottom-l { display: flex; gap: 12px; align-items: center; }
+.foot-bottom-l a { color: var(--mut); transition: color var(--tr); }
+.foot-bottom-l a:hover { color: var(--ink); }
+.foot-bottom-r { color: var(--faint); }
+
 /* ─────────────────────────────────────────────────────────────────────
  * RESPONSIVE — no apilar a lo bruto: re-jerarquizar
  * ───────────────────────────────────────────────────────────────────── */

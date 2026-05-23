@@ -1,0 +1,17 @@
+# Orux · robots.txt — política para crawlers.
+#
+# Permitimos la landing (la cara pública) y bloqueamos lo que NO es contenido
+# para indexar:
+#  - /app/   = el IDE detrás del login. No tiene contenido público para SEO.
+#  - /api/   = endpoints HTTP del operador / billing / errors. Tampoco.
+#  - /oauth/ = callbacks de OAuth. No es destino, solo paso.
+#  - /admin  = consola interna del operador.
+
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /api/
+Disallow: /oauth/
+Disallow: /admin
+
+Sitemap: https://orux.space/sitemap.xml

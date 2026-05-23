@@ -77,9 +77,18 @@ _ERRORS_RPM = 60  # tope generoso de reportes de error por IP (es para
                   # debugging propio, los errores legítimos pueden ser
                   # muchos en una sesión problemática; el cliente además
                   # debounce-a antes de mandar).
+_TRACK_RPM = 120  # más permisivo: la landing puede generar varios eventos
+                  # legítimos (pageview + cta_click + ...) en una sola
+                  # visita. 120/min sigue siendo asfixiante para un bot.
 
 _login_buckets: dict[str, list[float]] = {}
 _error_buckets: dict[str, list[float]] = {}
+_track_buckets: dict[str, list[float]] = {}
+
+# Capa 36: timestamp del arranque del proceso para calcular uptime en
+# /api/v1/status. monotonic() no retrocede aunque el reloj del host se
+# ajuste (NTP), así que la métrica es honesta.
+_INICIO_MONO = time.monotonic()
 
 
 def _ip_de(req: Request) -> str:
@@ -134,6 +143,26 @@ def _rate_limit_errors(ip: str) -> bool:
         ]
         for k in muertas:
             _error_buckets.pop(k, None)
+    return True
+
+
+def _rate_limit_track(ip: str) -> bool:
+    """Tope para /api/v1/track. Más permisivo aún: una visita normal puede
+    generar varios eventos legítimos. Si una IP se pasa, la silenciamos
+    (el analytics local pierde algunas señales, no es crítico)."""
+    ahora = time.monotonic()
+    corte = ahora - 60.0
+    bucket = _track_buckets.setdefault(ip, [])
+    bucket[:] = [t for t in bucket if t > corte]
+    if len(bucket) >= _TRACK_RPM:
+        return False
+    bucket.append(ahora)
+    if len(_track_buckets) > 10_000:
+        muertas = [
+            k for k, v in _track_buckets.items() if not v or v[-1] <= corte
+        ]
+        for k in muertas:
+            _track_buckets.pop(k, None)
     return True
 
 
@@ -669,9 +698,58 @@ async def _client_error(req: Request) -> Response:
     return Response(status_code=204)
 
 
+async def _client_track(req: Request) -> Response:
+    """Analytics propio minimalista. Mismo patrón que `_client_error`: sin
+    auth, sin cookies, sin IDs persistentes. La IP se usa SOLO para rate
+    limit, no se loguea con el evento. UA y referrer se cortan a tamaños
+    pequeños — son señales agregadas (qué browser, de dónde llegan), no
+    datos personales.
+
+    Eventos pensados: "pageview" al cargar la landing. Si en el futuro
+    sumamos `cta_click` o similar, el endpoint los acepta sin cambios.
+    """
+    ip = _ip_de(req)
+    if not _rate_limit_track(ip):
+        return Response(status_code=429)
+    try:
+        data = await req.json()
+    except Exception:  # noqa: BLE001
+        return Response(status_code=400)
+    if not isinstance(data, dict):
+        return Response(status_code=400)
+    event = str(data.get("event", ""))[:32]
+    url = str(data.get("url", ""))[:300]
+    referrer = str(data.get("referrer", ""))[:300]
+    ua = str(req.headers.get("user-agent", ""))[:300]
+    # log estructurado: la línea es la fuente de verdad del dato. Se ve con
+    # `docker compose logs api | grep client_track`.
+    logger.info(
+        "client_track: event=%s url=%r referrer=%r ua=%r",
+        event, url, referrer, ua,
+    )
+    return Response(status_code=204)
+
+
+async def _status(req: Request) -> JSONResponse:
+    """Endpoint público de "está vivo". Para UptimeRobot, cronjobs externos,
+    o debugging rápido desde la línea de comandos (`curl /api/v1/status`).
+    Devuelve uptime del proceso (no del host) y versión si el operador la
+    seteó vía `ORUX_VERSION` — útil para confirmar qué deploy está activo.
+    Sin auth: nada sensible acá."""
+    uptime_s = int(time.monotonic() - _INICIO_MONO)
+    version = os.environ.get("ORUX_VERSION", "dev")
+    return JSONResponse({
+        "ok": True,
+        "uptime_s": uptime_s,
+        "version": version,
+    })
+
+
 _RUTAS = [
     Route("/api/v1/health", _health),
+    Route("/api/v1/status", _status),
     Route("/api/v1/errors", _client_error, methods=["POST"]),
+    Route("/api/v1/track", _client_track, methods=["POST"]),
     Route("/api/v1/login", _login, methods=["POST"]),
     Route("/api/v1/users", _usuarios),
     Route("/api/v1/teams", _teams),

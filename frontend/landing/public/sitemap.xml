@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sitemap mínimo: una sola URL (la home) porque la landing es SPA con
+  anclas (#pilares, #como, #faq, #precio) que Google indexa de la propia
+  home. Si después separás las secciones en URLs propias, las sumás acá.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://orux.space/</loc>
+    <lastmod>2026-05-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

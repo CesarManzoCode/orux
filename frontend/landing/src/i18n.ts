@@ -299,6 +299,7 @@ export const T = {
     foot_how: "Cómo funciona",
     foot_faq: "FAQ",
     foot_price: "Precio",
+    foot_copy: "© 2026 Orux",
 
     // Lang
     lang_es: "Español",
@@ -593,6 +594,7 @@ export const T = {
     foot_how: "How it works",
     foot_faq: "FAQ",
     foot_price: "Pricing",
+    foot_copy: "© 2026 Orux",
 
     // Lang
     lang_es: "Español",

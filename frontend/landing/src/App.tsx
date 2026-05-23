@@ -856,6 +856,24 @@ export function App() {
             <a href="#faq">{t.foot_faq}</a>
             <a href="#precio">{t.foot_price}</a>
           </div>
+          {/* Sub-fila inferior: contacto + repo + copyright. Antes el footer
+              terminaba en las anclas internas y un usuario que quería
+              escribirnos no tenía dónde — primer gap real para gente que
+              encuentra un bug y quiere reportarlo. */}
+          <div className="foot-bottom">
+            <div className="foot-bottom-l">
+              <a href="mailto:hola@orux.space">hola@orux.space</a>
+              <span aria-hidden>·</span>
+              <a
+                href="https://github.com/CesarManzoCode/laidea"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                GitHub
+              </a>
+            </div>
+            <div className="foot-bottom-r">{t.foot_copy}</div>
+          </div>
         </div>
       </footer>
     </>
