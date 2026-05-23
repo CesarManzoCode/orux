@@ -257,6 +257,9 @@ def decode(raw: str | bytes) -> Message:
         if kind == "auth_error":
             return AuthErrorMessage(
                 reason=_str(data.get("reason"), max_len=_MAX_MESSAGE, campo="reason"),
+                # Capa 35: ver AuthErrorMessage.code. Cap chico (64) — los
+                # códigos son labels cerrados; cualquier cosa mayor es ruido.
+                code=_str(data.get("code"), max_len=64, campo="code"),
             )
         if kind == "git_status":
             return GitStatusMessage(

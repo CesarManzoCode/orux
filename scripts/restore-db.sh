@@ -20,6 +20,16 @@ if [ $# -lt 1 ]; then
   exit 2
 fi
 
+# Cargar .env del repo igual que en backup-db.sh: si más adelante
+# necesitamos vars (ej. distintos PG_USER), salen de ahí.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090,SC1091
+  . "$REPO_ROOT/.env"
+  set +a
+fi
+
 BACKUP_FILE="$1"
 PG_SERVICE="${PG_SERVICE:-postgres}"
 PG_USER="${PG_USER:-orux}"

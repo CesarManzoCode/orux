@@ -13,7 +13,7 @@
 // teclado: la tarjeta ya es `<button>`; Enter/Space abren.
 import { useEffect, useRef, useState } from "react";
 import {
-  Shield, Users, ChevronRight, ArrowRight, ArrowLeft, ArrowUpCircle,
+  Shield, Users, ChevronRight, ArrowLeft, ArrowUpCircle,
   Plus, KeyRound, Sparkles,
 } from "lucide-react";
 import { useStore } from "../useStore";
@@ -344,12 +344,30 @@ export function Hub() {
                 <b>{t.hub_empty_title}</b>
                 <span>{t.hub_empty_desc}</span>
               </div>
-              {/* Pista visual hacia el formulario "crear o unirme". El usuario
-                  nuevo a veces no ve la columna derecha — esta flecha es
-                  redundancia útil. Pure decoration: aria-hidden. */}
-              <div className="hub-empty-arrow" aria-hidden>
-                <ArrowRight size={18} />
-                <span>{t.hub_empty_arrow}</span>
+              {/* CTA explícito (no decoración): el usuario nuevo no exploraba
+                  la columna derecha del Hub — sobre todo en mobile donde se
+                  apila debajo. Estos botones activan el picker Y enfocan el
+                  input correspondiente, así llegás directo al teclado en
+                  lugar de "ver el formulario y buscar dónde clickear". */}
+              <div className="hub-empty-cta">
+                <button
+                  className="primario hub-empty-btn"
+                  onClick={() => {
+                    setPickerMode("crear");
+                    setTimeout(() => refNombre.current?.focus(), 30);
+                  }}
+                >
+                  <Plus size={14} aria-hidden /> {t.hub_empty_cta_create}
+                </button>
+                <button
+                  className="hub-empty-join"
+                  onClick={() => {
+                    setPickerMode("unirme");
+                    setTimeout(() => refCode.current?.focus(), 30);
+                  }}
+                >
+                  {t.hub_empty_cta_join}
+                </button>
               </div>
             </div>
           )}

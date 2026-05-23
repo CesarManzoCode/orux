@@ -178,7 +178,8 @@ export const en = {
     hub_pay_cancel: "Payment canceled — no charge was made.",
     hub_empty_title: "You're not in any team yet.",
     hub_empty_desc: "Create one (you become admin) or join with a code from an admin. Another team doesn't exist for you until you're inside yours.",
-    hub_empty_arrow: "Start here",
+    hub_empty_cta_create: "Create my first team",
+    hub_empty_cta_join: "or join with a code",
     hub_id_eyebrow: "your identity",
     hub_kpi_team: "team",
     hub_kpi_teams: "teams",
@@ -512,6 +513,20 @@ export const en = {
     tr_in: "in",
     tr_affects: "— affects your",
     tr_sev: { alta: "high", media: "medium", baja: "low" } as Record<string,string>,
+    // Layer 35: translations for the stable codes the server sends in
+    // AuthErrorMessage.code. If the code isn't here, the client falls
+    // back to the raw `reason` from the server (Spanish, less ideal but
+    // still readable).
+    auth_err: {
+      invalid_message: "The client sent something the server didn't understand.",
+      rate_limited: "Too many attempts from your network. Wait a few minutes.",
+      rate_limited_register: "Too many registrations from your network. Wait a few minutes.",
+      closed_registration: "Registration is closed by the operator.",
+      register_failed: "Couldn't register.",
+      bad_credentials: "Wrong username or password.",
+      invalid_session: "Your session expired. Sign in again.",
+      must_auth_first: "Sign in first.",
+    } as Record<string, string>,
     tr_view: (path: string) => "view " + path,
     tr_dismiss: "dismiss",
 

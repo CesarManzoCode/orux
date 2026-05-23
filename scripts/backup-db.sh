@@ -24,6 +24,21 @@ set -euo pipefail
 # Directorios y configuración base. BACKUPS_DIR override-able por env var
 # por si querés guardarlos en otro disco / volumen en el VPS.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Cargar .env del repo si existe. Este script corre en el HOST, no en un
+# container — docker compose lee el .env solo para inyectarlo a los
+# servicios, así que sin esto las DO_SPACES_* del .env no llegan acá.
+# `set -a` exporta automáticamente lo que el source asigne; lo apagamos al
+# salir para no contaminar el resto. Variables del shell del usuario YA
+# son visibles (heredadas del entorno) y NO se pisan si vienen en el .env
+# después, porque source asigna en el orden del archivo.
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090,SC1091
+  . "$REPO_ROOT/.env"
+  set +a
+fi
+
 BACKUPS_DIR="${BACKUPS_DIR:-$REPO_ROOT/backups}"
 RETENTION_DIAS="${RETENTION_DIAS:-7}"
 

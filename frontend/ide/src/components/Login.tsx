@@ -152,9 +152,17 @@ export function Login() {
     window.location.href = "/oauth/github/login";
   };
 
+  // Capa 35: el server manda `code` estable + `reason` legible. Si el
+  // code está en el diccionario i18n del idioma activo, lo traducimos;
+  // si no (server viejo, o caso variable como ValueError de formato),
+  // mostramos el `reason` crudo — ya es legible en español (el cliente
+  // EN igual lo verá en ES, pero es preferible a "Error" genérico).
+  const serverErr = s.loginError
+    ? (t.auth_err[s.loginError.code] ?? s.loginError.reason)
+    : "";
   // Error a mostrar: si el server respondió algo, eso manda. Si no, el
   // local. Si no, el de offline. `min-height` en el CSS evita salto.
-  const errVisible = s.loginError || localErr || oauthErr || (offline ? t.login_offline : "");
+  const errVisible = serverErr || localErr || oauthErr || (offline ? t.login_offline : "");
 
   return (
     <div className="landing">

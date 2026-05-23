@@ -298,9 +298,11 @@
   .ht-go { padding: 5px 8px; }
 }
 
-/* Empty-state: ahora con icono guía + texto + flecha al CTA. La flecha
-   apunta al formulario "crear o unirme" — redundancia útil para usuarios
-   que no exploran columnas. */
+/* Empty-state: icono + texto + CTA explícito (botón primario + link al
+   join). Antes había una flecha decorativa (aria-hidden) que apuntaba a
+   la columna derecha; el usuario nuevo no la conectaba con una acción —
+   y en mobile la columna derecha está apilada debajo, fuera de la línea
+   visual. Ahora los botones disparan el picker y enfocan el input. */
 .hub-empty {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center;
   gap: 14px;
@@ -320,25 +322,32 @@
   font-size: var(--t-md); font-weight: 700; color: var(--text);
   letter-spacing: -0.01em;
 }
-.hub-empty-arrow {
+.hub-empty-cta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  flex: none;
+}
+.hub-empty-btn {
   display: inline-flex; align-items: center; gap: 7px; flex: none;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent);
-  padding: 6px 11px; border-radius: 999px;
-  background: var(--accent-weak); border: 1px solid var(--accent-soft);
-  animation: hub-empty-pulse 2.6s ease-in-out infinite;
+  white-space: nowrap;
 }
-.hub-empty-arrow svg { color: var(--accent); }
-@keyframes hub-empty-pulse {
-  0%, 100% { transform: translateX(0); opacity: 0.95; }
-  50%      { transform: translateX(2px); opacity: 1; }
+.hub-empty-join {
+  background: transparent; border: none; padding: 0;
+  font-size: var(--t-sm); color: var(--muted);
+  text-decoration: underline; text-underline-offset: 3px;
+  cursor: pointer; transition: color var(--tr);
 }
-@media (prefers-reduced-motion: reduce) {
-  .hub-empty-arrow { animation: none; }
+.hub-empty-join:hover { color: var(--text); }
+.hub-empty-join:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px;
 }
 @media (max-width: 600px) {
   .hub-empty { grid-template-columns: auto 1fr; }
-  .hub-empty-arrow { grid-column: 1 / -1; justify-self: flex-start; }
+  .hub-empty-cta {
+    grid-column: 1 / -1; align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .hub-empty-btn { justify-content: center; }
+  .hub-empty-join { text-align: center; }
 }
 /* Botón "volver al equipo previo" en la cabecera del Hub — ahora con icono. */
 .hub-back {

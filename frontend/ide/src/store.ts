@@ -54,7 +54,10 @@ export interface ActItem {
 export interface State {
   conn: "conectando" | "conectado" | "desconectado" | "error";
   authed: boolean;
-  loginError: string | null;
+  // Capa 35: el server manda `code` (label estable) Y `reason` (texto
+  // legible). Guardamos ambos para que Login.tsx decida si traduce el code
+  // o cae al reason crudo (clientes viejos sin code, casos sin label).
+  loginError: { code: string; reason: string } | null;
   yo: { client_id: string; name: string; color: string } | null;
   files: Record<string, string>;
   currentPath: string | null;
@@ -307,7 +310,13 @@ function onMessage(raw: string) {
       break;
     case "auth_error":
       localStorage.removeItem("orux_session");
-      set({ authed: false, loginError: m.reason, fase: "auth" });
+      set({
+        authed: false,
+        // Capa 35: code puede no venir (server viejo) — lo normalizamos a
+        // "" para que el componente no tenga que chequear undefined.
+        loginError: { code: m.code || "", reason: m.reason },
+        fase: "auth",
+      });
       break;
     case "lobby": {
       set({ fase: "lobby", equipos: m.teams || [], equipoError: m.error || "" });

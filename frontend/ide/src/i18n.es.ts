@@ -186,7 +186,8 @@ export const es = {
     hub_pay_cancel: "Pago cancelado — no se hizo ningún cobro.",
     hub_empty_title: "Aún no estás en ningún equipo.",
     hub_empty_desc: "Crea uno (quedas como admin) o únete con un código que te pasó un admin. Otro equipo no existe para ti hasta que estés dentro del tuyo.",
-    hub_empty_arrow: "Empieza por aquí",
+    hub_empty_cta_create: "Crear mi primer equipo",
+    hub_empty_cta_join: "o unirme con un código",
     hub_id_eyebrow: "tu identidad",
     hub_kpi_team: "equipo",
     hub_kpi_teams: "equipos",
@@ -529,6 +530,19 @@ export const es = {
     tr_in: "en",
     tr_affects: "— afecta tu",
     tr_sev: { alta: "alta", media: "media", baja: "baja" } as Record<string,string>,
+    // Capa 35: traducciones de los códigos estables que manda el server en
+    // AuthErrorMessage.code. Si el code no está acá, el cliente cae al
+    // `reason` literal del server (que ya viene legible en español).
+    auth_err: {
+      invalid_message: "El cliente envió algo que el servidor no entendió.",
+      rate_limited: "Demasiados intentos desde tu red. Esperá unos minutos.",
+      rate_limited_register: "Demasiados registros desde tu red. Esperá unos minutos.",
+      closed_registration: "El registro está cerrado por el operador.",
+      register_failed: "No se pudo registrar.",
+      bad_credentials: "Usuario o contraseña incorrectos.",
+      invalid_session: "Tu sesión venció. Inicia sesión de nuevo.",
+      must_auth_first: "Hay que iniciar sesión primero.",
+    } as Record<string, string>,
     tr_view: (path: string) => "ver " + path,
     tr_dismiss: "visto",
 

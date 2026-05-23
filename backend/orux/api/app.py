@@ -69,9 +69,17 @@ _SECRET = os.environ.get("ORUX_ADMIN_TOKEN", "")
 # diccionario IP -> deque de timestamps, ventana deslizante. Para deploy
 # multi-réplica habría que externalizar; nota dejada arriba del bucket.
 
-_LOGIN_RPM = 5  # requests por minuto por IP
+_LOGIN_RPM = 3  # requests por minuto por IP (capa 35: bajado de 5→3 antes
+                # del anuncio; el operador `ORUX_ADMIN_USER` es target
+                # obvio y PBKDF2 600k iteraciones ya hace caro el ataque,
+                # esto es defensa en profundidad)
+_ERRORS_RPM = 60  # tope generoso de reportes de error por IP (es para
+                  # debugging propio, los errores legítimos pueden ser
+                  # muchos en una sesión problemática; el cliente además
+                  # debounce-a antes de mandar).
 
 _login_buckets: dict[str, list[float]] = {}
+_error_buckets: dict[str, list[float]] = {}
 
 
 def _ip_de(req: Request) -> str:
@@ -106,6 +114,26 @@ def _rate_limit_login(ip: str) -> bool:
         ]
         for k in muertas:
             _login_buckets.pop(k, None)
+    return True
+
+
+def _rate_limit_errors(ip: str) -> bool:
+    """Mismo patrón que login, pero más permisivo. Los errores son señal
+    útil para nosotros — preferimos perder algunos si una IP se vuelve
+    abusiva, antes que floodear los logs."""
+    ahora = time.monotonic()
+    corte = ahora - 60.0
+    bucket = _error_buckets.setdefault(ip, [])
+    bucket[:] = [t for t in bucket if t > corte]
+    if len(bucket) >= _ERRORS_RPM:
+        return False
+    bucket.append(ahora)
+    if len(_error_buckets) > 10_000:
+        muertas = [
+            k for k, v in _error_buckets.items() if not v or v[-1] <= corte
+        ]
+        for k in muertas:
+            _error_buckets.pop(k, None)
     return True
 
 
@@ -605,8 +633,45 @@ async def _billing_webhook(req: Request) -> JSONResponse:
     return JSONResponse({"recibido": True, "aplicado": res is not None})
 
 
+async def _client_error(req: Request) -> Response:
+    """Recibe errores JS del cliente y los loguea en el container `api` para
+    que el operador los vea con `docker compose logs api`. Sin auth: cualquier
+    visitante puede reportar (la info no es sensible — son stack traces — y
+    no exigir auth maximiza la captura de bugs que rompen el login mismo).
+
+    Defensas:
+    - rate limit por IP (60/min: errores legítimos pueden ser muchos en una
+      sesión problemática, pero un atacante igual no puede inundar);
+    - `_LimiteBody` ya recorta el body a 64KB (suficiente para un stack);
+    - cap por campo acá adentro (no nos importa el último kilobyte del
+      stack; importa que un campo no se vaya a 200KB);
+    - 204 sin cuerpo: nada útil que devolverle al cliente, y dejar el
+      response chico ayuda con el ancho de banda en sesiones que están
+      mandando errores en serie."""
+    ip = _ip_de(req)
+    if not _rate_limit_errors(ip):
+        return Response(status_code=429)
+    try:
+        data = await req.json()
+    except Exception:  # noqa: BLE001 — body inválido = descartar
+        return Response(status_code=400)
+    if not isinstance(data, dict):
+        return Response(status_code=400)
+    msg = str(data.get("message", ""))[:500]
+    stack = str(data.get("stack", ""))[:4000]
+    url = str(data.get("url", ""))[:500]
+    ua = str(data.get("userAgent", ""))[:300]
+    kind = str(data.get("kind", "error"))[:32]
+    logger.warning(
+        "client_error: kind=%s ip=%s url=%r ua=%r msg=%r stack=%r",
+        kind, ip, url, ua, msg, stack,
+    )
+    return Response(status_code=204)
+
+
 _RUTAS = [
     Route("/api/v1/health", _health),
+    Route("/api/v1/errors", _client_error, methods=["POST"]),
     Route("/api/v1/login", _login, methods=["POST"]),
     Route("/api/v1/users", _usuarios),
     Route("/api/v1/teams", _teams),

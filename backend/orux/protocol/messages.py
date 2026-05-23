@@ -388,6 +388,12 @@ class AuthErrorMessage:
     """
 
     reason: str
+    # Capa 35: código estable del error (en inglés, ASCII) para que el
+    # cliente lo traduzca a su idioma. `reason` queda como fallback legible
+    # cuando el cliente no reconoce el code (clientes viejos, o casos
+    # variables como "no se pudo registrar" que no merecen una constante).
+    # Vacío = sin código asignado → el cliente muestra `reason` literal.
+    code: str = ""
     type: Literal["auth_error"] = "auth_error"
 
 

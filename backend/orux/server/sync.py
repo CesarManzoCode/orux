@@ -886,14 +886,21 @@ class SyncServer:
         # tan bajo que el atacante re-paga el handshake muy seguido.
         MAX_FALLOS = 12
 
-        async def _fallo(reason: str) -> bool:
+        async def _fallo(reason: str, code: str = "") -> bool:
             """Responde el error, aplica el backoff y dice si hay que cortar
             (tope alcanzado). El sleep va DESPUÉS de enviar el error: el
             cliente legítimo ve el mensaje al instante; el costo es del que
-            sigue intentando."""
+            sigue intentando.
+
+            `code` (capa 35) es un label estable en inglés que el cliente
+            traduce a su idioma. `reason` sigue viajando como fallback
+            legible para clientes viejos o casos sin code definido.
+            """
             nonlocal fallos
             fallos += 1
-            await websocket.send(encode(AuthErrorMessage(reason=reason)))
+            await websocket.send(
+                encode(AuthErrorMessage(reason=reason, code=code))
+            )
             if fallos >= MAX_FALLOS:
                 logger.warning(
                     "auth: %d fallos en una conexión, se corta", fallos
@@ -908,7 +915,7 @@ class SyncServer:
             try:
                 msg = decode(raw)
             except ValueError:
-                if await _fallo("mensaje inválido"):
+                if await _fallo("mensaje inválido", "invalid_message"):
                     return None
                 continue
             if isinstance(msg, RegisterMessage):
@@ -919,7 +926,8 @@ class SyncServer:
                 if not self._throttle_registro(_ip_cliente(websocket)):
                     logger.warning("registro: tope por IP alcanzado")
                     if await _fallo(
-                        "demasiados registros desde tu red, esperá unos minutos"
+                        "demasiados registros desde tu red, esperá unos minutos",
+                        "rate_limited_register",
                     ):
                         return None
                     continue
@@ -940,7 +948,9 @@ class SyncServer:
                         except Exception:
                             actuales = []
                         if len(actuales) >= cap:
-                            if await _fallo("registro cerrado"):
+                            if await _fallo(
+                                "registro cerrado", "closed_registration"
+                            ):
                                 return None
                             continue
                 try:
@@ -953,11 +963,17 @@ class SyncServer:
                     # longitud) que no filtran existencia y que el cliente
                     # legítimo necesita para corregir su input.
                     motivo_real = str(e)
+                    # El sub-caso "ya existe" lo enmascaramos para no
+                    # filtrar enumeración (BACKEND-AUDIT-0004); le ponemos
+                    # code para que el cliente lo traduzca. Los demás
+                    # errores de FORMATO (charset, longitud) viajan con
+                    # texto libre y SIN code — el cliente cae al `reason`
+                    # literal (que ya es legible para el usuario).
                     if "ya existe" in motivo_real.lower():
-                        razon = "no se pudo registrar"
+                        razon, code_err = "no se pudo registrar", "register_failed"
                     else:
-                        razon = motivo_real
-                    if await _fallo(razon):
+                        razon, code_err = motivo_real, ""
+                    if await _fallo(razon, code_err):
                         return None
             elif isinstance(msg, LoginMessage):
                 # Anti-fuerza-bruta: tope de logins por IP. El backoff
@@ -966,13 +982,16 @@ class SyncServer:
                 if not self._throttle_login(_ip_cliente(websocket)):
                     logger.warning("login: tope por IP alcanzado")
                     if await _fallo(
-                        "demasiados intentos desde tu red, esperá unos minutos"
+                        "demasiados intentos desde tu red, esperá unos minutos",
+                        "rate_limited",
                     ):
                         return None
                     continue
                 if await self.users.verificar(msg.username, msg.password):
                     return normalizar(msg.username)
-                if await _fallo("usuario o contraseña incorrectos"):
+                if await _fallo(
+                    "usuario o contraseña incorrectos", "bad_credentials"
+                ):
                     return None
             elif isinstance(msg, SessionMessage):
                 # Epoch del usuario al verificar: tokens emitidos antes de
@@ -998,10 +1017,14 @@ class SyncServer:
                     logger.warning("error verificando sesión: %s", e)
                 if user is not None and await self.users.existe(user):
                     return user
-                if await _fallo("sesión inválida, inicia sesión"):
+                if await _fallo(
+                    "sesión inválida, inicia sesión", "invalid_session"
+                ):
                     return None
             else:
-                if await _fallo("debes autenticarte primero"):
+                if await _fallo(
+                    "debes autenticarte primero", "must_auth_first"
+                ):
                     return None
         return None
 
