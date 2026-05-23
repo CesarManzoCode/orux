@@ -448,15 +448,25 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
   position: relative; padding: 18px 0;
   font-family: var(--font-mono); font-size: 12.5px; line-height: 2.05;
 }
-.ln { display: flex; gap: 18px; padding: 0 20px; position: relative; }
+.ln { display: flex; gap: 18px; padding: 0 20px; position: relative;
+  transition: background 0.45s var(--ease), box-shadow 0.45s var(--ease); }
 .ln .n { color: var(--faint); width: 20px; text-align: right; flex: none; user-select: none; }
 .ln code { color: #c2c8d2; white-space: pre; }
 .ln .kw { color: #8fa6c9; }
 .ln .fn { color: var(--ink); }
 .ln .st { color: #c79a4f; }
 .ln .cm { color: var(--faint); }
+/* Texto que Ana escribe en vivo (fase 1 del demo): mismo color que el resto
+   de la firma, sin highlight propio — la animación es la información, no el
+   color. En fases 2-4 queda fijo como parte normal de la firma. */
+.ln .typed { color: #c2c8d2; }
 .ln.me { background: rgba(67, 185, 138, 0.10); box-shadow: inset 2px 0 0 var(--live); }
 .ln.peer { background: rgba(110, 168, 230, 0.09); box-shadow: inset 2px 0 0 var(--peer); }
+/* Riesgo: la firma de claim cambió → halo ámbar en la línea. Coexiste con
+   .peer mientras Ana sigue editando (fase 1 → 2 traslapan visualmente). */
+.ln.risk { background: rgba(214, 163, 65, 0.12); box-shadow: inset 2px 0 0 var(--risk); }
+.ln.risk.peer { background: linear-gradient(90deg, rgba(110, 168, 230, 0.10), rgba(214, 163, 65, 0.14));
+  box-shadow: inset 2px 0 0 var(--risk); }
 .ln .cursor {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
   font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
@@ -481,26 +491,29 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
 .ide-status .dotg { width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
 .ide-status .push { margin-left: auto; }
 
-/* Tarjetas flotantes: profundidad real (sombra + overhang). Conectadas
-   por una traza fina al editor — el sistema relacionando, no decorando. */
+/* Arquitectura de tres capas para las cards del stage:
+   ┌─ .card-slot ───────────────────────────────────────────────┐
+   │ posicionamiento absoluto en el stage (top/right/width).    │
+   │ Lo controla CSS — los media queries pisan position:relative│
+   │ en mobile para que la card se aplane bajo el IDE.          │
+   │  ┌─ <motion.div> ──────────────────────────────────────┐   │
+   │  │ entrada cinemática: opacity + y + scale + blur,     │   │
+   │  │ disparado por framer-motion según fase.             │   │
+   │  │  ┌─ .float ──────────────────────────────────────┐  │   │
+   │  │  │ perspectiva 3D estática (rotateY -11deg) +    │  │   │
+   │  │  │ styling visual (sombra, hairline, padding).   │  │   │
+   │  │  └───────────────────────────────────────────────┘  │   │
+   │  └─────────────────────────────────────────────────────┘   │
+   └────────────────────────────────────────────────────────────┘
+   Cada capa hace UNA cosa, así no hay conflicto de transforms. */
+.card-slot { position: absolute; z-index: 3; will-change: transform, opacity, filter; }
+.card-slot-impact { top: 23%; right: -72px; width: 290px; }
+.card-slot-prop   { bottom: -40px; left: -68px; width: 278px; }
 .float {
-  position: absolute; z-index: 3; border-radius: var(--r-lg);
+  border-radius: var(--r-lg);
   background: var(--bg-2); border: 1px solid var(--line);
   box-shadow: var(--sh-3); padding: 15px 17px;
   transform: rotateY(-11deg) rotateX(4deg);
-  will-change: transform;
-}
-/* Micro-drift: las dos floats respiran a tiempos distintos. Es un
-   "el sistema está vivo" muy bajo: 4-5px de oscilación en 7-9s. La
-   transformación se compone con el rotate del card (el keyframe ya
-   reincluye rotateY/X para no pisarlo). */
-@keyframes floatDriftA {
-  0%, 100% { transform: rotateY(-11deg) rotateX(4deg) translateY(0); }
-  50%      { transform: rotateY(-11deg) rotateX(4deg) translateY(-5px); }
-}
-@keyframes floatDriftB {
-  0%, 100% { transform: rotateY(-11deg) rotateX(4deg) translateY(0); }
-  50%      { transform: rotateY(-11deg) rotateX(4deg) translateY(4px); }
 }
 .float .ft {
   display: flex; align-items: center; gap: 9px; font-size: 12px;
@@ -510,17 +523,6 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
   width: 21px; height: 21px; border-radius: var(--r-sm); display: grid;
   place-items: center; font-size: 11px; flex: none;
 }
-.card-impact {
-  top: 23%; right: -72px; width: 290px;
-  /* La card de impacto cantaba demasiado y robaba atención al editor.
-     Bajamos a 0.88 para que se lea "información del sistema" en vez de
-     "panel principal". En hover sube a 1 (la pieza se enciende si el
-     usuario la apunta). */
-  opacity: 0.88;
-  animation: floatDriftA 8s ease-in-out infinite;
-  transition: opacity var(--tr);
-}
-.card-impact:hover { opacity: 1; }
 .card-impact .ic { color: var(--risk); background: var(--risk-bg); border: 1px solid var(--risk-line); }
 .card-impact .body { font-size: 12px; color: var(--ink-2); line-height: 1.56; }
 .card-impact .body code { color: var(--ink); font-size: 11.5px; }
@@ -528,6 +530,7 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
   margin-top: 10px; display: flex; flex-direction: column; gap: 5px;
   font-family: var(--font-mono); font-size: 10.5px; color: var(--mut);
 }
+.card-impact .uses span { display: block; }
 .card-impact .uses span::before { content: "→ "; color: var(--risk); }
 .card-impact .auto {
   margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line-soft);
@@ -539,25 +542,99 @@ h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 60
   box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55);
   animation: pulse 2.8s ease-out infinite;
 }
-.card-prop {
-  bottom: -40px; left: -68px; width: 278px;
-  animation: floatDriftB 9.2s ease-in-out infinite 0.6s;
-}
 .card-prop .ic { color: var(--peer); background: var(--peer-bg); border: 1px solid var(--peer-line); }
 .card-prop .meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--mut); margin-bottom: 12px; }
 .card-prop .meta b { color: var(--ink-2); font-weight: 600; }
-.card-prop .acts { display: flex; gap: 8px; }
+/* .acts es position:relative porque adentro vive el cursor "T" absoluto
+   (entra en fase propose como puntero del cliqueo simulado). */
+.card-prop .acts { display: flex; gap: 8px; position: relative; }
 .card-prop .ap, .card-prop .vw {
   flex: 1; text-align: center; font-size: 11.5px; font-weight: 640;
   padding: 8px; border-radius: var(--r-sm); border: 1px solid transparent;
+  transition: transform 200ms var(--ease), filter 200ms var(--ease),
+    background 320ms var(--ease), border-color 320ms var(--ease),
+    color 320ms var(--ease);
 }
-.card-prop .ap { color: var(--steel-ink); background: var(--steel-fill); border-color: var(--steel-line); }
+.card-prop .ap { color: var(--steel-ink); background: var(--steel-fill);
+  border-color: var(--steel-line); position: relative; }
 .card-prop .vw { color: var(--ink-2); background: var(--bg-3); border-color: var(--line); }
+/* Click simulado en Aprobar (fase propose): scale-down breve. Sin glow,
+   sin rebote — un compress lineal como el de un botón mecánico. */
+.card-prop .ap.is-pressed { transform: scale(0.955); filter: brightness(0.93); }
+/* Estado synced: el botón vira a verde calmo (no celebra), la card lo
+   acompaña con un sutil tinte en el borde inferior. */
+.card-prop.is-synced .ap {
+  background: var(--live-bg);
+  border-color: var(--live-line);
+  color: var(--live);
+  box-shadow: none;
+}
+.card-prop .ap-check { display: inline-block; font-size: 14px; font-weight: 800; line-height: 1; }
+/* Cursor "T" — el visitante observa cómo "tú" hace clic en Aprobar. Vive
+   colgando de la esquina inferior-derecha del botón Aprobar (como un avatar
+   de presencia, no un puntero literal de mouse). AnimatePresence lo entra
+   con un pequeño "aterrizaje" desde abajo-derecha y lo sale en fade. */
+.card-prop .ap .ptr-T {
+  position: absolute;
+  right: -10px;
+  bottom: -12px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-grid; place-items: center;
+  font: 800 10px/1 var(--font-mono);
+  color: #06120c;
+  background: var(--live);
+  border: 2px solid var(--bg-1);
+  box-shadow: 0 6px 18px -6px rgba(0,0,0,0.7);
+  pointer-events: none;
+  z-index: 4;
+}
 .card-prop .pend {
   margin-top: 10px; font-family: var(--font-mono); font-size: 10px;
   color: var(--risk); display: inline-flex; align-items: center; gap: 6px;
+  transition: color 0.3s var(--ease);
 }
-.card-prop .pend::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--risk); }
+.card-prop .pend::before { content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--risk); transition: background 0.3s var(--ease); }
+.card-prop.is-synced .pend { color: var(--live); text-transform: lowercase; }
+.card-prop.is-synced .pend::before { background: var(--live); }
+
+/* Chip "synced" — micro-toast que aparece sobre el status bar al cerrar el
+   loop. Tono verde calmo, monospace, no celebra: confirma. Posicionado
+   absolute dentro del .ide (perspective conservada). */
+.synced-chip {
+  position: absolute;
+  bottom: 44px;
+  right: 16px;
+  z-index: 4;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 7px;
+  border-radius: var(--r-pill);
+  background: var(--live-bg);
+  border: 1px solid var(--live-line);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--live);
+  box-shadow: 0 10px 26px -10px rgba(0,0,0,0.6),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  pointer-events: none;
+}
+.synced-chip .check {
+  display: inline-grid; place-items: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--live);
+  color: #06120c;
+  font-size: 9px; font-weight: 800;
+}
+
+/* Status bar: el número "↑X ↓0" gana un flash verde en fase synced para
+   que el ojo registre el cambio de 2→3 (es un solo carácter, sin flash
+   pasaría desapercibido). Transición sobria, sin pulso. */
+.ide-status .s-up { transition: color 0.4s var(--ease); }
+.stage-anim.phase-synced .ide-status .s-up { color: var(--live); }
 
 /* ── Tira de métricas (no marquee): registro enterprise, señal de
    seriedad. Reemplaza el slogan con datos del sistema. El margin-top

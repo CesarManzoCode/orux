@@ -62,6 +62,11 @@ export const T = {
     stage_prop_approve: "Aprobar",
     stage_prop_view: "Ver diff",
     stage_prop_pend: "pendiente · un clic la integra",
+    stage_synced: "sincronizado",
+    stage_phase_edit: "Ana edita",
+    stage_phase_detect: "Impacto detectado",
+    stage_phase_propose: "Propuesta lista",
+    stage_phase_synced: "Sincronizado",
 
     // Trust — señales verificables (no claims sociales)
     trust: [
@@ -351,6 +356,11 @@ export const T = {
     stage_prop_approve: "Approve",
     stage_prop_view: "View diff",
     stage_prop_pend: "pending · one click integrates it",
+    stage_synced: "synced",
+    stage_phase_edit: "Ana editing",
+    stage_phase_detect: "Impact detected",
+    stage_phase_propose: "Proposal ready",
+    stage_phase_synced: "Synced",
 
     // Trust
     trust: [

@@ -240,9 +240,95 @@ function Faq({ items }: { items: readonly FaqItem[] }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * STAGE — el "video sin video" del hero. Loop de ~12s, infinito, SIEMPRE
+ * activo: sin observer que lo apague fuera de viewport, sin pausa al
+ * hover, sin honor a prefers-reduced-motion. La animación es parte de
+ * la identidad del producto; el visitante debe verla pase lo que pase.
+ *
+ * Las 4 fases:
+ *   1) edit    — Ana modifica la firma de claim() en vivo (typing).
+ *   2) detect  — card ▲ "Impacto" aterriza con blur+spring, lista 4 usos.
+ *   3) propose — card ◇ "Propuesta" aterriza, cursor T cae sobre Aprobar.
+ *   4) synced  — Aprobar → check verde, status ↑2→↑3, chip "sincronizado".
+ *
+ * Cada card vive dentro de un <motion.div> wrapper que aporta la entrada
+ * cinematográfica (opacity + y + scale + blur con spring), mientras el
+ * div.float interior mantiene su perspectiva 3D estática (rotateY -11deg)
+ * en CSS. Así no hay choque de transforms y los media queries de mobile
+ * siguen funcionando (apuntan al .card-slot, no al .float).
+ * ───────────────────────────────────────────────────────────────────── */
+type StagePhase = "edit" | "detect" | "propose" | "synced";
+const PHASE_ORDER: readonly StagePhase[] = ["edit", "detect", "propose", "synced"];
+const PHASE_MS: Record<StagePhase, number> = {
+  edit:    3200,
+  detect:  2800,
+  propose: 3400,
+  synced:  2600,
+};
+const TYPE_TARGET = ", user";
+
+function useStagePhase(): StagePhase {
+  const [phase, setPhase] = useState<StagePhase>("edit");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPhase((p) => PHASE_ORDER[(PHASE_ORDER.indexOf(p) + 1) % PHASE_ORDER.length]);
+    }, PHASE_MS[phase]);
+    return () => clearTimeout(t);
+  }, [phase]);
+  return phase;
+}
+
+// "Typing" del ", user" durante la fase edit. En cualquier otra fase la
+// firma se muestra ya completa — porque el frame post-edit debe contar
+// "esto ya cambió, ahora corresponde mirar el impacto".
+function useTyping(phase: StagePhase) {
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    if (phase !== "edit") { setTyped(TYPE_TARGET); return; }
+    setTyped("");
+    let i = 0;
+    let iv: ReturnType<typeof setInterval> | null = null;
+    const start = setTimeout(() => {
+      iv = setInterval(() => {
+        i += 1;
+        setTyped(TYPE_TARGET.slice(0, i));
+        if (i >= TYPE_TARGET.length && iv) { clearInterval(iv); iv = null; }
+      }, 160);
+    }, 650);
+    return () => {
+      clearTimeout(start);
+      if (iv) clearInterval(iv);
+    };
+  }, [phase]);
+  return typed;
+}
+
+// Transición compartida para las dos cards: spring suave + opacity/filter
+// con cubic-bezier (el spring queda raro aplicado a opacity y blur). El
+// resultado es: la card cae desde abajo-borrosa-pequeña hacia su posición
+// real con un pequeño "settle" cinematográfico, no rebote de juguete.
+const cardEnterTransition = {
+  type: "spring" as const,
+  damping: 26,
+  stiffness: 200,
+  mass: 0.9,
+  opacity: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
+  filter:  { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
+};
+
 function Stage({ t }: { t: Traducciones }) {
+  const phase = useStagePhase();
+  const typed = useTyping(phase);
+
+  const showImpact = phase !== "edit";
+  const showProp   = phase === "propose" || phase === "synced";
+  const synced     = phase === "synced";
+  const editing    = phase === "edit";
+  const riskHalo   = phase === "detect" || phase === "propose";
+
   return (
-    <div className="stage" aria-hidden>
+    <div className={"stage stage-anim phase-" + phase} aria-hidden>
       <div className="stage-back2" />
       <div className="stage-back" />
       <div className="ide">
@@ -261,56 +347,133 @@ function Stage({ t }: { t: Traducciones }) {
         <div className="ide-body">
           <aside className="ide-rail">
             <div className="rail-h">core /</div>
-            <span className="f on"><span className="dirn">›</span> roster.py <em className="own me">{t.stage_mine}</em></span>
+            <span className="f"><span className="dirn">›</span> roster.py</span>
             <span className="f"><span className="dirn">›</span> sync.py <em className="own peer">Ana</em></span>
             <span className="f"><span className="dirn">›</span> impact.py</span>
             <span className="f"><span className="dirn">›</span> git.py</span>
             <div className="rail-h" style={{ marginTop: 12 }}>api /</div>
-            <span className="f"><span className="dirn">›</span> routes.py</span>
+            <span className="f on"><span className="dirn">›</span> routes.py <em className="own me">{t.stage_mine}</em></span>
           </aside>
           <div className="ide-code">
-            <div className="ln"><span className="n">11</span><code><span className="kw">def</span> <span className="fn">claim</span>(path, user):</code></div>
-            <div className="ln me"><span className="n">12</span><code>    owners[path] = user  <span className="cm"># {t.stage_mine}</span></code></div>
+            {/* Línea 11 — Ana edita la firma de claim. Fase 1: cursor de
+                Ana visible + typing en vivo. Fase 2+: firma completa, halo
+                ámbar (línea cambiada, posible impacto). */}
+            <div className={"ln" + (editing ? " peer" : "") + (riskHalo ? " risk" : "")}>
+              <span className="n">11</span>
+              <code>
+                <span className="kw">def</span>{" "}
+                <span className="fn">claim</span>(path<span className="typed">{typed}</span>):
+              </code>
+              {editing && <span className="cursor cursor-ana">Ana</span>}
+            </div>
+            <div className="ln"><span className="n">12</span><code>    owners[path] = user</code></div>
             <div className="ln"><span className="n">13</span><code>    <span className="kw">return</span> Ownership(path)</code></div>
             <div className="ln"><span className="n">14</span><code></code></div>
-            <div className="ln peer"><span className="n">15</span><code><span className="kw">def</span> <span className="fn">presence</span>(line):</code><span className="cursor">Ana</span></div>
-            <div className="ln"><span className="n">16</span><code>    roster.touch(line)</code></div>
-            <div className="ln"><span className="n">17</span><code>    broadcast(<span className="st">"presence"</span>)</code></div>
+            <div className="ln me"><span className="n">15</span><code><span className="kw">def</span> <span className="fn">presence</span>(line):</code></div>
+            <div className="ln me"><span className="n">16</span><code>    roster.touch(line)</code></div>
+            <div className="ln me"><span className="n">17</span><code>    broadcast(<span className="st">"presence"</span>)</code></div>
           </div>
         </div>
         <div className="ide-status">
           <span className="s acc"><span className="dotg" /> main</span>
-          <span className="s">↑2 ↓0</span>
+          <span className="s s-up">↑{synced ? "3" : "2"} ↓0</span>
           <span className="s">{t.stage_live}</span>
           <span className="s acc">{t.stage_clean}</span>
           <span className="s push">Python · UTF-8</span>
         </div>
+
+        <AnimatePresence>
+          {synced && (
+            <motion.div
+              className="synced-chip"
+              initial={{ opacity: 0, y: 14, scale: 0.88 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.92 }}
+              transition={{ type: "spring", damping: 20, stiffness: 380, mass: 0.7 }}
+            >
+              <span className="check" aria-hidden>✓</span>
+              <span>{t.stage_synced}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="float card-impact">
-        <div className="ft"><span className="ic">▲</span> {t.stage_impact_title}</div>
-        <div className="body">
-          {t.stage_impact_body1} <code>claim()</code> {t.stage_impact_body2}{" "}
-          <b>4 {t.stage_impact_count}</b> {t.stage_impact_body3}
+      {/* Slot externo posicionado (CSS) + motion wrapper (entrada cinemática)
+          + .float con su perspectiva 3D propia. Tres capas para que cada
+          parte haga UNA cosa y no chocar transforms. */}
+      <motion.div
+        className="card-slot card-slot-impact"
+        initial={{ opacity: 0, y: 24, scale: 0.92, filter: "blur(10px)" }}
+        animate={{
+          opacity: showImpact ? 1 : 0,
+          y:       showImpact ? 0 : 24,
+          scale:   showImpact ? 1 : 0.92,
+          filter:  showImpact ? "blur(0px)" : "blur(10px)",
+        }}
+        transition={cardEnterTransition}
+      >
+        <div className="float card-impact">
+          <div className="ft"><span className="ic">▲</span> {t.stage_impact_title}</div>
+          <div className="body">
+            {t.stage_impact_body1} <code>claim()</code> {t.stage_impact_body2}{" "}
+            <b>4 {t.stage_impact_count}</b> {t.stage_impact_body3}
+          </div>
+          <div className="uses">
+            {["server/sync.py:142","api/routes.py:88","cli/admin.py:14","tests/test_own.py:23"].map((u, i) => (
+              <motion.span
+                key={u}
+                initial={false}
+                animate={{
+                  opacity: showImpact ? 1 : 0,
+                  x:       showImpact ? 0 : -10,
+                }}
+                transition={{
+                  duration: 0.42,
+                  ease: [0.22, 1, 0.36, 1],
+                  delay: showImpact ? 0.28 + i * 0.085 : 0,
+                }}
+              >{u}</motion.span>
+            ))}
+          </div>
+          <div className="auto">{t.stage_impact_auto}</div>
         </div>
-        <div className="uses">
-          <span>server/sync.py:142</span>
-          <span>api/routes.py:88</span>
-          <span>cli/admin.py:14</span>
-          <span>tests/test_own.py:23</span>
-        </div>
-        <div className="auto">{t.stage_impact_auto}</div>
-      </div>
+      </motion.div>
 
-      <div className="float card-prop">
-        <div className="ft"><span className="ic">◇</span> {t.stage_prop_title}</div>
-        <div className="meta">{t.stage_prop_meta} <b>+12 −3</b> · impacto calculado</div>
-        <div className="acts">
-          <span className="ap">{t.stage_prop_approve}</span>
-          <span className="vw">{t.stage_prop_view}</span>
+      <motion.div
+        className={"card-slot card-slot-prop" + (synced ? " is-synced" : "")}
+        initial={{ opacity: 0, y: 28, scale: 0.92, filter: "blur(10px)" }}
+        animate={{
+          opacity: showProp ? 1 : 0,
+          y:       showProp ? 0 : 28,
+          scale:   showProp ? 1 : 0.92,
+          filter:  showProp ? "blur(0px)" : "blur(10px)",
+        }}
+        transition={cardEnterTransition}
+      >
+        <div className={"float card-prop" + (synced ? " is-synced" : "")}>
+          <div className="ft"><span className="ic">◇</span> {t.stage_prop_title}</div>
+          <div className="meta">{t.stage_prop_meta} <b>+12 −3</b> · impacto calculado</div>
+          <div className="acts">
+            <span className={"ap" + (phase === "propose" ? " is-pressed" : "")}>
+              {synced ? <span className="ap-check" aria-hidden>✓</span> : t.stage_prop_approve}
+              <AnimatePresence>
+                {phase === "propose" && (
+                  <motion.span
+                    className="ptr-T"
+                    initial={{ opacity: 0, x: 22, y: 22, scale: 0.55 }}
+                    animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.85 }}
+                    transition={{ type: "spring", damping: 18, stiffness: 280, mass: 0.7, delay: 0.45 }}
+                    aria-hidden
+                  >T</motion.span>
+                )}
+              </AnimatePresence>
+            </span>
+            <span className="vw">{t.stage_prop_view}</span>
+          </div>
+          <div className="pend">{synced ? t.stage_synced : t.stage_prop_pend}</div>
         </div>
-        <div className="pend">{t.stage_prop_pend}</div>
-      </div>
+      </motion.div>
     </div>
   );
 }

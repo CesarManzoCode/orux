@@ -217,20 +217,20 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .stage { margin-right: 0; perspective: none; max-width: 760px; }
   .stage-back, .stage-back2 { display: none; }
   .ide, .float { transform: none; }
-  /* Cuando el hero pierde la perspectiva (queda plano y apilado), las
-     tarjetas flotantes dejan de flotar — se asientan en stack bajo el
+  /* Cuando el hero pierde la perspectiva (queda plano y apilado), los
+     slots de las tarjetas dejan de flotar — se asientan en stack bajo el
      IDE. Sin esto mantenían top/right/left/bottom intermedios que las
      cruzaban encima del código del mock (700–1080px era el tramo más
      feo). El bloque <=760px de abajo replicaba este reset; ahora ya
      se aplica más temprano. */
-  .card-impact, .card-prop {
+  .card-slot, .card-slot-impact, .card-slot-prop {
     position: relative;
     inset: auto;
     right: auto; left: auto; top: auto; bottom: auto;
     width: auto;
     margin-top: 14px;
-    box-shadow: var(--sh-2);
   }
+  .float { box-shadow: var(--sh-2); }
 }
 @media (max-width: 900px) {
   .modules, .flow { grid-template-columns: 1fr; }
@@ -258,8 +258,9 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .nav-stat { display: none; }
   .nav-links { display: none; }
   .stage { overflow: hidden; border-radius: var(--r-isla); }
-  .card-impact, .card-prop { position: relative; inset: auto; width: auto;
-    right: auto; left: auto; top: auto; bottom: auto; margin-top: 14px; box-shadow: var(--sh-2); }
+  .card-slot, .card-slot-impact, .card-slot-prop { position: relative; inset: auto; width: auto;
+    right: auto; left: auto; top: auto; bottom: auto; margin-top: 14px; }
+  .float { box-shadow: var(--sh-2); }
   .trust .wrap { grid-template-columns: 1fr; }
   .trust .ti { border-right: none !important; border-bottom: 1px solid var(--line-soft);
     padding: 18px 0 !important; }
