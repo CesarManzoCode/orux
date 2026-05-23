@@ -89,6 +89,8 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 - **Sprint F (comunidad / UI de status / Discord / press kit):** conscientemente diferido hasta tener usuarios reales. No roadmapearlo sin que el usuario lo pida.
 - **G.2 diferidos no urgentes:** clone toast prematuro (mitigado por panel `gitResult`), banner WS-caído-editando (sería sprint propio con buffer local de cambios).
 
+**Whitelist de Origins WS (anti-CSRF):** el server WebSocket valida el header `Origin` del handshake contra una whitelist (env `ORUX_WS_ORIGINS`, ver `backend/orux/server/config.py`). Defaults: `https://orux.space` + `http://localhost:5173` + `http://localhost:8080` + clientes sin Origin (no-browser: tests, healthcheck, Electron, plugins futuros). **REGLA OPERATIVA — cada cliente nuevo con browser debe sumarse a la whitelist** (set `ORUX_WS_ORIGINS=...` en `docker-compose.yml`/.env del VPS). Si se olvida, los usuarios de ese cliente no podrán conectarse (handshake 403). `ORUX_WS_ORIGINS=*` desactiva el filtro (solo debug puntual).
+
 ## Trampas operativas ya vistas
 
 - **Servidor zombi en puerto 8765.** Al cambiar el protocolo, si un servidor de versión anterior sigue corriendo, los clientes nuevos hablan con él y aparecen archivos fantasma llamados "undefined" en la UI. Antes de debuggear lógica, verificar siempre: `ps aux | grep python | grep -v grep` y `lsof -i:8765`. El comando correcto para arrancar el server actual es `python -m orux.server`, no `python server.py` (ese archivo ya no existe).

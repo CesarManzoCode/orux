@@ -32,24 +32,14 @@ import inspect
 import logging
 import os
 import time
-from functools import partial
 from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 
-from ..analysis import impacto, motivos as motivos_de, tiers
-from ..analysis.modelo import severidad_de
-from ..analysis.tiers import lenguaje_de
-from ..analysis.transitive import impacto_transitivo
-from ..analysis.rename import (
-    Rename,
-    aplicar_rename,
-    detectar_rename,
-    texto_sugerencia,
-)
-from ..plans import limites, permite_rename
-from .. import stripe_client
+from ..analysis import tiers
+from ..analysis.rename import Rename, detectar_rename
+from ..plans import permite_rename
 from ..git import GitRepo
 from ..identity import (
     UserStore,
@@ -73,7 +63,6 @@ from ..protocol import (
     GitRefreshMessage,
     GitResultMessage,
     GitStatusMessage,
-    ImpactMessage,
     InitMessage,
     InviteCreatedMessage,
     LeaveMessage,
@@ -107,93 +96,23 @@ from .config import (
     RATE_TASA,
     WS_MAX_QUEUE,
     WS_MAX_SIZE,
+    WS_ORIGINS,
     _RateLimiter,
     _env_float,
     _env_int,
 )
+from . import eviction, seats
+from . import impacto as impacto_mod
 from .runtime import TeamRuntime
+from .util import autor_git, ip_cliente, wrap_users
 
 logger = logging.getLogger(__name__)
 
-
-def _autor_git(usuario: str) -> tuple[str, str]:
-    """Identidad de commit a partir del usuario autenticado (capa 7).
-
-    Si el usuario parece un email lo usamos como email y el nombre es la
-    parte antes de la @. Si no, nombre = usuario y email sintético
-    `usuario@orux.local` (git exige un email; no tenemos uno real y no lo
-    inventamos bonito a propósito — es honesto que sea sintético).
-    """
-    if "@" in usuario:
-        return usuario.split("@", 1)[0], usuario
-    return usuario, f"{usuario}@orux.local"
-
-
-class _UsuariosAsync:
-    """Envuelve un `UserStore` síncrono (en memoria/JSON, tests) en una
-    superficie async, para que el server haga SIEMPRE `await self.users.X()`
-    sin importar si detrás hay JSON (tests) o Postgres (deploy). Si ya es
-    async (PgUserStore) el server lo usa tal cual, sin envolver."""
-
-    def __init__(self, base) -> None:
-        self._b = base
-
-    async def existe(self, u: str) -> bool:
-        return self._b.existe(u)
-
-    async def registrar(self, u: str, p: str) -> str:
-        return self._b.registrar(u, p)
-
-    async def verificar(self, u: str, p: str) -> bool:
-        return self._b.verificar(u, p)
-
-    async def usuarios(self) -> list[str]:
-        """Lista de nombres registrados. Lo usa el cap de registro
-        (BACKEND-AUDIT-0224)."""
-        listar = getattr(self._b, "usuarios", None)
-        return listar() if callable(listar) else []
-
-    async def epoch(self, u: str) -> int:
-        """Contador de sesiones del usuario (BACKEND-AUDIT-0002). 0 si el
-        store no lo soporta (compat con stores legacy)."""
-        ep = getattr(self._b, "epoch", None)
-        if ep is None:
-            return 0
-        try:
-            return int(ep(u))
-        except (TypeError, ValueError):
-            return 0
-
-
-def _wrap_users(users):
-    base = users if users is not None else UserStore()
-    # PgUserStore ya es async (existe es coroutine): usar tal cual.
-    if inspect.iscoroutinefunction(getattr(base, "existe", None)):
-        return base
-    return _UsuariosAsync(base)
-
-
-def _ip_cliente(websocket: ServerConnection) -> str:
-    """IP del cliente. En el deploy la conexión TCP llega desde Caddy (mismo
-    host), así que la IP real del usuario va en el header `X-Forwarded-For`
-    que Caddy agrega al hacer de proxy. En dev/tests sin proxy se cae a la
-    dirección del socket. Defensivo: ante cualquier fallo devuelve un
-    placeholder — nunca rompe el flujo de autenticación."""
-    try:
-        req = getattr(websocket, "request", None)
-        if req is not None:
-            xff = req.headers.get("X-Forwarded-For", "")
-            if xff:
-                return xff.split(",")[0].strip()
-    except Exception as e:  # noqa: BLE001 - diagnóstico opcional
-        logger.debug("X-Forwarded-For ilegible: %r", e)
-    try:
-        addr = websocket.remote_address
-        if addr:
-            return str(addr[0])
-    except Exception as e:  # noqa: BLE001
-        logger.debug("remote_address ilegible: %r", e)
-    return "desconocida"
+# Re-exportados desde `util.py` con su nombre histórico para callers internos.
+# La función real vive en `util.py`; acá es solo alias.
+_autor_git = autor_git
+_ip_cliente = ip_cliente
+_wrap_users = wrap_users
 
 
 class SyncServer:
@@ -325,60 +244,30 @@ class SyncServer:
 
     # --- Capa 31: cobro por asiento -------------------------------------
     #
-    # El plan premium se cobra POR USUARIO (como ChatGPT Business): la
-    # suscripción de Stripe tiene una cantidad igual al número de miembros
-    # del equipo. Cuando entra un miembro nuevo (`redimir` en el lobby), si
-    # el equipo es premium hay que subir esa cantidad. La llamada a Stripe
-    # vive acá —no en el contenedor `api`— porque el join ocurre en este
-    # server WebSocket; `stripe_client` es stdlib pura, compartible.
+    # La lógica vive en `server/seats.py` (modularizado 2026-05-23). Acá
+    # quedan los wrappers de instancia que cablean los atributos del server
+    # (stripe_secret, teams, locks, tareas de fondo) al módulo puro.
 
     def _ajustar_asientos_bg(self, team_id: str) -> None:
         """Dispara el ajuste de asientos en SEGUNDO PLANO. Que un miembro
         entre a un equipo no debe esperar a una llamada de red a Stripe —
-        el lobby sigue de largo. Si billing no está configurado (sin
-        `STRIPE_SECRET_KEY`) ni siquiera crea la tarea."""
+        el lobby sigue de largo. Sin `STRIPE_SECRET_KEY` no crea tarea
+        (la guardia es acá para no instanciar la coroutine inútilmente)."""
         if not self._stripe_secret:
             return
-        tarea = asyncio.create_task(self._ajustar_asientos(team_id))
-        self._tareas_fondo.add(tarea)
-        tarea.add_done_callback(self._tareas_fondo.discard)
+        seats.disparar_ajuste(
+            self._ajustar_asientos(team_id), self._tareas_fondo,
+        )
 
     async def _ajustar_asientos(self, team_id: str) -> None:
-        """Deja la suscripción de Stripe del equipo en tantos asientos como
-        miembros tenga (cobro por usuario). Best-effort: cualquier fallo se
-        loguea y se traga — el cobro nunca debe afectar la colaboración.
-
-        Solo actúa si el equipo es premium Y tiene una suscripción real de
-        Stripe; un equipo free, o uno premium puesto a mano por el operador
-        (sin suscripción), no se tocan. El lock por equipo serializa dos
-        altas casi simultáneas: la segunda tarea relee el conteo ya
-        actualizado, así el POST a Stripe usa el número correcto."""
-        try:
-            lock = self._asientos_locks.get(team_id)
-            if lock is None:
-                lock = self._asientos_locks[team_id] = asyncio.Lock()
-            async with lock:
-                if await self.teams.plan(team_id) != "premium":
-                    return
-                sub = await self.teams.suscripcion(team_id)
-                if not sub:
-                    return
-                n = await self.teams.contar_miembros(team_id)
-                loop = asyncio.get_running_loop()
-                # `functools.partial` para pasar `team_id` como kwarg de
-                # contexto (solo afecta logs): `run_in_executor` no acepta
-                # kwargs directos.
-                await loop.run_in_executor(
-                    None,
-                    partial(
-                        stripe_client.actualizar_cantidad,
-                        self._stripe_secret, sub, n, team_id=team_id,
-                    ),
-                )
-        except Exception:  # noqa: BLE001 - best-effort, nunca propaga
-            logger.exception(
-                "ajuste de asientos falló para el equipo %s", team_id
-            )
+        """Cara de instancia de `seats.ajustar_asientos`: cablea las
+        dependencias del server."""
+        await seats.ajustar_asientos(
+            team_id=team_id,
+            stripe_secret=self._stripe_secret,
+            teams=self.teams,
+            asientos_locks=self._asientos_locks,
+        )
 
     async def _runtime_para(self, team_id: str) -> TeamRuntime:
         """Runtime del equipo, creado perezosamente. En deploy lo arma la
@@ -543,193 +432,13 @@ class SyncServer:
         autor_nombre: str,
         rename: Rename | None = None,
     ) -> None:
-        """Capa 6: avisa al dueño de cada archivo afectado por este cambio.
-
-        Capa 26: `rename` (free) = se detectó un rename de miembro confiable
-        pero el plan NO aplica el codemod; el aviso de ESE símbolo se
-        reescribe al texto accionable ("se renombró X→Y, actualizá los
-        usos"). `rename=None` => comportamiento byte-idéntico a capa 6/24
-        (todos los tests previos siguen valiendo sin tocarse).
-
-        "Sin clickear, lo hace solo" (README). Reglas: si el afectado no
-        tiene dueño no hay a quién avisar; si no parsea, `impacto` da {} y
-        no manda nada. Todo scopeado al workspace/ownership de ESTE equipo.
-
-        Decisión del usuario: el aviso TAMBIÉN va al autor cuando el
-        afectado le pertenece. Misma tesis aplicada de forma simétrica —
-        si cambiar `Usuario` rompe `auth.py`, importa por igual sea quien
-        sea el dueño de `auth.py`. El archivo origen del cambio ya queda
-        fuera por `archivos_afectados` (filtra `o != path`), así que no
-        hay auto-eco del archivo recién editado: solo OTROS archivos
-        suyos donde el símbolo realmente se usa.
-        """
-        # Capa 16: el análisis corre casi por tecla y antes era SÍNCRONO en
-        # el event loop — bloqueaba presencia/locks/broadcasts de TODO el
-        # equipo. Ahora todo el trabajo (incl. el lazy-arranque de pyright,
-        # que hace spawn+handshake bloqueante) va a UN hilo: ni el parser C
-        # ni el subproceso LSP tocan el event loop. Capa 17: la sesión LSP
-        # del equipo (tibia) hace el fan-out resolución-real; si no hay
-        # (sandbox/sin pyright) o falla, `impacto`/`motivos` degradan solos
-        # a capa 16. Seguro: `snapshot()` es copia, todo lo demás strings.
-        snap = rt.workspace.snapshot()
-        # Capa 22: el cap de lenguajes LSP del plan se lee acá (el store es
-        # async, vive en el loop) y se pasa al hilo. Premium = sin tope.
-        plan = await self.teams.plan(rt.team_id)
-        cap_langs = limites(plan)["max_langs"]
-
-        # Capa 24 (rehecho): el camino DIRECTO (capas 17-21) corre SIEMPRE,
-        # free y premium. Es el aviso de alto valor ("cambió la firma de X
-        # → revisá las llamadas", severidad real). Antes premium hacía
-        # `return` ANTES de esto y solo mandaba la onda transitiva: te dejaba
-        # SIN el aviso bueno y encima mal etiquetado. Bug arreglado: premium
-        # = free + cadena (la cadena se agrega DESPUÉS, sin reemplazar nada).
-        def _analizar() -> tuple[dict, dict, str]:
-            ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
-            af = impacto(snap, path, viejo, nuevo, ses)
-            if not af:
-                return {}, {}, ""
-            # Capa 35: el analizador efectivo se decide ACÁ, con la misma
-            # sesión LSP que se intentó usar. Etiquetar afuera, recalculando,
-            # se desincronizaría con el resultado real (un retry/cache de la
-            # sesión podría diferir). Acá es la verdad.
-            return (
-                af,
-                motivos_de(path, viejo, nuevo, ses),
-                tiers.analizador_efectivo(path, ses),
-            )
-
-        afectados, razones, analiz_directo = await asyncio.to_thread(_analizar)
-        if not afectados:
-            return
-        # Capa 26 (free): el cambio ES un rename confiable pero el plan no
-        # lo aplica solo. Se cambia el "por qué" de ESE símbolo por el
-        # qué-hacer concreto; el resto del aviso (a quién, byte-idéntico).
-        if rename is not None and rename.clase in razones:
-            razones = {**razones, rename.clase: texto_sugerencia(rename)}
-        # Reagrupamos símbolo->archivos ==> archivo_afectado->símbolos.
-        por_archivo: dict[str, list[str]] = {}
-        for simbolo, archivos in afectados.items():
-            for af in archivos:
-                por_archivo.setdefault(af, []).append(simbolo)
-        for af, simbolos in por_archivo.items():
-            dueño = rt.ownership.owner(af)
-            # El autor SÍ recibe aviso si el afectado le pertenece
-            # (decisión del usuario): saber qué de tu propio código usa
-            # lo que acabás de tocar es la misma tesis aplicada simétrica.
-            if dueño is None:
-                continue
-            syms = sorted(simbolos)
-            await self._enviar_a(
-                rt,
-                dueño,
-                encode(
-                    ImpactMessage(
-                        source_path=path,
-                        author_name=autor_nombre,
-                        affected_path=af,
-                        symbols=syms,
-                        motivos=[razones.get(s, "") for s in syms],
-                        severidades=[
-                            severidad_de(razones.get(s, "")) for s in syms
-                        ],
-                        analizador=analiz_directo,
-                    )
-                ),
-            )
-
-        # --- Capa 24 (premium) = free + cadena -----------------------------
-        # El directo de arriba YA se mandó (free y premium igual). Premium
-        # AGREGA la onda por interfaz contaminada que llega MÁS ALLÁ del
-        # directo. Decisión del usuario: se descartan (a) los hops
-        # TERMINALES (uso en cuerpo: no se propaga, era ruido redundante con
-        # el directo) y (b) los archivos que el directo YA cubrió (el
-        # cliente deduplica por source+affected: un 2º mensaje los pisaría).
-        # Resultado: premium NUNCA peor que free; la cadena solo suma valor.
-        if limites(plan)["impacto"] != "transitivo":
-            return
-        directos = set(por_archivo)
-        # Capa 35: el transitivo NO usa LSP a propósito (decisión de costo:
-        # un símbolo aguas-abajo no justifica el round-trip a pyright). Su
-        # analizador efectivo es el del tier de detección sin LSP — el chip
-        # del cliente refleja eso.
-        analiz_trans = tiers.analizador_efectivo(path, None)
-
-        def _trans():
-            lang = lenguaje_de(path)
-            tier = tiers.tier_para(path)
-            if tier is None or lang is None:
-                return {}, False
-            cambiados = list(tiers.cambios(path, viejo, nuevo))
-            if not cambiados:
-                return {}, False
-            # Perf (capa 24c): índice de referencias 1 vez/análisis;
-            # `extraer` memoizado por contenido (no D×N parseos).
-            refs_idx = {
-                f: tier.referencias(c)
-                for f, c in snap.items()
-                if lenguaje_de(f) == lang
-            }
-
-            def _fan(s: str, origen: str) -> set[str]:
-                return {
-                    f for f, r in refs_idx.items()
-                    if f != origen and s in r
-                }
-
-            _cache: dict[str, dict] = {}
-
-            def _extraer(c: str):
-                if c not in _cache:
-                    _cache[c] = tier.simbolos(c) or {}
-                return _cache[c]
-
-            return impacto_transitivo(
-                snap, path, cambiados, fan_out=_fan,
-                extraer=_extraer, lenguaje_de=lenguaje_de,
-            )
-
-        out, trunc = await asyncio.to_thread(_trans)
-        sufijo = (
-            " · análisis truncado (cambio muy amplio)" if trunc else ""
+        """Cable a `impacto.notificar_impacto` (modularizado 2026-05-23).
+        Acá vive solo el cableado de la instancia; la lógica está en
+        `server/impacto.py`."""
+        await impacto_mod.notificar_impacto(
+            self, rt, path, viejo, nuevo, autor_id, autor_nombre,
+            rename=rename,
         )
-        for af, items in out.items():
-            if af in directos:
-                continue  # ya lo cubrió el directo (no duplicar/pisar)
-            dueño = rt.ownership.owner(af)
-            # Misma simetría que el directo: el autor también recibe la
-            # onda transitiva si el archivo aguas-abajo le pertenece.
-            if dueño is None:
-                continue
-            # Solo la propagación REAL (interfaz contaminada). Terminal =
-            # uso en cuerpo: no es la onda, es ruido (decisión del usuario).
-            props = [d for d in items if not d["terminal"]]
-            if not props:
-                continue
-            props.sort(key=lambda d: (d["cadena"][0], len(d["cadena"])))
-            # Bug #2 arreglado: el encabezado nombra lo que REALMENTE
-            # cambió (el símbolo ORIGEN de la cadena, que vive en
-            # source_path), no el símbolo terminal. `cadena[0]` =
-            # "<path>:<sym_original>" -> el sym es lo de después del último
-            # ":" (los paths del workspace y los símbolos no llevan ":").
-            syms = [d["cadena"][0].rsplit(":", 1)[1] for d in props]
-            await self._enviar_a(
-                rt,
-                dueño,
-                encode(
-                    ImpactMessage(
-                        source_path=path,
-                        author_name=autor_nombre,
-                        affected_path=af,
-                        symbols=syms,
-                        motivos=[d["motivo"] + sufijo for d in props],
-                        severidades=[
-                            severidad_de(d["motivo"]) for d in props
-                        ],
-                        cadena=props[0]["cadena"],
-                        analizador=analiz_trans,
-                    )
-                ),
-            )
 
     async def _propagar_rename(
         self,
@@ -741,70 +450,12 @@ class SyncServer:
         autor_id: str,
         autor_nombre: str,
     ) -> None:
-        """Capa 26 (premium): propaga un rename de miembro detectado a quien
-        usa la clase, como **propuesta tentativa de capa 4 VERBATIM** — la
-        misma ventana aprobar/rechazar que ya conocen. Cero UX/protocolo
-        nuevo: la feature entra por la puerta que ya existe.
-
-        Reusa el fan-out de capas 17-21 (`impacto`) para saber QUÉ archivos
-        usan la clase de verdad: con sesión LSP viva es resolución real
-        (mata falsos positivos); sin ella degrada a token-scan, igual que
-        TODO el análisis. El dueño REVISA el diff y aprueba/rechaza: no es
-        auto-commit a ciegas — la aprobación es la red de seguridad que
-        hace seguro un codemod heurístico (la tesis trabajando a favor).
-        """
-        snap = rt.workspace.snapshot()
-        plan = await self.teams.plan(rt.team_id)
-        cap_langs = limites(plan)["max_langs"]
-
-        def _afectados() -> dict[str, list[str]]:
-            ses = rt.lsp_sesion(lenguaje_de(path), cap_langs)
-            return impacto(snap, path, viejo, nuevo, ses)
-
-        afectados = await asyncio.to_thread(_afectados)
-        for af in afectados.get(ren.clase, []):
-            if af == path:
-                continue  # el origen ya tiene el rename (lo hizo el autor)
-            contenido = snap.get(af)
-            if contenido is None:
-                continue
-            propuesto = aplicar_rename(contenido, ren.viejo, ren.nuevo)
-            if propuesto == contenido:
-                continue  # el acceso no aparece textual acá: nada que hacer
-            dueño = rt.ownership.owner(af)
-            # Capa 26 (premium): el cambio lo construye el server (codemod
-            # `aplicar_rename`), no lo tipeó nadie en ese archivo. El dueño
-            # ve un autor explícito "OruxBot" para que la propuesta se lea
-            # como "el sistema te propone esto" — misma ventana aprobar/
-            # rechazar de capa 4, solo cambia quién aparece arriba. El
-            # contexto del rename va en el mismo string (lo que cambió a lo
-            # que pasa). `author_id` queda como el client_id real del que
-            # disparó el rename: si el dueño rechaza, el revert (capa 4) le
-            # llega a esa identidad y no a un id sintético sin conexión.
-            etiqueta = f"OruxBot · rename {ren.viejo}→{ren.nuevo}"
-            if dueño is None or dueño == autor_id:
-                # Sin dueño o propio: se aplica directo (igual que un
-                # update de capa 4 sin dueño). El baseline avanza: el
-                # codemod ya es un punto coherente, no re-avisar sobre él.
-                rt.workspace.update(af, propuesto)
-                rt._analizado[af] = propuesto
-                await self._broadcast_todos(
-                    rt, encode(UpdateMessage(path=af, content=propuesto))
-                )
-            else:
-                # Dueño ajeno: propuesta capa 4 VERBATIM. La etiqueta lleva
-                # el contexto -> el dueño ve "Ana · rename x→y propone
-                # cambios a af" + el diff, con la MISMA UI de siempre.
-                prop = rt.proposals.put(
-                    path=af,
-                    author_id=autor_id,
-                    author_name=etiqueta,
-                    content=propuesto,
-                )
-                await self._persistir_prop(rt, prop)
-                await self._enviar_a(
-                    rt, dueño, encode(ProposalMessage(proposal=prop))
-                )
+        """Cable a `impacto.propagar_rename` (modularizado 2026-05-23).
+        Acá vive solo el cableado de la instancia; la lógica está en
+        `server/impacto.py`."""
+        await impacto_mod.propagar_rename(
+            self, rt, path, viejo, nuevo, ren, autor_id, autor_nombre,
+        )
 
     async def _git_status_encoded(self, rt: TeamRuntime) -> str | None:
         """Estado git del equipo, serializado, o None si no hay git."""
@@ -1770,97 +1421,38 @@ class SyncServer:
         # Init/Welcome/Leave del cliente se ignoran: los origina el
         # server. Mensajes de lobby acá tampoco aplican (ya hay equipo).
 
+    # --- Barridos de RAM (LSP + runtimes) -------------------------------
+    #
+    # La lógica vive en `server/eviction.py` (modularizado 2026-05-23).
+    # Acá quedan los wrappers que cablean los atributos del server al
+    # módulo puro, manteniendo la API histórica para no romper callers
+    # internos.
+
     async def _barrer_lsp_ociosas(self, ttl: float) -> None:
-        """Tarea de fondo: cada minuto evicta sesiones LSP sin uso hace más
-        de `ttl`. La RAM escala con equipos ACTIVOS, no totales (una sesión
-        LSP pesa cientos de MB; un equipo que editó 5 min y se fue no debe
-        seguir reteniéndola). El re-arranque al volver degrada a
-        tree-sitter mientras reindexa (net de capa 17): nunca se rompe.
-        """
-        while True:
-            await asyncio.sleep(60)
-            for tid, rt in list(self._runtimes.items()):
-                ev = rt.evictar_lsp_ociosas(ttl)
-                if ev:
-                    logger.info(
-                        "LSP evictadas por ociosas (%ds) equipo %s: %s",
-                        int(ttl), tid, ", ".join(ev),
-                    )
+        await eviction.barrer_lsp_ociosas(self._runtimes, ttl)
 
     def _runtime_evictable(self, rt: TeamRuntime, ttl: float, ahora: float) -> bool:
-        """¿Es seguro evictar este runtime ahora?
-
-        Reglas (todas deben cumplirse):
-        - Sin conexiones vivas (`rt.clients` vacío) — obvio.
-        - Ocioso desde hace > `ttl` (`_vacio_desde` no None y suficientemente viejo).
-        - Sus propuestas tentativas están persistidas (`proposals_store`),
-          O no tiene propuestas pendientes. Sin persistencia, evictar
-          significa PERDER propuestas; en modo dev preferimos retener RAM.
-        - Sin trabajo en vuelo: si el git_lock o el estado_lock están
-          tomados, alguien está procesando un mensaje justo ahora — no
-          tocar. (Race contra `_runtime_para` la cubre el lock por team_id
-          arriba en `evictar_runtimes_ociosos`.)
-        """
-        if rt.clients:
-            return False
-        if rt._vacio_desde is None:
-            return False
-        if ahora - rt._vacio_desde < ttl:
-            return False
-        if rt.proposals._pendientes and self._proposals_store is None:
-            return False
-        if rt._git_lock.locked() or rt._estado_lock.locked():
-            return False
-        return True
+        return eviction.runtime_evictable(
+            rt, ttl, ahora,
+            tiene_proposals_store=self._proposals_store is not None,
+        )
 
     async def _evictar_runtime(self, team_id: str) -> bool:
-        """Saca el runtime del registro y libera sus sesiones LSP.
-        Re-chequea bajo el lock por team_id que sigue siendo evictable
-        (otra conexión pudo entrar entre el barrido y acá). Devuelve True
-        si efectivamente lo evictó."""
-        lock = self._rt_locks.get(team_id)
-        if lock is None:
-            return False
-        async with lock:
-            rt = self._runtimes.get(team_id)
-            if rt is None:
-                return False
-            # Re-check defensivo: si una conexión entró justo entre el
-            # barrido y este lock, abortar.
-            if rt.clients or rt._vacio_desde is None:
-                return False
-            rt.reciclar_lsp()  # cierra subprocesos LSP (cientos de MB)
-            del self._runtimes[team_id]
-        # Limpieza fuera del lock (otras conexiones del MISMO equipo van
-        # a crear locks nuevos al volver, vía `setdefault`).
-        self._rt_locks.pop(team_id, None)
-        self._asientos_locks.pop(team_id, None)
-        return True
+        return await eviction.evictar_runtime(
+            team_id,
+            runtimes=self._runtimes,
+            rt_locks=self._rt_locks,
+            asientos_locks=self._asientos_locks,
+        )
 
     async def _barrer_runtimes_ociosos(self, ttl: float) -> None:
-        """Tarea de fondo: cada minuto evicta runtimes sin conexiones desde
-        hace > `ttl`. Sin esto, `_runtimes` crece sin techo (cada equipo
-        que se conectó alguna vez retiene RAM hasta que el proceso muera).
-
-        Al volver alguien al equipo, `_runtime_para` reconstruye el
-        runtime y rehidrata ownership + propuestas desde Postgres (capa
-        15 y persistencia de propuestas). El usuario no ve diferencia
-        más allá de un instante de "primer mensaje" un poco más caro
-        (igual que la primera conexión al deploy).
-        """
-        while True:
-            await asyncio.sleep(60)
-            ahora = time.monotonic()
-            candidatos = [
-                tid for tid, rt in list(self._runtimes.items())
-                if self._runtime_evictable(rt, ttl, ahora)
-            ]
-            for tid in candidatos:
-                if await self._evictar_runtime(tid):
-                    logger.info(
-                        "runtime evictado por ocioso (%ds) equipo %s",
-                        int(ttl), tid,
-                    )
+        await eviction.barrer_runtimes_ociosos(
+            ttl,
+            runtimes=self._runtimes,
+            rt_locks=self._rt_locks,
+            asientos_locks=self._asientos_locks,
+            tiene_proposals_store=self._proposals_store is not None,
+        )
 
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
         """Arranca el server WebSocket y lo deja escuchando para siempre.
@@ -1890,10 +1482,18 @@ class SyncServer:
         async with serve(
             self.handle, host, port,
             max_size=WS_MAX_SIZE, max_queue=WS_MAX_QUEUE,
+            origins=WS_ORIGINS,
         ):
+            if WS_ORIGINS is None:
+                origenes_desc = "* (sin filtro)"
+            else:
+                origenes_desc = ", ".join(
+                    o if o is not None else "(sin Origin)" for o in WS_ORIGINS
+                )
             logger.info(
-                "servidor escuchando en ws://%s:%d (max_size=%d max_queue=%d)",
-                host, port, WS_MAX_SIZE, WS_MAX_QUEUE,
+                "servidor escuchando en ws://%s:%d "
+                "(max_size=%d max_queue=%d origenes=%s)",
+                host, port, WS_MAX_SIZE, WS_MAX_QUEUE, origenes_desc,
             )
             # Mismo patrón que `_ajustar_asientos_bg` (linea 341): guardar la
             # referencia en `_tareas_fondo` evita que el GC tire la tarea con

@@ -138,7 +138,10 @@ _URL_SCP = re.compile(
 )
 # Local: solo para tests y workspace siembra. NUNCA aceptada en producción
 # en clones que vienen del cliente (ese filtro lo aplica `clonar`).
-_URL_LOCAL = re.compile(r"^(?:file://)?(/|\./|\.\./)[A-Za-z0-9._/-]+$")
+# Anti-traversal: el regex ya NO acepta `../` como prefijo, y además
+# `_url_segura` rechaza CUALQUIER `..` en la URL (defensa en profundidad,
+# aunque git resuelva la ruta canónica).
+_URL_LOCAL = re.compile(r"^(?:file://)?(/|\./)[A-Za-z0-9._/-]+$")
 
 
 def _url_segura(url: str, *, permitir_local: bool = True) -> bool:
@@ -149,7 +152,13 @@ def _url_segura(url: str, *, permitir_local: bool = True) -> bool:
     acepta: https/http, git://, ssh:// (con o sin user), SCP-like estricto y
     rutas locales (necesarias para tests y siembra de workspace). Todo lo
     demás se rechaza. `permitir_local=False` lo apaga para clones que
-    aceptan input directo del cliente."""
+    aceptan input directo del cliente.
+
+    Anti-traversal en rutas locales (capa de seguridad sobre el regex):
+    `file:///foo/../etc/passwd` o `/a/b/../../etc` se rechazan aunque
+    el regex los acepte. Sin esto, `clonar` (que llama con
+    `permitir_local=True`) dejaba al cliente escapar del workspace
+    incluso aunque `git clone` resuelva la ruta canónica."""
     u = (url or "").strip()
     if not u or u.startswith("-"):
         return False
@@ -157,7 +166,7 @@ def _url_segura(url: str, *, permitir_local: bool = True) -> bool:
         return True
     if _URL_SCP.match(u):
         return True
-    if permitir_local and _URL_LOCAL.match(u):
+    if permitir_local and _URL_LOCAL.match(u) and ".." not in u:
         return True
     return False
 

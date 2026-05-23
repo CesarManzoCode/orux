@@ -47,6 +47,44 @@ RATE_TASA = _env_float("ORUX_RATE_PER_SEC", 50.0, 1.0, 1000.0)
 RATE_BURST = _env_float("ORUX_RATE_BURST", 100.0, 1.0, 10_000.0)
 
 
+# --- Validación de Origin (anti-CSRF WebSocket) ---------------------------
+#
+# El navegador envía el header `Origin` en el handshake WS. Si no validamos,
+# un sitio malicioso puede forzar el navegador de un usuario autenticado a
+# conectarse al server y ejecutar acciones en su nombre. websockets.serve()
+# tiene soporte nativo: pasamos `origins=[...]` y rechaza handshakes cuyo
+# Origin no esté en la lista (HTTP 403 antes de despachar al handler).
+#
+# IMPORTANTE — whitelist:
+# - Cada cliente NUEVO con browser tiene que sumarse explícitamente a la
+#   whitelist (`ORUX_WS_ORIGINS`). El olvido = los usuarios de ese cliente
+#   no pueden conectarse.
+# - Clientes NO-browser (tests Python, Electron, plugins de IDE futuros,
+#   `wscat`, healthchecks) NO mandan Origin: incluimos `None` en la lista
+#   para que pasen. Esto es seguro porque CSRF requiere un browser que
+#   monte el Origin automáticamente.
+#
+# Formatos del env:
+# - vacío o default: solo `https://orux.space` + clientes sin Origin
+#   (cubre prod y el healthcheck del Docker; localhost dev se añade manual)
+# - CSV ("https://orux.space,http://localhost:5173"): esos + sin Origin
+# - "*": aceptar TODO (incluye clientes browser arbitrarios; usar SOLO en
+#   debug puntual, jamás en prod)
+_DEF_ORIGINS = "https://orux.space,http://localhost:5173,http://localhost:8080"
+
+
+def _parse_origins(env: str) -> list[str | None] | None:
+    crudo = (env or "").strip()
+    if crudo == "*":
+        return None  # websockets: sin filtro (modo permisivo)
+    items = [o.strip() for o in crudo.split(",") if o.strip()]
+    # `None` permite handshakes sin Origin (clientes no-browser).
+    return [*items, None] if items else [None]
+
+
+WS_ORIGINS = _parse_origins(os.environ.get("ORUX_WS_ORIGINS", _DEF_ORIGINS))
+
+
 class _RateLimiter:
     """Token bucket simple por conexión. No usa lock: cada conexión vive en
     una sola corutina, así que el acceso es serial. `permitir()` devuelve

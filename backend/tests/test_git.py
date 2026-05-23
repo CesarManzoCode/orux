@@ -311,6 +311,19 @@ def test_url_acepta_remotos_legitimos_y_paths_locales() -> None:
     assert _url_segura("/tmp/repo-bare") is True  # los tests clonan así
 
 
+def test_url_rechaza_traversal_en_ruta_local() -> None:
+    # `clonar` pasa `permitir_local=True` con input del cliente. Sin esta
+    # defensa, un cliente malicioso podría hacer `clonar("file:///../etc")`
+    # u `clonar("/a/../../etc")` y git resolvería la ruta canónica.
+    assert _url_segura("../etc/passwd") is False
+    assert _url_segura("./../etc") is False
+    assert _url_segura("file:///foo/../etc/passwd") is False
+    assert _url_segura("/a/b/../../etc") is False
+    assert _url_segura("file://../etc") is False
+    # Sin `permitir_local` igual se rechaza (más restrictivo).
+    assert _url_segura("/a/../b", permitir_local=False) is False
+
+
 def test_rama_rechaza_caracteres_raros_y_dotdot() -> None:
     assert _rama_segura("orux/ef6a") is True
     assert _rama_segura("main") is True
