@@ -266,13 +266,17 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
  * la escena del IDE es protagonista, cinematográfica, sangra fuera del
  * viewport a la derecha. Tira de métricas sobria debajo del fold.
  * ───────────────────────────────────────────────────────────────────── */
-.hero { padding-top: clamp(48px, 7vw, 84px); padding-bottom: 0; overflow: hidden; }
-.hero .wrap {
-  display: grid; grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
-  gap: clamp(24px, 3.5vw, 56px); align-items: center;
-  min-height: clamp(560px, 78vh, 760px);
+.hero {
+  padding-top: clamp(60px, 8vw, 104px);
+  padding-bottom: clamp(64px, 9vw, 128px);
+  overflow: hidden;
 }
-.hero-copy { max-width: 540px; }
+.hero .wrap {
+  display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(0, 1.16fr);
+  gap: clamp(32px, 4.5vw, 72px); align-items: center;
+  min-height: clamp(580px, 80vh, 800px);
+}
+.hero-copy { max-width: 520px; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 11px;
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
@@ -290,24 +294,31 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
   70%, 100% { box-shadow: 0 0 0 9px rgba(67, 185, 138, 0); }
 }
 h1 {
-  margin-top: 28px;
-  font-size: clamp(40px, 5.6vw, 74px);
-  line-height: 1.02; letter-spacing: -0.042em; font-weight: 680;
-  color: var(--ink); max-width: 14ch;
+  margin-top: 30px;
+  font-size: clamp(36px, 4.7vw, 60px);
+  line-height: 1.06; letter-spacing: -0.038em; font-weight: 680;
+  color: var(--ink); max-width: 16ch;
 }
-h1 .dim { color: var(--ink-2); font-weight: 600; }
+/* Dos compases tipográficos en el h1, no uno aplastado contra otro: la
+   primera parte declara ("Quién toca qué…"), la segunda contextualiza
+   ("En tiempo real, sobre el Git que ya usás."). Cada parte es un span
+   block con un respiro fijo entre ellas; antes el espacio entre líneas
+   dependía del wrap del navegador y la frase secundaria quedaba pegada
+   a "Qué rompe.", matando el ritmo del titular. */
+h1 .h1-top { display: block; }
+h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 600; }
 .sub {
-  margin-top: 26px; max-width: 46ch; color: var(--ink-2);
-  font-size: clamp(15.5px, 1.5vw, 18px); line-height: 1.7;
+  margin-top: 32px; max-width: 50ch; color: var(--ink-2);
+  font-size: clamp(15.5px, 1.5vw, 18px); line-height: 1.72;
 }
-.cta { display: flex; gap: 12px; margin-top: 36px; flex-wrap: wrap; }
+.cta { display: flex; gap: 12px; margin-top: 48px; flex-wrap: wrap; }
 /* "60s para empezar" — pill compacta, fría, justo bajo el CTA. No es un
    claim grande (la promesa fuerte vive en final_micro): es un anchor de
    afordancia. Verde "vivo" con punto pulsante = coherencia con el resto
    del lenguaje visual (eyebrow, sticky-cta). */
 .hero-time {
   display: inline-flex; align-items: center; gap: 9px;
-  margin-top: 18px; padding: 7px 14px 7px 11px;
+  margin-top: 22px; padding: 7px 14px 7px 11px;
   border-radius: var(--r-pill);
   background: var(--live-bg);
   border: 1px solid var(--live-line);
@@ -323,8 +334,8 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
   animation: pulse 2.8s ease-out infinite;
 }
 .signals {
-  margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line-soft);
-  display: flex; flex-wrap: wrap; gap: 10px 26px;
+  margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line-soft);
+  display: flex; flex-wrap: wrap; gap: 14px 30px;
 }
 .signals .sig {
   display: inline-flex; align-items: center; gap: 10px;
@@ -343,6 +354,21 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 .stage {
   position: relative; perspective: 2400px;
   margin-right: clamp(-220px, -10vw, -56px);
+}
+/* Halo ambiental detrás del IDE: profundidad luminosa muy sutil, no neón.
+   Dos radiales acero/peer-azul borrosos detrás de todo. Sin esto el
+   lado derecho del hero se hundía en negro plano y el mockup desaparecía
+   en el fondo; con esto el mock "respira" sobre una niebla fría que no
+   compite con el contenido. Va con z-index 0 (los stage-back y el .ide
+   quedan delante por orden DOM). En ≤1080px se neutraliza porque ahí
+   el stage se aplana y un halo recortado quedaría desorientado. */
+.stage::before {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  inset: -100px -120px -130px -40px;
+  background:
+    radial-gradient(58% 52% at 46% 40%, rgba(93, 127, 166, 0.22), transparent 65%),
+    radial-gradient(40% 38% at 62% 72%, rgba(110, 168, 230, 0.10), transparent 70%);
+  filter: blur(40px);
 }
 .stage-back, .stage-back2 {
   position: absolute; z-index: 0; border-radius: var(--r-isla);
@@ -436,6 +462,13 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
   font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
   color: #06121f; background: var(--peer);
   padding: 2px 8px; border-radius: var(--r-xs) var(--r-xs) var(--r-xs) 1px;
+  animation: cursorBlink 2.6s ease-in-out infinite;
+}
+/* Blink sutil del cursor de Ana: 100%→70% opacidad, no es ñato cursor
+   parpadeo de terminal — sólo "sigue ahí, sigue escribiendo". */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.68; }
 }
 .ide-status {
   display: flex; align-items: center; gap: 20px;
@@ -455,6 +488,19 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
   background: var(--bg-2); border: 1px solid var(--line);
   box-shadow: var(--sh-3); padding: 15px 17px;
   transform: rotateY(-11deg) rotateX(4deg);
+  will-change: transform;
+}
+/* Micro-drift: las dos floats respiran a tiempos distintos. Es un
+   "el sistema está vivo" muy bajo: 4-5px de oscilación en 7-9s. La
+   transformación se compone con el rotate del card (el keyframe ya
+   reincluye rotateY/X para no pisarlo). */
+@keyframes floatDriftA {
+  0%, 100% { transform: rotateY(-11deg) rotateX(4deg) translateY(0); }
+  50%      { transform: rotateY(-11deg) rotateX(4deg) translateY(-5px); }
+}
+@keyframes floatDriftB {
+  0%, 100% { transform: rotateY(-11deg) rotateX(4deg) translateY(0); }
+  50%      { transform: rotateY(-11deg) rotateX(4deg) translateY(4px); }
 }
 .float .ft {
   display: flex; align-items: center; gap: 9px; font-size: 12px;
@@ -464,7 +510,17 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
   width: 21px; height: 21px; border-radius: var(--r-sm); display: grid;
   place-items: center; font-size: 11px; flex: none;
 }
-.card-impact { top: 23%; right: -72px; width: 290px; }
+.card-impact {
+  top: 23%; right: -72px; width: 290px;
+  /* La card de impacto cantaba demasiado y robaba atención al editor.
+     Bajamos a 0.88 para que se lea "información del sistema" en vez de
+     "panel principal". En hover sube a 1 (la pieza se enciende si el
+     usuario la apunta). */
+  opacity: 0.88;
+  animation: floatDriftA 8s ease-in-out infinite;
+  transition: opacity var(--tr);
+}
+.card-impact:hover { opacity: 1; }
 .card-impact .ic { color: var(--risk); background: var(--risk-bg); border: 1px solid var(--risk-line); }
 .card-impact .body { font-size: 12px; color: var(--ink-2); line-height: 1.56; }
 .card-impact .body code { color: var(--ink); font-size: 11.5px; }
@@ -480,8 +536,13 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 }
 .card-impact .auto::before {
   content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--live);
+  box-shadow: 0 0 0 0 rgba(67, 185, 138, 0.55);
+  animation: pulse 2.8s ease-out infinite;
 }
-.card-prop { bottom: -40px; left: -68px; width: 278px; }
+.card-prop {
+  bottom: -40px; left: -68px; width: 278px;
+  animation: floatDriftB 9.2s ease-in-out infinite 0.6s;
+}
 .card-prop .ic { color: var(--peer); background: var(--peer-bg); border: 1px solid var(--peer-line); }
 .card-prop .meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--mut); margin-bottom: 12px; }
 .card-prop .meta b { color: var(--ink-2); font-weight: 600; }
@@ -499,8 +560,12 @@ h1 .dim { color: var(--ink-2); font-weight: 600; }
 .card-prop .pend::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--risk); }
 
 /* ── Tira de métricas (no marquee): registro enterprise, señal de
-   seriedad. Reemplaza el slogan con datos del sistema. ── */
+   seriedad. Reemplaza el slogan con datos del sistema. El margin-top
+   propio (además del padding-bottom del hero) la separa lo suficiente
+   como para que se sienta "segunda lectura" — antes quedaba pegada al
+   bloque de signals del hero y leía como continuación del titular. ── */
 .trust {
+  margin-top: clamp(32px, 4vw, 56px);
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   background: rgba(255, 255, 255, 0.008);

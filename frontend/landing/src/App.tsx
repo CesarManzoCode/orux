@@ -391,14 +391,10 @@ export function App() {
               </span>
             </motion.div>
             <motion.h1 variants={fadeUp}>
-              {t.hero_h1_1}{" "}
+              <span className="h1-top">{t.hero_h1_1}</span>
               <span className="dim">{t.hero_h1_2}</span>
             </motion.h1>
             <motion.p className="sub" variants={fadeUp}>{t.hero_sub}</motion.p>
-            <motion.div className="hero-aud" variants={fadeUp}>
-              <span className="hero-aud-dot" aria-hidden />
-              {t.hero_audience}
-            </motion.div>
             <motion.div className="cta" variants={fadeUp}>
               <a className="btn primary lg" href={APP}>
                 {t.hero_cta_primary} <span className="arr">→</span>
@@ -412,7 +408,6 @@ export function App() {
               <span className="hero-time-dot" />
               <span>{t.hero_time}</span>
             </motion.div>
-            <motion.p className="hero-micro" variants={fadeUp}>{t.hero_micro}</motion.p>
             <motion.div className="signals" variants={fadeUp}>
               <span className="sig">{t.hero_sig1} <b>{t.hero_sig1_b}</b></span>
               <span className="sig">{t.hero_sig2} <b>{t.hero_sig2_b}</b></span>

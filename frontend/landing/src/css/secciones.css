@@ -205,8 +205,15 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
  * ───────────────────────────────────────────────────────────────────── */
 @media (max-width: 1080px) {
   .hero .wrap { grid-template-columns: 1fr; gap: 48px; min-height: 0; }
-  .hero { padding-bottom: clamp(40px, 7vw, 70px); }
+  .hero { padding-bottom: clamp(56px, 7vw, 96px); }
   .hero-copy { max-width: 640px; }
+  /* Reset del offset desktop: al colapsar a una columna, el stage queda
+     debajo del copy en flujo normal y no debe llevar translateY. */
+  .hero-stage-col { transform: none; }
+  /* El halo ambiental detrás del IDE asume perspective; al aplanar el
+     stage, el halo quedaría como una mancha grande desorientada en mobile.
+     Lo neutralizamos junto con la perspective. */
+  .stage::before { display: none; }
   .stage { margin-right: 0; perspective: none; max-width: 760px; }
   .stage-back, .stage-back2 { display: none; }
   .ide, .float { transform: none; }
@@ -311,7 +318,17 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
  * sola frase mono. Hairline arriba lo ata visualmente al stage sin
  * caja. Color ink-2 (no --mut: la frase es densa, tiene que leerse).
  * ───────────────────────────────────────────────────────────────────── */
-.hero-stage-col { display: flex; flex-direction: column; }
+/* En desktop el stage queda alineado al CENTRO vertical del grid del
+   hero, pero la columna de copy (eyebrow + h1 + sub + cta + time +
+   signals) es mucho más larga que el stage, así que el centro caía un
+   poco bajo respecto al peso visual del titular. Subimos el mockup un
+   pelo para que su línea de horizonte (la barra superior del IDE) se
+   asiente al nivel del h1, no debajo. En ≤1080px se anula: ahí la
+   página colapsa a una columna y este offset descolocaría todo. */
+.hero-stage-col {
+  display: flex; flex-direction: column;
+  transform: translateY(-32px);
+}
 .stage-cap {
   margin-top: 26px;
   padding-top: 18px;
