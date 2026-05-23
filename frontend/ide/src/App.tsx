@@ -18,6 +18,7 @@ import { AdminModal } from "./components/AdminModal";
 import { Inspector } from "./components/Inspector";
 import { Splitter } from "./components/Splitter";
 import { KbdHelp } from "./components/KbdHelp";
+import { Tutorial } from "./tutorial/Tutorial";
 import { useI18n } from "./i18n";
 
 // Capa 27 — Anchos redimensionables del Sidebar y el Inspector.
@@ -91,6 +92,24 @@ export function App() {
 
   // Si dejás de ser admin (re-init tras un clone), el modal se cierra solo.
   useEffect(() => { if (!s.esAdmin && adminOpen) setAdminOpen(false); }, [s.esAdmin, adminOpen]);
+
+  // Tutorial guiado (OruxBot). Disparo único: la primera vez que un admin
+  // entra a un workspace virgen (files vacío), y siempre que NO lo haya
+  // saltado/terminado antes (flag en localStorage). Los miembros invitados
+  // no lo ven en v1 — vienen con contexto de quien los invitó. El estado
+  // se calcula al cambiar a fase "team": al disparar la primera vez,
+  // `tutorialOn=true` se queda hasta que el componente avise `onDone`.
+  const [tutorialOn, setTutorialOn] = useState(false);
+  useEffect(() => {
+    if (s.fase !== "team") return;
+    if (!s.esAdmin) return;
+    if (Object.keys(s.files).length > 0) return;
+    if (localStorage.getItem("orux_tutorial_done") === "1") return;
+    setTutorialOn(true);
+    // Sólo gateamos al entrar a "team" — `s.files` cambia mucho y no
+    // queremos re-evaluar el trigger en cada update del store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.fase, s.esAdmin]);
 
   // Capa 19: Ctrl+S / Cmd+S global = checkpoint del archivo abierto. El
   // Editor ya lo captura cuando el textarea tiene foco; este handler cubre
@@ -381,6 +400,12 @@ export function App() {
       <StatusBar />
       {adminOpen && s.esAdmin && <AdminModal onClose={() => setAdminOpen(false)} />}
       {kbdOpen && <KbdHelp onClose={() => setKbdOpen(false)} />}
+      {tutorialOn && (
+        <Tutorial
+          api={{ setVista, setInspectorOpen: setInspOpen }}
+          onDone={() => setTutorialOn(false)}
+        />
+      )}
       {toast && (
         <div
           className={"kbd-toast t-" + toast.tone}

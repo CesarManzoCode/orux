@@ -201,6 +201,7 @@ function PanelGit() {
                 className="no"
                 onClick={() => { if (!url.trim()) return; setPidiendoClone(true); }}
                 aria-label={t.sg_clone_btn}
+                data-tour-id="git-clone"
               >
                 <DownloadCloud size={12} /> {t.sg_clone_btn}
               </button>

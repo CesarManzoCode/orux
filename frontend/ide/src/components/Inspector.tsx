@@ -59,12 +59,23 @@ function Sec(props: {
   // a11y queda intacta (aria-expanded sigue siendo la única verdad).
   // aria-hidden cuando está plegado para que screen readers no lean
   // contenido oculto.
+  // data-tour-id permite al tutorial anclar el spotlight a cada sección
+  // (presencia, ownership, impacto, propuestas, actividad) sin filtrar la
+  // implementación de coordenadas en el guión.
+  const tourMap: Record<string, string> = {
+    pres: "inspector-presencia",
+    own: "inspector-ownership",
+    imp: "inspector-impacto",
+    prop: "inspector-propuestas",
+    act: "inspector-actividad",
+  };
   return (
     <section
       className={
         "insec" + (props.tono ? " " + props.tono : "") +
         (plegada ? " plegada" : "")
       }
+      data-tour-id={tourMap[props.k]}
     >
       <button
         type="button"
@@ -188,6 +199,7 @@ function PropCard({
               onClick={() => resolver(p.id, true)}
               aria-label={t.tr_approve}
               title={t.kbd_btn_hint_approve}
+              data-tour-id="prop-accept"
             >
               {t.tr_approve}
             </button>

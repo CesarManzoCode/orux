@@ -123,6 +123,15 @@ export function subscribe(l: () => void) {
 }
 export function getState() { return state; }
 
+// Tutorial-only: setter expuesto para que el guión interactivo del onboarding
+// pueda inyectar estado fake (archivos, propuestas, ownership, impacto)
+// directamente en el cliente — sin tocar el servidor. Se llama desde
+// src/tutorial/mock.ts y SOLO se debe usar mientras el tutorial está activo,
+// que a su vez sólo arranca con `files` vacío (workspace virgen). El cleanup
+// resetea todos esos campos a vacío al saltar/terminar, así no queda
+// residuo. NO usar fuera del tutorial — saltea protocolo y broadcast.
+export function __setForTutorial(patch: Partial<State>): void { set(patch); }
+
 // ── Toast emitter (cliente puro, fuera del estado React) ────────────────
 // Pequeño bus pub/sub para que acciones del store (guardar, clonar, borrar)
 // puedan pedir feedback visual sin acoplarse a React. `App.tsx` se suscribe

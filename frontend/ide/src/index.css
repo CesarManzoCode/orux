@@ -24,3 +24,6 @@
 @import "./css/modales.css";
 @import "./css/inspector.css";
 @import "./css/pulido.css";
+/* Tutorial guiado: overlay (bot, spotlight, halo). Va último para que
+   sus z-index altos y reglas de :fixed ganen sobre cualquier panel. */
+@import "./css/tutorial.css";

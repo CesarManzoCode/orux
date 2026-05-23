@@ -594,4 +594,23 @@ export const en = {
     confirm_discard_msg:
       "You're about to discard your local draft. What you wrote won't be sent to the file's owner and will be lost. This can't be undone.",
     confirm_discard_ok: "discard",
+    // ── Guided tutorial (OruxBot) ────────────────────────────────────────
+    tut_aria: "Orux guided tutorial",
+    tut_skip: "Skip",
+    tut_skip_aria: "Skip the tutorial",
+    tut_cta_start: "Start",
+    tut_hello: "Hi. I'm Orux.",
+    tut_intro: "I sit on top of Git. I don't replace it — I coordinate what your team is doing on top.",
+    tut_skip_hint: "I'll show you what matters in under a minute. Skip whenever you want.",
+    tut_open_git: "This is where your repo comes in. Click.",
+    tut_clone: "Hit clone — I'll bring in a sample repo.",
+    tut_code_here: "Your code lives here.",
+    tut_open_file: "Open any file.",
+    tut_ana_joins: "Ana joins the same file. You see her live in presence.",
+    tut_ana_proposes: "She proposes a change. It lands in proposed changes.",
+    tut_accept_prop: "One click to approve.",
+    tut_impact: "That change renamed a function. Orux detected it impacts other files.",
+    tut_autofix: "Orux Premium proposes the cascading rename.",
+    tut_accept_fix: "Approve this too.",
+    tut_close: "Done. Same Git, no collisions. Live coordination over your real repo.",
 } as const;

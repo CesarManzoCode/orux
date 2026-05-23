@@ -111,6 +111,7 @@ export function FileTree() {
       const sinMarcar = !!s.dirty[f.path];
       filas.push(
         <li key={"f:" + f.path}
+            data-tour-id={"file-" + f.path}
             className={"row file" + (f.path === s.currentPath ? " activo" : "")}
             onClick={() => seleccionar(f.path)}>
           <span className="row-indent">
@@ -164,7 +165,7 @@ export function FileTree() {
   pintar(arbol(paths), "", 0);
   return (
     <>
-      <ul className="tree">{filas}</ul>
+      <ul className="tree" data-tour-id="files-tree">{filas}</ul>
       {confirmDel && (
         <ConfirmDialog
           title={t.confirm_delete_title}

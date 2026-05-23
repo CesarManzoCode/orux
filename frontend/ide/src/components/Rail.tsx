@@ -47,6 +47,7 @@ export function Rail(props: {
           aria-label={ariaGit}
           aria-pressed={props.vista === "git"}
           onClick={() => props.setVista("git")}
+          data-tour-id="rail-git"
         >
           <GitBranch size={18} aria-hidden />
           {cambiosGit > 0 && <span className="rail-dot" aria-hidden />}
