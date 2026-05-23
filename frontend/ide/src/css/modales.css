@@ -81,18 +81,21 @@
   line-height: 1.55;
 }
 
+/* Footer del modal: gap y padding ligeramente más generosos. La primaria
+   y la secundaria se distinguen mejor por aire entre ellas; el footer
+   se siente "asentado" en lugar de apretado contra el borde del card. */
 .modal-foot {
-  display: flex; justify-content: flex-end; gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  display: flex; justify-content: flex-end; gap: 0.6rem;
+  padding: 0.85rem 1.1rem;
   border-top: 1px solid var(--border-soft);
   background: var(--surface-2);
 }
 .modal-foot button {
   font: 600 12px/1 var(--font-base);
-  padding: 0.5rem 0.85rem;
+  padding: 0.55rem 0.95rem;
   border-radius: var(--r-sm);
-  cursor: pointer; transition: background var(--tr), color var(--tr), border-color var(--tr);
-  display: inline-flex; align-items: center; gap: 0.35rem;
+  cursor: pointer; transition: background var(--tr), color var(--tr), border-color var(--tr), transform var(--tr), filter var(--tr);
+  display: inline-flex; align-items: center; gap: 0.4rem;
 }
 .modal-foot button.primario {
   background: var(--accent-fill, var(--accent));

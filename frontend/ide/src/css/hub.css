@@ -208,10 +208,15 @@
   transition: background var(--tr), border-color var(--tr),
     box-shadow var(--tr), transform var(--tr);
 }
+/* Hover de equipo: la sombra "tira" tenue debajo de la card iba en VERDE
+   (residuo del IDE). El Hub vive en paleta Acero — la sombra ahora es
+   neutra (negra), respetando la regla "color = estado, profundidad =
+   jerarquía". El filo izquierdo de acento sigue siendo la señal
+   activa, ahora coherente con la cabina. */
 .hub-team:hover {
   background: var(--surface-3); border-color: var(--accent-line);
   box-shadow: inset 2px 0 0 var(--accent),
-    0 10px 28px -22px rgba(76, 195, 138, 0.6);
+    0 10px 28px -22px rgba(0, 0, 0, 0.65);
   transform: translateY(-1px);
 }
 .hub-team:focus-visible {
@@ -455,7 +460,7 @@
 .hub-row .secundario { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .hub-row .secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .hub-row button:disabled {
-  opacity: 0.45; cursor: default; transform: none !important; filter: none !important;
+  opacity: 0.5; cursor: default; transform: none !important; filter: none !important;
 }
 
 /* ── SISTEMA: tres filas con dot+label+nota, banda larga abajo. */

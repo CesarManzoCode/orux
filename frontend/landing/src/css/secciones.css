@@ -123,12 +123,16 @@
 
 /* ─────────────────────────────────────────────────────────────────────
  * LO QUE NO SOMOS
+ * Gap entre filas algo más generoso (12px) para que se lean como
+ * declaraciones independientes y no como un checklist apretado. El
+ * padding interno también baja un poco la densidad: el ojo necesita
+ * respirar cuando cada fila es una negación sobria.
  * ───────────────────────────────────────────────────────────────────── */
-.nots { margin-top: clamp(40px, 5vw, 52px); display: grid; gap: 10px; max-width: 800px; }
+.nots { margin-top: clamp(40px, 5vw, 52px); display: grid; gap: 12px; max-width: 800px; }
 .not {
   display: flex; gap: 16px; align-items: center;
   font-size: clamp(14.5px, 1.6vw, 16.5px); color: var(--ink-2);
-  padding: 17px 22px; border-radius: var(--r-lg);
+  padding: 18px 22px; border-radius: var(--r-lg);
   background: var(--bg-1); border: 1px solid var(--line-soft);
   border-left: 2px solid var(--line-strong);
 }
@@ -280,6 +284,11 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   .fn { padding: 24px; }
   .eyebrow { font-size: 10px; letter-spacing: 0.1em; }
   .brand .tag { display: none; }
+  /* Signals del hero: a este ancho el gap horizontal apretaba los tres
+     items y el último saltaba a una segunda línea con espacios raros.
+     En columna se lee como tres confirmaciones, no como un bloque
+     escupido. */
+  .signals { flex-direction: column; gap: 12px; margin-top: 32px; padding-top: 22px; }
 }
 
 /* ── prefers-reduced-motion: apaga TODO el motion ── */
@@ -304,7 +313,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   color: rgba(255,255,255,.35); padding: 3px 6px;
   border-radius: 100px; cursor: pointer;
   background: transparent;
-  transition: background 120ms, color 120ms;
+  transition: background var(--tr), color var(--tr);
 }
 .lnd-lang button:hover { color: rgba(255,255,255,.7); }
 .lnd-lang button.ll-active {

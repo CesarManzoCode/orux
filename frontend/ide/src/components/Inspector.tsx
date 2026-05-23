@@ -87,7 +87,10 @@ function Sec(props: {
         <span className="insec-t">{props.tit}</span>
         {props.n != null && <span className="insec-n">{props.n}</span>}
         <span className="insec-chev">
-          <ChevronDown size={13} />
+          {/* Chevron 14px: a 13px se leía como un punto, dejaba el header
+              sin afordancia clara de "esto se pliega". A 14px el ojo lo
+              registra sin que el header pierda densidad. */}
+          <ChevronDown size={14} />
         </span>
       </button>
       <div className="insec-b" aria-hidden={plegada}>{props.children}</div>

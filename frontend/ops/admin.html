@@ -59,11 +59,12 @@
   --border-strong:#333a47;
   --hl:           rgba(255,255,255,0.035);
 
-  /* Texto: 4 niveles, AA sobre --surface */
+  /* Texto: 4 niveles, AA sobre --surface. --faint subido en sincronía con
+     el IDE para asegurar contraste AA en labels y eyebrows de 10px. */
   --text:    #e8eaef;
   --text-2:  #b5bac5;
   --muted:   #8a8f9c;
-  --faint:   #5b606e;
+  --faint:   #6b7180;
 
   /* Acento de marca: verde→cian. Mismo gradiente que el IDE. */
   --accent:      #4cc38a;
@@ -138,12 +139,13 @@ body::before {
 /* Scrollbars finas, coherentes con IDE */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb {
-  background: var(--border); border-radius: 999px;
+  background: var(--border-strong); border-radius: 999px;
   border: 3px solid transparent; background-clip: padding-box;
+  transition: background var(--tr);
 }
-*::-webkit-scrollbar-thumb:hover { background: #3a3f4b; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #424857; background-clip: padding-box; }
 *::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
-* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
 /* ─── TIPOGRAFÍA ────────────────────────────────────────────────────────── */
 h1, h2, h3 { font-weight: 650; letter-spacing: -0.015em; }
@@ -254,9 +256,11 @@ input::placeholder { color: var(--faint); }
     transform var(--tr), filter var(--tr);
 }
 .btn:active { transform: translateY(1px); }
-/* Estado deshabilitado (botón en carga): plano, sin hover ni active. */
+/* Estado deshabilitado (botón en carga): plano, sin hover ni active.
+   Opacidad 0.5 unifica con el IDE — un solo "peso visual" de disabled
+   en todo el producto. */
 .btn:disabled {
-  opacity: 0.55; cursor: default;
+  opacity: 0.5; cursor: default;
   transform: none !important; filter: none !important;
 }
 
@@ -329,12 +333,15 @@ input::placeholder { color: var(--faint); }
   animation: fadeIn 220ms cubic-bezier(.22,1,.36,1) both;
 }
 
-/* Header del panel */
+/* Header del panel — padding rebajado: en una consola de operador el
+   header no es un "hero", es chrome. Antes consumía ~44px de altura
+   antes de mostrar el primer dato; ahora ~32px. Recuperás casi una fila
+   de tabla en el viewport sin sacrificar legibilidad de la marca. */
 .panel-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--s-6) 0 var(--s-5);
+  padding: var(--s-5) 0 var(--s-4);
   border-bottom: 1px solid var(--border-soft);
-  margin-bottom: var(--s-6);
+  margin-bottom: var(--s-5);
 }
 
 .panel-brand { display: flex; align-items: center; gap: 11px; }
@@ -363,8 +370,12 @@ input::placeholder { color: var(--faint); }
 
 #msg { margin-bottom: var(--s-4); }
 
-/* ─── SECCIONES ─────────────────────────────────────────────────────────── */
-.section { margin-bottom: var(--s-8); }
+/* ─── SECCIONES ───────────────────────────────────────────────────────────
+   Margin entre secciones rebajado de 32px a 24px: el operador escanea
+   muchos equipos/usuarios; un abismo entre "Teams" y "Users" desperdicia
+   real estate sin agregar claridad. La cabecera de cada sección sigue
+   anclando la separación visual. */
+.section { margin-bottom: var(--s-6); }
 
 .section-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -376,21 +387,29 @@ input::placeholder { color: var(--faint); }
   letter-spacing: 0.13em; text-transform: uppercase;
 }
 
+/* Contador de equipos/usuarios — antes era una pill tímida en 10.5px /
+   --muted; el operador necesita escanear ese número de un vistazo
+   (cuántos equipos hay, cuántos usuarios). Subimos a t-sm y --text-2:
+   sigue siendo metadata pero con la legibilidad que el rol pide. */
 .section-count {
   font-family: var(--font-mono);
-  font-size: var(--t-xs); color: var(--muted);
+  font-size: var(--t-sm); color: var(--text-2);
   background: var(--surface-2);
   border: 1px solid var(--border-soft);
-  border-radius: 999px; padding: 2px 9px;
+  border-radius: 999px; padding: 2px 10px;
   letter-spacing: 0;
 }
 
-/* ─── TABLA DE EQUIPOS ──────────────────────────────────────────────────── */
+/* ─── TABLA DE EQUIPOS ──────────────────────────────────────────────────
+   Borde subido a --border (de --border-soft): la tabla es el objeto
+   principal de la página, tiene que destacar del fondo. Antes el
+   hairline se diluía sobre --bg y la tabla se leía "flotando sin
+   marco" — el efecto es premium-sutil-equivocado en una consola. */
 .table-wrap {
   background:
     linear-gradient(180deg, var(--hl), transparent 2px),
     var(--surface);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -421,8 +440,12 @@ table#teams tbody tr {
 table#teams tbody tr:last-child { border-bottom: none; }
 table#teams tbody tr:hover { background: var(--surface-2); }
 
+/* Filas de tabla — 14px de padding vertical (antes 12px). La diferencia
+   es mínima pero los párpados la registran al escanear varias filas en
+   sucesión: cada fila respira un escalón más sin perder densidad de
+   herramienta. */
 table#teams td {
-  padding: 12px 16px;
+  padding: 14px 16px;
   font-size: var(--t-base);
   vertical-align: middle;
 }
@@ -433,14 +456,14 @@ table#teams td {
   letter-spacing: -0.005em;
 }
 
-/* ID en mono */
+/* ID del equipo — mono (es un identificador), pero sin "pozo": el
+   bloque con fondo+borde de antes lo hacía competir con team-name como
+   si fueran del mismo peso. Ahora es metadata pura: mismo lenguaje que
+   un commit hash en el log de git. */
 .team-id {
   font-family: var(--font-mono);
-  font-size: var(--t-xs); color: var(--muted);
-  background: var(--surface-2);
-  border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  padding: 2px 6px; display: inline-block;
+  font-size: var(--t-xs); color: var(--faint);
+  letter-spacing: 0.01em;
 }
 
 /* Badges de plan */

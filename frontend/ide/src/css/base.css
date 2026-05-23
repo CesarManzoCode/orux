@@ -41,11 +41,13 @@
 
   /* ── Texto: 4 niveles. --text-2 es NUEVO: el escalón legible secundario
        (valores, etiquetas) que faltaba entre --text y --muted. Todos AA
-       sobre --surface. ── */
+       sobre --surface. --faint se subió de #5b606e a #6b7180 (≈3.6:1 sobre
+       --bg, ≈4:1 sobre --surface): asegura legibilidad en labels y eyebrows
+       de 10px sin perder el carácter "metadato" del escalón. ── */
   --text: #e8eaef;
   --text-2: #b5bac5;
   --muted: #8a8f9c;
-  --faint: #5b606e;
+  --faint: #6b7180;
 
   /* ── Acento de marca: verde→cian. El gradiente SOLO en el logomark y el
        CTA primario; el resto usa el sólido o un tinte neutro. ── */
@@ -148,16 +150,19 @@ body::before {
 ::selection { background: rgba(76, 195, 138, 0.24); }
 
 /* Scrollbars: finas, casi invisibles en reposo, despiertan al pasar. El
-   detalle que separa "app" de "herramienta". */
+   detalle que separa "app" de "herramienta". El thumb en reposo usa
+   --border-strong para tener un poco más de presencia (antes --border
+   se confundía con el hairline de los paneles); el hover sube un escalón
+   más sin estridencias. */
 *::-webkit-scrollbar { width: 11px; height: 11px; }
 *::-webkit-scrollbar-thumb {
-  background: var(--border); border-radius: var(--r-pill);
+  background: var(--border-strong); border-radius: var(--r-pill);
   border: 3px solid transparent; background-clip: padding-box;
   transition: background var(--tr);
 }
-*::-webkit-scrollbar-thumb:hover { background: #3a3f4b; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #424857; background-clip: padding-box; }
 *::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
-* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
 /* Números que se alinean en columna (gutter, contadores, métricas) =
    tabular. En prosa NO (queda peor); por eso es scoped, no global. */
@@ -195,7 +200,7 @@ button:active { transform: translateY(1px); }
 .btn-secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--muted); }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
-.btn:disabled { opacity: 0.4; cursor: default; transform: none !important; filter: none !important; }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none !important; filter: none !important; }
 
 /* ── PATRÓN: inputs. Una sola identidad para TODO control de texto del
    IDE (login, git, modal): foco = borde acento + halo íntimo. ── */
@@ -246,7 +251,11 @@ button:active { transform: translateY(1px); }
 @keyframes rise-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
 @keyframes pop-in  { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 
-.app { height: 100%; display: flex; flex-direction: column; padding: 6px; gap: 6px; }
+/* Padding/gap atado a la escala (--s-2). Antes era 6px suelto: la rejilla
+   total del producto se siente más intencional al "encajar" en múltiplos
+   de 4. La diferencia es invisible aislada, pero el ojo registra el orden
+   cuando los paneles se enmarcan. */
+.app { height: 100%; display: flex; flex-direction: column; padding: var(--s-2); gap: var(--s-2); }
 
 /* La "isla": objeto diseñado, no panel plano. Elevación contenida +
    hairline de luz arriba. Costura fina, no marco grueso: el conjunto se
@@ -266,8 +275,11 @@ button:active { transform: translateY(1px); }
 .app > .layout > .main { animation-delay: 80ms; }
 .app > .statusbar { animation-delay: 105ms; }
 
-/* ── Topbar: tres grupos con divisores finos. Ritmo, no ruido. ── */
-.topbar { display: flex; align-items: center; gap: 0.55rem; padding: 0.4rem 0.6rem 0.4rem 0.55rem; flex-shrink: 0; }
+/* ── Topbar: tres grupos con divisores finos. Ritmo, no ruido. Padding
+   simétrico (8px 10px) en lugar de valores casi-iguales del antes:
+   visualmente parece igual, pero la regla "todo encaja en la escala 4px"
+   le da al ojo una cabina que respeta. ── */
+.topbar { display: flex; align-items: center; gap: 0.55rem; padding: var(--s-2) 0.625rem; flex-shrink: 0; }
 /* Grupo lógico: une lo que va junto y lo separa de lo que no. */
 .tb-grp { display: inline-flex; align-items: center; gap: 0.5rem; }
 /* Divisor vertical sutil entre grupos (1px, hairline). */
@@ -333,9 +345,12 @@ button:active { transform: translateY(1px); }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 .peers .av:first-child { margin-left: 0; }
+/* Hover de avatar: elevación pura, sin anillo blanco. El anillo robaba
+   atención y rompía el lenguaje del resto del producto (donde el "halo"
+   se reserva al focus de teclado). */
 .peers .av:hover {
   transform: translateY(-2px); z-index: 2;
-  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 10px -3px rgba(0, 0, 0, 0.6);
 }
 .peers .av.mas { background: var(--surface-3); color: var(--muted); border-color: var(--surface); font-weight: 650; }
 .salir, .invitar {
@@ -361,7 +376,7 @@ button:active { transform: translateY(1px); }
 .tb-insp.activo { color: var(--accent); border-color: var(--accent-weak); background: var(--accent-weak); }
 
 /* ── Layout: rail + sidebar + main ── */
-.layout { flex: 1; display: flex; min-height: 0; gap: 6px; }
+.layout { flex: 1; display: flex; min-height: 0; gap: var(--s-2); }
 .rail {
   width: 44px; flex-shrink: 0; display: flex; flex-direction: column;
   align-items: center; gap: 4px; padding: 7px 0;
@@ -403,8 +418,8 @@ button:active { transform: translateY(1px); }
 .splitter.arr { background: var(--accent-weak); }
 
 .sidebar {
-  width: 248px; flex-shrink: 0; padding: 0.7rem 0.6rem; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.55rem;
+  width: 248px; flex-shrink: 0; padding: 0.7rem 0.65rem; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.6rem;
 }
 /* Encabezado de sección: micro, ancho, en mayúsculas — estructura sin
    gritar. */
@@ -553,8 +568,12 @@ button:active { transform: translateY(1px); }
 .row:hover .delx { opacity: 0.45; }
 .row:focus-within .delx, .delx:focus-visible, .delx:hover { opacity: 1; }
 .delx:hover { color: var(--bad); background: var(--bad-bg); }
+/* Foco visible específico del botón destructivo: anillo del color "bad"
+   (rebajado) en lugar del acento. Misma fórmula del --ring global —
+   consistente con el resto del IDE, sólo cambia el color del segundo
+   stop a "bad" porque la acción es destructiva. */
 .delx:focus-visible {
   outline: none; color: var(--bad); background: var(--bad-bg);
-  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--bad);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
 }
 

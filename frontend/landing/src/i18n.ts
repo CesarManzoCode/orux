@@ -261,7 +261,7 @@ export const T = {
     s06_sub: "Sin trial, sin tarjeta. El core completo de coordinación está en Free para siempre. Lo que se paga es escala y profundidad, no la funcionalidad básica.",
     free_tier: "Free · para siempre",
     free_h4: "Para el equipo que arranca",
-    free_sub: "El core completo de coordinación, no una versión recortada. Lo que se tiera es escala — no la tesis.",
+    free_sub: "El core completo de coordinación, no una versión recortada. Lo que se limita es escala — no la tesis.",
     free: [
       "Hasta 5 devs en vivo en un workspace",
       "Análisis profundo de impacto en Python y TypeScript",
