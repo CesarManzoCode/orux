@@ -50,13 +50,33 @@ Orux está **desplegado y en uso** en `orux.space`. Construido por capas (**33**
 
 **Modelo freemium** (`plans.py`): plan `free` permanente y de verdad usable (5 devs, 2 lenguajes LSP, impacto directo) frente a `premium` (sin tope, impacto transitivo, rename automático). El cobro con Stripe es **por asiento** (capa 31): un asiento por miembro del equipo, factura `precio × miembros`, la cantidad se ajusta sola cuando entra gente. Está cerrado por defecto: sin credenciales, `/api/v1/billing/*` responde 503.
 
-**Cambios pre-anuncio del 2026-05-23** (tres P0 cerrados antes del freeze):
-- **WS reconnect automático con backoff exponencial** en `frontend/ide/src/store.ts`: si la conexión se cae (wifi, server reiniciándose) el cliente reintenta solo (500ms→30s, reset al onopen). Bandera `cierreIntencional` evita doble-reconexión cuando `salirEquipo()` lo cierra a propósito. Antes: cualquier parpadeo de red = abandono.
-- **Tutorial OruxBot con CTA de escape** en `frontend/ide/src/tutorial/Tutorial.tsx`: pasos `click` ofrecen "Continuar" tras 18s O 4s con target sin bbox válido — cubre el caso de Inspector no montado o race del mock. Skip total y Esc ya existían; esto es el guardrail intermedio.
-- **Tier del análisis expuesto al cliente:** `tiers.analizador_efectivo(path, sesion)` etiqueta cada análisis (`"lsp"|"ast"|"treesitter"|"regex"`); viaja en `ImpactMessage.analizador` (default vacío = byte-compat); el Inspector muestra un chip discreto `.inimp-analiz` cuando no es `"lsp"`. Transitivo NO usa LSP por diseño → siempre muestra chip.
+**Lote pre-anuncio cerrado el 2026-05-23** (P0 + P1 + D + E + og.png):
+
+*P0 (bloqueadores):*
+- **WS reconnect automático con backoff exponencial** en `frontend/ide/src/store.ts` (500ms→30s, reset al onopen). Bandera `cierreIntencional` evita doble-reconexión cuando `salirEquipo()` lo cierra a propósito.
+- **Tutorial OruxBot con CTA de escape** en `Tutorial.tsx`: pasos `click` ofrecen "Continuar" tras 18s O 4s con target sin bbox válido.
+- **Tier del análisis expuesto al cliente:** `tiers.analizador_efectivo(path, sesion)` → `ImpactMessage.analizador`; el Inspector muestra chip `.inimp-analiz` cuando no es `"lsp"`. Transitivo NO usa LSP por diseño → siempre muestra chip.
+
+*P1 (operacional + observabilidad + polish + seguridad):*
+- **Backup Postgres** `scripts/backup-db.sh` + `make db-backup`/`db-restore`. Carga `.env` desde el host. Local 7 días + off-site opcional a DO Spaces.
+- **Límites de recursos `docker-compose.yml`** (`deploy.resources.limits` por servicio).
+- **`RUNBOOK.md`** operacional en la raíz (8 secciones).
+- **Reportería de errores client-side**: `frontend/ide/src/error-reporter.ts` + `POST /api/v1/errors`.
+- **Empty state Hub con CTA explícito** en `Hub.tsx`.
+- **AuthError con código** estable + traducción en cliente (`messages.py:AuthErrorMessage.code`, `t.auth_err[code]`).
+- **Rate limit login 5 → 3 req/min/IP**.
+
+*Pre-anuncio NO-código (D + E + og.png):*
+- **`og.png`** 1200×630 en `frontend/landing/public/` (generado por `scripts/build-og.sh` con magick puro). Source editable: `frontend/landing/og.svg`.
+- **Footer contacto** en landing: `mailto:hola@orux.space` + link al repo + copyright (clave i18n `foot_copy`).
+- **`LICENSE`** en raíz (MIT, "César Manzo").
+- **`robots.txt` + `sitemap.xml`** en `frontend/landing/public/`.
+- **Analytics propio**: `POST /api/v1/track` + `frontend/landing/src/analytics.ts` (pageview en `load`, keepalive, fire-and-forget). Sin cookies, sin IDs persistentes. Los datos están en `docker compose logs api | grep client_track`.
+- **Endpoint público `GET /api/v1/status`**: `{ok, uptime_s, version}`. Para UptimeRobot/cronjobs externos. Versión desde env var `ORUX_VERSION` (default `"dev"`).
 
 **Pendientes conocidos:**
 - **Stripe en VPS:** el backend está listo pero falta config + validación en el VPS.
+- **Sprint F (comunidad / UI de status / Discord / press kit):** conscientemente diferido hasta tener usuarios reales. No roadmapearlo sin que el usuario lo pida.
 
 ## Trampas operativas ya vistas
 
