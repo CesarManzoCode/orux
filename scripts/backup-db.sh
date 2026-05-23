@@ -56,14 +56,14 @@ fi
 
 # El gzip puede salir 0 con archivo vacío si pg_dump produjo cero bytes.
 # Detectamos eso antes de que el "backup vacío" se sienta seguro.
-TAMAÑO_BYTES="$(stat -c%s "$BACKUP_PATH" 2>/dev/null || stat -f%z "$BACKUP_PATH")"
-if [ "$TAMAÑO_BYTES" -lt 100 ]; then
-  echo "[backup] ERROR: backup demasiado chico ($TAMAÑO_BYTES bytes) — algo salió mal" >&2
+TAMANO_BYTES="$(stat -c%s "$BACKUP_PATH" 2>/dev/null || stat -f%z "$BACKUP_PATH")"
+if [ "$TAMANO_BYTES" -lt 100 ]; then
+  echo "[backup] ERROR: backup demasiado chico ($TAMANO_BYTES bytes) — algo salió mal" >&2
   rm -f "$BACKUP_PATH"
   exit 1
 fi
 
-echo "[backup] ✓ local OK ($TAMAÑO_BYTES bytes)"
+echo "[backup] ✓ local OK ($TAMANO_BYTES bytes)"
 
 # --- 2) Retención local -------------------------------------------------------
 # Borra los backups locales más viejos que RETENTION_DIAS. NO toca los del
