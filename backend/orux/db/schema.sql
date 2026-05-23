@@ -108,6 +108,42 @@ CREATE INDEX IF NOT EXISTS idx_ownership_owner ON ownership(owner);
 CREATE INDEX IF NOT EXISTS idx_invites_expires ON invites(expires_at)
     WHERE expires_at IS NOT NULL;
 
+-- Propuestas tentativas pendientes (capa 4). Hasta ahora vivían SOLO en
+-- memoria del `TeamRuntime`: un deploy a mitad de "Ana editó, Kai por
+-- aprobar" perdía el estado. Ahora se durabilizan: `Proposals` en memoria
+-- sigue siendo el hot path; cada `put/pop/drop_path` se escribe-a-través
+-- y al abrir un equipo el runtime se hidrata.
+-- proposal_id es `path::author_id` (determinista, lo construye el server):
+-- reeditar reemplaza en vez de duplicar. Por equipo: dos equipos pueden
+-- tener un proposal_id idéntico sin colisión.
+CREATE TABLE IF NOT EXISTS proposals (
+    team_id     TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    proposal_id TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    author_id   TEXT NOT NULL,
+    author_name TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (team_id, proposal_id)
+);
+-- `drop_path` borra todas las propuestas sobre un path al borrarse el
+-- archivo. Sin índice por (team_id, path), seq scan sobre la tabla entera.
+CREATE INDEX IF NOT EXISTS idx_proposals_team_path ON proposals(team_id, path);
+
+-- Webhooks de Stripe ya aplicados (idempotencia por event_id). Stripe
+-- garantiza entrega, NO orden ni unicidad: puede reentregar el mismo
+-- event_id por timeout, o entregar `subscription.deleted` ANTES que el
+-- `subscription.updated` por demora de red. Con esta tabla, antes de
+-- aplicar miramos si ese event_id ya se procesó; si sí, ignoramos.
+-- Garantía: cada evento de Stripe se aplica EXACTAMENTE UNA VEZ.
+-- Pruned periódicamente: tras 30 días un evento ya no llega de Stripe.
+CREATE TABLE IF NOT EXISTS processed_webhooks (
+    event_id     TEXT PRIMARY KEY,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Para el barrido de viejos (purge >30 días): O(log n) en vez de seq scan.
+CREATE INDEX IF NOT EXISTS idx_webhooks_processed ON processed_webhooks(processed_at);
+
 -- BACKEND-AUDIT-0204: tabla de versiones de esquema. Por ahora es solo
 -- "this schema applied"; cuando aparezca Alembic, esta tabla es el origen.
 CREATE TABLE IF NOT EXISTS schema_version (

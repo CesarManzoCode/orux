@@ -15,7 +15,11 @@ from __future__ import annotations
 
 import logging
 
-from ..billing import cambio_de_plan, suscripcion_de_evento
+from ..billing import (
+    cambio_de_plan,
+    event_id_de,
+    suscripcion_de_evento,
+)
 from ..identity.store import normalizar
 from ..identity.tokens import crear_token, usuario_de_token
 from ..plans import PLANES
@@ -121,14 +125,22 @@ async def cambiar_plan(teams, team_id: str, plan: str) -> dict | None:
 # `MemTeamStore`.
 
 
-async def aplicar_evento_stripe(teams, evento: dict) -> dict | None:
+async def aplicar_evento_stripe(
+    teams, evento: dict, webhooks=None,
+) -> dict | None:
     """Aplica un evento de Stripe YA verificado al plan de un equipo.
 
     Devuelve `{team_id, plan, subscription_id}` si cambió algo; `None` si
-    el evento se ignora (tipo no relevante, sin `team_id`, o equipo que no
-    existe en esta plataforma). Idempotente: `actualizar_suscripcion` fija
-    valores, así que reaplicar el mismo evento no hace daño — Stripe puede
-    reentregar un webhook y eso debe ser inofensivo.
+    el evento se ignora (tipo no relevante, sin `team_id`, equipo que no
+    existe, o evento ya procesado).
+
+    Idempotencia (capa nueva): si se pasa `webhooks` (un store con
+    `marcar(event_id) -> bool`), antes de aplicar marcamos el evento como
+    procesado. Si ya estaba, devolvemos `None` y NO reaplicamos. Stripe
+    garantiza entrega, no unicidad: un webhook reentregado por timeout
+    activaba side-effects extra y ruido en logs; ahora se aplica exactamente
+    una vez. Sin `webhooks` (modo legacy / sin DB): se mantiene el
+    comportamiento previo (idempotencia sólo por "fijar valores").
 
     Capa 31 (cobro por asiento): el alta guarda también el id de la
     suscripción de Stripe. Ese id es lo que hace falta para ajustar la
@@ -139,6 +151,20 @@ async def aplicar_evento_stripe(teams, evento: dict) -> dict | None:
     if cambio is None:
         return None
     team_id, plan = cambio
+    # Idempotencia por event_id: el chequeo va ANTES de tocar el plan o
+    # el ajuste de asientos. Si el evento no trae id (improbable con
+    # webhooks reales), se cae al comportamiento legacy: aplicar igual,
+    # confiando en que `actualizar_suscripcion` es fijar-valores. Mejor
+    # eso que ignorar silencioso un evento real sin id.
+    event_id = event_id_de(evento)
+    if webhooks is not None and event_id:
+        nuevo = await webhooks.marcar(event_id)
+        if not nuevo:
+            logger.info(
+                "Stripe: evento %s ya procesado (replay), se ignora",
+                event_id,
+            )
+            return None
     if await teams.equipo(team_id) is None:
         # Webhook para un equipo que no existe acá: lo más probable es un
         # evento de otra plataforma/entorno apuntando a este endpoint, o

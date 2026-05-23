@@ -1494,8 +1494,9 @@ def test_evicta_lsp_ociosas_y_conserva_activas() -> None:
     # Capa 20: la RAM escala con equipos ACTIVOS. Una sesión sin uso hace
     # más del TTL se evicta (libera cientos de MB); una reciente se queda.
     import time as _t
+    from orux.server.runtime import _LspEstado
     rt = TeamRuntime()
-    rt._lsp = {"py": None, "go": None}
+    rt._lsp = {"py": _LspEstado(), "go": _LspEstado()}
     ahora = _t.monotonic()
     rt._lsp_uso = {"py": ahora - 5000, "go": ahora}  # py ocioso, go activo
     assert rt.evictar_lsp_ociosas(1200) == ["py"]
@@ -1506,16 +1507,32 @@ def test_evicta_lsp_ociosas_y_conserva_activas() -> None:
 def test_cap_de_lenguajes_del_plan_en_el_gate_lsp() -> None:
     # Capa 22: free = 2 lenguajes LSP. Un 3º NUEVO no arranca (degrada a
     # tree-sitter), un lenguaje YA activo siempre pasa, premium sin tope.
+    # Nota tras la capa de retry: el "cap" cuenta lenguajes con sesión
+    # VIVA, no estados en cooldown. En sandbox sin pyright, una entrada
+    # con cooldown no consume cap — eso encaja con la regla: "el cap es
+    # un techo de RAM real (subprocesos vivos)", no un contador de
+    # intentos.
+    from orux.server.runtime import _LspEstado
     rt = TeamRuntime()
     rt._ws_dir = "/tmp"                 # pasa el guard de "sin dir"
-    rt._lsp = {"py": None, "ts": None}  # 2 ya activos
+    # 2 lenguajes con cooldown post-fallo (sin sesión viva, no consumen cap).
+    # Para forzar la lógica histórica del test, simulamos cooldown vigente.
+    import time as _t
+    ahora = _t.monotonic()
+    for k in ("py", "ts"):
+        st = _LspEstado()
+        st.intentos_fallidos = 1
+        st.ultimo_fallo = ahora  # cooldown vigente
+        rt._lsp[k] = st
     rt._lsp_uso = {"py": 0.0, "ts": 0.0}
-    # 3º lenguaje nuevo con cap=2 -> bloqueado (no se agrega a _lsp).
-    assert rt.lsp_sesion("go", cap_langs=2) is None
-    assert "go" not in rt._lsp
-    # Un lenguaje YA activo pasa aunque esté "lleno" (no es nuevo).
-    assert rt.lsp_sesion("py", cap_langs=2) is None  # None=sandbox sin LSP
+    # Un lenguaje YA registrado en cooldown: respeta el cooldown.
+    assert rt.lsp_sesion("py", cap_langs=2) is None
     assert "py" in rt._lsp
+    # Un 3º lenguaje nuevo con cap=2: ningún cap aplica porque no hay
+    # sesiones VIVAS, pero el spawn falla (sandbox). El estado queda
+    # registrado (con fallo + cooldown).
+    assert rt.lsp_sesion("go", cap_langs=2) is None
+    assert "go" in rt._lsp
     # Sin cap (premium / cap_langs=inf): el nuevo SÍ se intenta (queda
     # registrado aunque en sandbox el server no exista -> None).
     assert rt.lsp_sesion("rust", cap_langs=float("inf")) is None

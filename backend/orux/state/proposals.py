@@ -153,3 +153,52 @@ class Proposals:
                 propias.discard(pid)
                 if not propias:
                     del self._por_autor[prop.author_id]
+
+    def cargar(self, proposals: list) -> None:
+        """Hidrata el estado en memoria desde una lista de propuestas
+        (persistidas en un store). Se usa al construir el `TeamRuntime`:
+        las propuestas que existían antes del restart vuelven a estar
+        disponibles para el dueño cuando se conecte."""
+        for prop in proposals:
+            self._pendientes[prop.id] = prop
+            self._por_autor.setdefault(prop.author_id, set()).add(prop.id)
+
+
+# --- Store en memoria (tests sin Postgres) --------------------------------
+#
+# `PgProposalsStore` (db/stores.py) es la implementación real; este es el
+# equivalente en memoria que mantiene la MISMA superficie async para que
+# tests integren el flujo de persistencia sin levantar Postgres. Igual que
+# `MemTeamStore` con `PgTeamStore`.
+
+
+class MemProposalsStore:
+    """Store en memoria de propuestas por equipo. Útil en tests que validan
+    que el SyncServer escribe-a-través y rehidrata. Async para encajar con
+    el contrato (PgProposalsStore es async)."""
+
+    def __init__(self) -> None:
+        # team_id -> proposal_id -> Proposal
+        self._data: dict[str, dict[str, "object"]] = {}
+
+    async def cargar(self, team_id: str) -> list:
+        return list(self._data.get(team_id, {}).values())
+
+    async def guardar(self, team_id: str, prop) -> None:
+        self._data.setdefault(team_id, {})[prop.id] = prop
+
+    async def borrar(self, team_id: str, proposal_id: str) -> None:
+        d = self._data.get(team_id)
+        if d is not None:
+            d.pop(proposal_id, None)
+
+    async def borrar_path(self, team_id: str, path: str) -> None:
+        d = self._data.get(team_id)
+        if d is None:
+            return
+        self._data[team_id] = {
+            k: v for k, v in d.items() if v.path != path
+        }
+
+    async def borrar_todo(self, team_id: str) -> None:
+        self._data.pop(team_id, None)

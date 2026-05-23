@@ -58,6 +58,7 @@ def _secreto(base: Path) -> str:
     """
     env = os.environ.get("ORUX_SESSION_SECRET", "").strip()
     f = base / "secret"
+    log = logging.getLogger(__name__)
     if env and f.exists():
         try:
             del_archivo = f.read_text(encoding="utf-8").strip()
@@ -65,12 +66,20 @@ def _secreto(base: Path) -> str:
                 # BACKEND-AUDIT-0290: la divergencia env vs archivo invalida
                 # TODOS los tokens vivos (cada uno firmó con uno distinto).
                 # Loguear ALTO para que se note en ops.
-                logging.getLogger(__name__).warning(
+                log.warning(
                     "ORUX_SESSION_SECRET difiere del archivo %s: los tokens "
                     "firmados antes de este boot dejaron de valer", f,
                 )
-        except OSError:
-            pass
+        except OSError as e:
+            # Antes era `pass` silencioso: si el archivo existe pero no se
+            # puede LEER (permisos rotos en /data, FS sin permiso), perdíamos
+            # la oportunidad de avisar la divergencia env vs archivo en este
+            # boot. Logueamos warning explícito; el flujo sigue (este branch
+            # es solo para alertar, no obligatorio para arrancar).
+            log.warning(
+                "no se pudo leer %s para chequear divergencia env vs archivo: %s",
+                f, e,
+            )
     if env:
         return env
     if f.exists():
@@ -87,8 +96,16 @@ def _secreto(base: Path) -> str:
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         os.chmod(base, 0o700)
-    except OSError:
-        pass
+    except OSError as e:
+        # El dir queda con el modo que dio mkdir (suele ser ok con umask
+        # 077); el chmod era refuerzo defensivo. Antes era `pass` silencioso
+        # — si el FS no soporta chmod (Windows, ciertos volúmenes Docker
+        # mal montados), el operador NO se enteraba y el dir podía quedar
+        # 0755. Warning explícito para que se note.
+        log.warning(
+            "no se pudo aplicar chmod 0700 a %s (el dir queda con su modo "
+            "por defecto, revisá permisos): %s", base, e,
+        )
     s = token_hex(32)
     # El secreto firma TODOS los tokens de sesión: quien lo lea forja la
     # sesión de cualquier usuario. Se crea 0600 de forma atómica (no
@@ -123,7 +140,11 @@ async def _amain() -> None:
         # sigue valiendo "git clone basta" (cada carpeta es un repo de
         # verdad). Los equipos/usuarios sobreviven a reiniciar (Postgres).
         from ..db import Database
-        from ..db.stores import PgOwnershipStore, PgUserStore
+        from ..db.stores import (
+            PgOwnershipStore,
+            PgProposalsStore,
+            PgUserStore,
+        )
         from ..teams import PgTeamStore
 
         db = await Database.conectar(dsn)
@@ -143,10 +164,14 @@ async def _amain() -> None:
             users=PgUserStore(db),
             teams=PgTeamStore(db),
             ownership_store=PgOwnershipStore(db),
+            proposals_store=PgProposalsStore(db),
             runtime_factory=_runtime,
             secret=secret,
         )
-        log.info("estado: Postgres (users/teams/ownership) + ws por equipo en %s", ws_root)
+        log.info(
+            "estado: Postgres (users/teams/ownership/proposals) + "
+            "ws por equipo en %s", ws_root,
+        )
     else:
         # Sin DSN: modo en memoria/JSON de un solo equipo implícito (dev /
         # arranque sin DB). Los equipos NO sobreviven a reiniciar — por eso

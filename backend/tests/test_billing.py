@@ -360,3 +360,118 @@ async def test_aplicar_evento_guarda_y_limpia_la_suscripcion() -> None:
     }
     # La baja vuelve a free y borra el id (la suscripción dejó de existir).
     assert await s.suscripcion(tid) == ""
+
+
+# --- Idempotencia por event_id (capa nueva) ------------------------------
+#
+# `actualizar_suscripcion` ya "fija valores" -> reaplicar el mismo evento
+# no rompe el plan. Pero sí dispara side-effects extra (ruido en logs,
+# eventualmente cobros / cargos prorrateados en otras integraciones). Con
+# `MemWebhooksStore`/`PgWebhooksStore` la garantía sube a exactly-once:
+# un evento ya procesado se ignora silenciosamente y NO se reaplica.
+
+
+def test_event_id_de_extrae_evt_y_devuelve_vacio_si_no_hay() -> None:
+    assert billing.event_id_de({"id": "evt_42"}) == "evt_42"
+    assert billing.event_id_de({}) == ""
+    assert billing.event_id_de({"id": ""}) == ""
+    assert billing.event_id_de({"id": 123}) == ""  # tipo raro = ""
+
+
+async def test_memwebhooksstore_marcar_es_uno_a_la_vez() -> None:
+    w = billing.MemWebhooksStore()
+    assert await w.marcar("evt_1") is True
+    assert await w.marcar("evt_1") is False  # replay
+    assert await w.marcar("evt_2") is True
+
+
+async def test_aplicar_evento_idempotente_por_event_id() -> None:
+    """Mismo event_id dos veces: el segundo se ignora. El primer call
+    aplica y devuelve dict; el segundo devuelve None aunque el equipo y el
+    cambio existan — eso lo detecta el caller del webhook."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("Idem", "ana")
+    w = billing.MemWebhooksStore()
+    ev = {
+        "id": "evt_pago_1",
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"team_id": t["id"]}}},
+    }
+    primero = await aplicar_evento_stripe(s, ev, webhooks=w)
+    assert primero is not None and primero["plan"] == "premium"
+
+    # Reentregado por Stripe (mismo event_id): se ignora.
+    segundo = await aplicar_evento_stripe(s, ev, webhooks=w)
+    assert segundo is None
+    assert await s.plan(t["id"]) == "premium"  # estado intacto
+
+
+async def test_aplicar_evento_distinto_id_no_se_confunde() -> None:
+    """Si llegan DOS eventos legítimos distintos (id distinto), ambos se
+    aplican — la idempotencia es POR id, no global."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("Dos", "ana")
+    w = billing.MemWebhooksStore()
+    ev1 = {
+        "id": "evt_alta",
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"team_id": t["id"]}}},
+    }
+    ev2 = {
+        "id": "evt_baja",
+        "type": "customer.subscription.deleted",
+        "data": {"object": {"metadata": {"team_id": t["id"]}}},
+    }
+    assert await aplicar_evento_stripe(s, ev1, webhooks=w) is not None
+    assert await s.plan(t["id"]) == "premium"
+    assert await aplicar_evento_stripe(s, ev2, webhooks=w) is not None
+    assert await s.plan(t["id"]) == "free"
+
+
+async def test_aplicar_evento_sin_webhooks_store_se_comporta_como_antes() -> None:
+    """Sin store: el flujo legacy sigue valiendo (`actualizar_suscripcion`
+    fija valores, reaplicar no rompe). Compat estricta con tests previos."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("Legacy", "ana")
+    ev = {
+        "id": "evt_x",
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"team_id": t["id"]}}},
+    }
+    # Dos applicaciones sin webhooks: ambas no-None (cambian el plan).
+    a = await aplicar_evento_stripe(s, ev)
+    b = await aplicar_evento_stripe(s, ev)
+    assert a is not None and b is not None
+    assert await s.plan(t["id"]) == "premium"
+
+
+async def test_aplicar_evento_sin_event_id_aplica_igual() -> None:
+    """Defensivo: si llega un evento sin `id` (caso raro), no se ignora
+    en silencio — se aplica igual. Mejor eso que perder un cambio real."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("SinID", "ana")
+    w = billing.MemWebhooksStore()
+    ev = {
+        # sin "id"
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"team_id": t["id"]}}},
+    }
+    res = await aplicar_evento_stripe(s, ev, webhooks=w)
+    assert res is not None and res["plan"] == "premium"
+
+
+async def test_idempotencia_marca_antes_que_chequear_equipo() -> None:
+    """Si el evento es para un equipo inexistente, lo marcamos igual
+    como procesado: Stripe NO debe reintentar (200/ignored a propósito);
+    el id queda registrado para evitar ruido si llega de nuevo."""
+    s = MemTeamStore()
+    w = billing.MemWebhooksStore()
+    ev = {
+        "id": "evt_huerfano",
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"team_id": "no-existe"}}},
+    }
+    assert await aplicar_evento_stripe(s, ev, webhooks=w) is None
+    # El id se consumió aunque el equipo no existía: una reentrega del
+    # mismo evento ya no vuelve a entrar a la rama de "warning + return".
+    assert await w.marcar("evt_huerfano") is False

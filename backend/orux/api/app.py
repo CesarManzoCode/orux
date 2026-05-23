@@ -41,7 +41,7 @@ from starlette.routing import Route
 
 from .. import billing, stripe_client
 from ..db.pool import Database
-from ..db.stores import PgUserStore
+from ..db.stores import PgUserStore, PgWebhooksStore
 from ..identity import (
     crear_token,
     firmar_state,
@@ -591,7 +591,10 @@ async def _billing_webhook(req: Request) -> JSONResponse:
     except ValueError:
         return JSONResponse({"error": "payload inválido"}, status_code=400)
     try:
-        res = await service.aplicar_evento_stripe(req.app.state.teams, evento)
+        res = await service.aplicar_evento_stripe(
+            req.app.state.teams, evento,
+            webhooks=getattr(req.app.state, "webhooks", None),
+        )
     except Exception:  # noqa: BLE001
         # Falló persistir el cambio (DB caída, etc.). Devolvemos 500 a
         # propósito: Stripe reintenta el webhook con backoff y el upgrade
@@ -627,12 +630,16 @@ _MIDDLEWARE = [
 ]
 
 
-def crear_app(users, teams) -> Starlette:
+def crear_app(users, teams, webhooks=None) -> Starlette:
     """App con stores inyectados directo (DI; útil para tests con starlette
-    instalado). El deploy usa `app` (Postgres en startup)."""
+    instalado). `webhooks=None` deja el endpoint /billing/webhook sin
+    idempotencia por event_id (sólo "fijar valores"); pasar un store
+    activa la garantía exactly-once. El deploy usa `app` (Postgres en
+    startup)."""
     a = Starlette(routes=_RUTAS, middleware=_MIDDLEWARE)
     a.state.users = users
     a.state.teams = teams
+    a.state.webhooks = webhooks
     return a
 
 
@@ -653,6 +660,10 @@ async def _lifespan(app: Starlette):
     app.state.db = db
     app.state.users = PgUserStore(db)
     app.state.teams = PgTeamStore(db)
+    # Idempotencia de webhooks de Stripe: tabla `processed_webhooks` ya
+    # creada por `_aplicar_schema`. Cada webhook recibido se marca antes
+    # de aplicarse — un evento ya procesado se ignora silenciosamente.
+    app.state.webhooks = PgWebhooksStore(db)
     try:
         yield
     finally:

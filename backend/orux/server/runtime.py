@@ -14,6 +14,7 @@ gestiona el ciclo de vida de sus sesiones LSP.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 
@@ -22,6 +23,37 @@ from websockets.asyncio.server import ServerConnection
 from ..analysis.lsp import arrancar_lsp
 from ..git import GitRepo
 from ..state import DiskStorage, Ownership, Proposals, Roster, Workspace
+
+logger = logging.getLogger(__name__)
+
+
+class _LspEstado:
+    """Estado por lenguaje de un equipo: sesión viva, o cooldown tras
+    fallo. Antes el cache era `dict[str, SesionLSP | None]` y un None
+    quedaba GRABADO para siempre — si pyright no arrancaba una vez (env
+    sin libatomic, OOM, lo que sea), la degradación era permanente hasta
+    reciclar el LSP entero. Y si la sesión MORÍA después (subprocess
+    crash), la cache devolvía un objeto muerto y todas las llamadas
+    fallaban silenciosas. Este pequeño contenedor hace ambos casos
+    auto-recuperables.
+    """
+
+    def __init__(self) -> None:
+        self.sesion = None  # SesionLSP | None
+        self.ultimo_fallo: float = 0.0
+        self.intentos_fallidos: int = 0
+
+    def cooldown_seg(self) -> float:
+        """Backoff exponencial entre reintentos: 60s, 120s, 240s, ..., tope
+        en 1800s (30 min). El tope evita pelotear el spawn de pyright cada
+        análisis cuando el entorno está roto de raíz; permitir reintento
+        para auto-recuperar cuando se arregla."""
+        if self.intentos_fallidos <= 0:
+            return 0.0
+        return min(1800.0, 60.0 * (2 ** (self.intentos_fallidos - 1)))
+
+    def puede_reintentar(self, ahora: float) -> bool:
+        return ahora - self.ultimo_fallo >= self.cooldown_seg()
 
 
 class TeamRuntime:
@@ -46,8 +78,13 @@ class TeamRuntime:
         self._ws_dir = str(storage.root) if storage is not None else None
         # Capa 18: una sesión LSP POR LENGUAJE ("py"->pyright,
         # "jsts"->tsserver). Lazy: se arranca al 1er análisis de ESE
-        # lenguaje y se cachea (incl. None = "no hay, no reintentar").
-        self._lsp: dict[str, object] = {}
+        # lenguaje. Antes cacheaba `None` para siempre tras un fallo;
+        # ahora cada entrada es un `_LspEstado` que sabe (a) si la sesión
+        # cacheada murió (detectable vía `disponible()`), (b) si toca
+        # reintentar arrancar tras el cooldown exponencial. Auto-recupera
+        # de OOMs/segfaults y de un entorno que arregla el operador en
+        # caliente, sin tener que evictar todo y reciclar.
+        self._lsp: dict[str, _LspEstado] = {}
         self._lsp_uso: dict[str, float] = {}  # lang -> last use (monotonic)
         self._lsp_lock = threading.Lock()
         # Capa 19: último contenido ANALIZADO por archivo (baseline del
@@ -66,6 +103,17 @@ class TeamRuntime:
         # Serializa commit/clone/push de ESTE equipo (subprocess+fs sobre su
         # workspace). Por-runtime: el git de un equipo no bloquea al de otro.
         self._git_lock = asyncio.Lock()
+        # Eviction de runtimes ociosos. El barrido evicta runtimes sin
+        # conexiones desde hace > TTL. Sin esto, `SyncServer._runtimes`
+        # crecía sin techo: cada equipo que se conectó alguna vez
+        # retenía RAM (workspace + ownership + presencia + propuestas)
+        # hasta que el proceso muriera. Marca: monotonic() cuando el
+        # ÚLTIMO cliente se va; None cuando hay al menos uno conectado.
+        # El runtime es perezoso por equipo: al volver alguien, se
+        # rehidrata vía `_runtime_para` (ownership y propuestas desde
+        # Postgres si hay store; sin store, modo dev — no evictamos
+        # runtimes con propuestas pendientes para no perderlas).
+        self._vacio_desde: float | None = time.monotonic()
         # Robustez (auditoría C1/C2/A1/A2): serializa los tramos
         # read-modify-write del equipo (Update/Save/Resolve/Delete/Claim/
         # AdminAssign + el reinicio tras clone). Sin esto, dos handlers que
@@ -84,11 +132,19 @@ class TeamRuntime:
         """Sesión LSP de ESTE equipo para `lang`, tibia: se arranca UNA vez
         (lazy, en el 1er análisis de ese lenguaje) y se reusa. Llamar
         SIEMPRE desde un hilo worker (spawn+handshake es bloqueante). None
-        si el lenguaje no tiene server / no hay dir => degrada a capa 16.
-        Cachear None evita reintentar el spawn en cada tecla.
+        si el lenguaje no tiene server / no hay dir / la sesión está en
+        cooldown tras un fallo => degrada a capa 16.
 
-        Capa 22: `cap_langs` = tope de lenguajes LSP del plan del equipo. Si
-        ya hay `cap_langs` lenguajes con sesión y este es NUEVO, NO se
+        Reintento + detección de muerte (capa nueva): si la sesión
+        cacheada murió (subprocess crash, OOM), se descarta y se reintenta
+        arrancar; si arrancar falla, se aplica un cooldown exponencial
+        (60s, 120s, 240s, ..., tope 30 min) antes del próximo intento. El
+        operador puede arreglar el entorno (`apt install libatomic1`,
+        liberar RAM) y el LSP vuelve solo sin tener que reciclar el
+        equipo entero.
+
+        Capa 22: `cap_langs` = tope de lenguajes LSP del plan del equipo.
+        Si ya hay `cap_langs` lenguajes con sesión y este es NUEVO, NO se
         arranca (degrada a tree-sitter/coarse, no rompe). Es el lever de
         costo real: premium = sin tope. El cap lo precomputa el server en
         el loop (el plan vive en un store async); acá solo se aplica.
@@ -96,14 +152,74 @@ class TeamRuntime:
         if lang is None or self._ws_dir is None:
             return None
         with self._lsp_lock:
-            if lang not in self._lsp:
-                if cap_langs is not None and len(self._lsp) >= cap_langs:
-                    return None  # tope del plan: no se paga el LSP extra
-                self._lsp[lang] = arrancar_lsp(lang, self._ws_dir)
-            # Marca de último uso para el barrido de ociosas: el server vive
-            # mientras el equipo lo use; si no, se evicta y libera RAM.
-            self._lsp_uso[lang] = time.monotonic()
-            return self._lsp[lang]
+            ahora = time.monotonic()
+            estado = self._lsp.get(lang)
+
+            # Caso A: tenemos una sesión cacheada.
+            if estado is not None and estado.sesion is not None:
+                if estado.sesion.disponible():
+                    self._lsp_uso[lang] = ahora
+                    return estado.sesion
+                # Subprocess murió silenciosamente: limpiarlo y caer
+                # abajo a la lógica de re-arranque con cooldown.
+                logger.warning(
+                    "LSP %s murió (subprocess), reintentando", lang,
+                )
+                try:
+                    estado.sesion.cerrar()
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "error cerrando LSP %s muerto: %r", lang, e,
+                    )
+                estado.sesion = None
+
+            # Caso B: en cooldown tras fallo previo, no insistir.
+            if estado is not None and not estado.puede_reintentar(ahora):
+                return None
+
+            # Caso C: tope del plan — solo aplica a lenguajes NUEVOS
+            # (sin estado todavía). Si ya teníamos estado, este lang ya
+            # contó alguna vez; no lo bloqueamos por venir de un fallo.
+            if (
+                cap_langs is not None and estado is None
+                and self._lsp_lenguajes_activos() >= cap_langs
+            ):
+                return None
+
+            # Reintentar / arrancar por primera vez.
+            nueva = arrancar_lsp(lang, self._ws_dir)
+            if estado is None:
+                estado = _LspEstado()
+                self._lsp[lang] = estado
+            if nueva is not None:
+                if estado.intentos_fallidos > 0:
+                    logger.info(
+                        "LSP %s re-arrancado tras %d fallo(s)",
+                        lang, estado.intentos_fallidos,
+                    )
+                estado.sesion = nueva
+                estado.intentos_fallidos = 0
+                estado.ultimo_fallo = 0.0
+                self._lsp_uso[lang] = ahora
+                return nueva
+            # Falló (arrancar_lsp ya logueó el porqué exacto). Marca
+            # fallo + cooldown crecente.
+            estado.intentos_fallidos += 1
+            estado.ultimo_fallo = ahora
+            logger.warning(
+                "LSP %s arranque #%d falló; próximo reintento en %ds",
+                lang, estado.intentos_fallidos,
+                int(estado.cooldown_seg()),
+            )
+            return None
+
+    def _lsp_lenguajes_activos(self) -> int:
+        """Cantidad de lenguajes con sesión LSP VIVA. Cooldowns no
+        cuentan para el cap del plan (no hay sesión consumiendo RAM)."""
+        return sum(
+            1 for e in self._lsp.values()
+            if e.sesion is not None and e.sesion.disponible()
+        )
 
     def evictar_lsp_ociosas(self, ttl: float) -> list[str]:
         """Cierra las sesiones sin uso hace más de `ttl` segundos y las
@@ -116,14 +232,16 @@ class TeamRuntime:
         evictadas: list[str] = []
         with self._lsp_lock:
             for lang in list(self._lsp):
-                ses = self._lsp[lang]
+                estado = self._lsp[lang]
                 if ahora - self._lsp_uso.get(lang, ahora) < ttl:
                     continue
-                if ses is not None:
+                if estado.sesion is not None:
                     try:
-                        ses.cerrar()
-                    except Exception:  # noqa: BLE001
-                        pass
+                        estado.sesion.cerrar()
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "error cerrando LSP %s ociosa: %r", lang, e,
+                        )
                 del self._lsp[lang]
                 self._lsp_uso.pop(lang, None)
                 evictadas.append(lang)
@@ -134,11 +252,14 @@ class TeamRuntime:
         Para el reinicio de capa 15 (clone destructivo cambia TODO el
         workspace: el índice de cada server quedó obsoleto)."""
         with self._lsp_lock:
-            for ses in self._lsp.values():
-                if ses is not None:
+            for lang, estado in self._lsp.items():
+                if estado.sesion is not None:
                     try:
-                        ses.cerrar()
-                    except Exception:  # noqa: BLE001
-                        pass
+                        estado.sesion.cerrar()
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "error cerrando LSP %s al reciclar: %r",
+                            lang, e,
+                        )
             self._lsp = {}
             self._lsp_uso = {}

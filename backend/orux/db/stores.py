@@ -1,7 +1,7 @@
-"""Adaptadores Postgres de usuarios y ownership. MISMA semántica que sus
-contrapartes en memoria; el server no sabe con cuál habla. NO importan
-asyncpg (sólo usan el `Database` inyectado): `import` seguro en el sandbox.
-Se ejercitan de verdad en el VPS (paso 3b), no acá.
+"""Adaptadores Postgres de usuarios, ownership, propuestas y webhooks.
+MISMA semántica que sus contrapartes en memoria; el server no sabe con cuál
+habla. NO importan asyncpg (sólo usan el `Database` inyectado): `import`
+seguro en el sandbox. Se ejercitan de verdad en el VPS (paso 3b), no acá.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from ..identity.passwords import (
     verificar_password,
 )
 from ..identity.store import normalizar, validar_nuevo_usuario
+from ..protocol import Proposal
 
 
 class PgUserStore:
@@ -137,3 +138,125 @@ class PgOwnershipStore:
                     "DO UPDATE SET owner = EXCLUDED.owner",
                     a_upsert,
                 )
+
+
+class PgProposalsStore:
+    """Persistencia de propuestas POR EQUIPO. Igual que `PgOwnershipStore`:
+    el hot path sigue siendo el dict en memoria del runtime; este store
+    sólo CARGA al abrir el equipo y se escribe-a-través tras cada mutación
+    (put / pop / drop_path / reset por clone destructivo).
+
+    Antes vivían sólo en memoria del `TeamRuntime`: un deploy a mitad de
+    "Ana editó, Kai por aprobar" perdía el estado. Con esto, un restart del
+    server reconstruye las propuestas pendientes y la conversación sigue.
+
+    El `proposal_id` (`path::author_id`) es determinista: el UPSERT
+    reemplaza la propuesta vieja si el autor reedita el mismo path —misma
+    semántica que `Proposals.put` en memoria.
+    """
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def cargar(self, team_id: str) -> list[Proposal]:
+        rows = await self._db.fetch(
+            "SELECT proposal_id, path, author_id, author_name, content "
+            "FROM proposals WHERE team_id=$1",
+            team_id,
+        )
+        return [
+            Proposal(
+                id=r["proposal_id"],
+                path=r["path"],
+                author_id=r["author_id"],
+                author_name=r["author_name"],
+                content=r["content"],
+            )
+            for r in rows
+        ]
+
+    async def guardar(self, team_id: str, prop: Proposal) -> None:
+        """UPSERT de una propuesta. Reemplazo en reedición = mismo
+        proposal_id, content nuevo (`DO UPDATE`)."""
+        await self._db.execute(
+            "INSERT INTO proposals "
+            "(team_id, proposal_id, path, author_id, author_name, content) "
+            "VALUES ($1,$2,$3,$4,$5,$6) "
+            "ON CONFLICT (team_id, proposal_id) "
+            "DO UPDATE SET content = EXCLUDED.content, "
+            "              author_name = EXCLUDED.author_name",
+            team_id, prop.id, prop.path,
+            prop.author_id, prop.author_name, prop.content,
+        )
+
+    async def borrar(self, team_id: str, proposal_id: str) -> None:
+        """Al aprobar/rechazar (Resolve)."""
+        await self._db.execute(
+            "DELETE FROM proposals WHERE team_id=$1 AND proposal_id=$2",
+            team_id, proposal_id,
+        )
+
+    async def borrar_path(self, team_id: str, path: str) -> None:
+        """Al borrarse el archivo (Delete): todas las propuestas sobre
+        ese path quedan moot."""
+        await self._db.execute(
+            "DELETE FROM proposals WHERE team_id=$1 AND path=$2",
+            team_id, path,
+        )
+
+    async def borrar_todo(self, team_id: str) -> None:
+        """Tras un clone destructivo: el workspace es otro repo, las
+        propuestas viejas ya no aplican."""
+        await self._db.execute(
+            "DELETE FROM proposals WHERE team_id=$1", team_id,
+        )
+
+
+class PgWebhooksStore:
+    """Idempotencia de webhooks de Stripe por event_id.
+
+    Stripe garantiza ENTREGA, no orden ni unicidad. Sin esto:
+    - un webhook reentregado por timeout aplica el cambio dos veces (con
+      `actualizar_suscripcion` que fija valores no rompe nada en la
+      práctica, pero loguea ruido y dispara side-effects extra);
+    - peor: si `customer.subscription.deleted` llega DESPUÉS de un evento
+      más nuevo por demora de red, el equipo queda en `free` aunque siga
+      pagando. (En la práctica acá no hay update intermedio mapeado a un
+      cambio de plan, pero sí pasa con secuencias raras del dashboard).
+
+    Esta tabla resuelve la primera (idempotencia exacta por event_id) y
+    da base para resolver la segunda (ordenar por `created` del evento).
+    Hoy resuelve la primera; la segunda se aborda al haber un caso real.
+    """
+
+    def __init__(self, db) -> None:
+        self._db = db
+
+    async def marcar(self, event_id: str) -> bool:
+        """True si es la PRIMERA vez (insertó); False si ya estaba (replay).
+
+        Usa `INSERT ... ON CONFLICT DO NOTHING RETURNING event_id`: la
+        decisión "primera o replay" es atómica (no hay carrera entre
+        SELECT y INSERT — dos workers procesando el mismo webhook a la
+        vez ven una decisión consistente)."""
+        v = await self._db.fetchval(
+            "INSERT INTO processed_webhooks (event_id) VALUES ($1) "
+            "ON CONFLICT (event_id) DO NOTHING RETURNING event_id",
+            event_id,
+        )
+        return v is not None
+
+    async def purgar(self, antes_de_segundos: int = 30 * 24 * 3600) -> int:
+        """Borra eventos procesados hace más de `antes_de_segundos`.
+        Stripe ya no reentrega tras ~30 días, así que un event_id
+        olvidado a los 30 no rompe la idempotencia en la práctica.
+        Devuelve cuántos se borraron (para loguear)."""
+        res = await self._db.execute(
+            "DELETE FROM processed_webhooks "
+            "WHERE processed_at < now() - ($1 || ' seconds')::interval",
+            str(int(antes_de_segundos)),
+        )
+        try:
+            return int(res.split()[-1])
+        except (ValueError, IndexError):
+            return 0

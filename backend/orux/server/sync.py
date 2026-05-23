@@ -206,6 +206,7 @@ class SyncServer:
         teams: object | None = None,
         runtime_factory=None,
         ownership_store: object | None = None,
+        proposals_store: object | None = None,
     ) -> None:
         # Compat con la firma previa: si pasan storage/ownership/git
         # concretos (tests de git), ese trío se usa para el equipo que se
@@ -220,8 +221,15 @@ class SyncServer:
         # tests. `ownership_store` (PgOwnershipStore|None) persiste el mapa
         # de ownership por equipo: se CARGA al abrir el equipo y se GUARDA
         # tras cada cambio (el hot path sigue siendo el mapa en memoria).
+        # `proposals_store` (PgProposalsStore|None) durabiliza las
+        # propuestas tentativas: antes vivían SOLO en memoria del runtime
+        # y un deploy a mitad de "Ana editó, Kai por aprobar" perdía el
+        # estado. Mismo patrón que ownership_store: cargar al abrir el
+        # equipo, escribir-a-través tras cada mutación; el hot path sigue
+        # siendo el dict en memoria del runtime.
         self._runtime_factory = runtime_factory
         self._ownership_store = ownership_store
+        self._proposals_store = proposals_store
         # Capa 7/15: usuarios SIEMPRE async para el server (envuelve el
         # sync de tests; PgUserStore pasa tal cual).
         self.users = _wrap_users(users)
@@ -399,6 +407,14 @@ class SyncServer:
                 guardados = await self._ownership_store.cargar(team_id)
                 for path, dueño in guardados.items():
                     rt.ownership.asignar(path, dueño)
+            if self._proposals_store is not None:
+                # Rehidrata las propuestas pendientes desde Postgres: si
+                # el server reinició a mitad de "Ana editó, Kai por
+                # aprobar", al abrir el equipo Kai vuelve a recibir la
+                # propuesta en el handshake (vía `proposals.para`).
+                rt.proposals.cargar(
+                    await self._proposals_store.cargar(team_id)
+                )
             self._runtimes[team_id] = rt
             return rt
 
@@ -410,6 +426,34 @@ class SyncServer:
             await self._ownership_store.guardar(
                 rt.team_id, rt.ownership.snapshot()
             )
+
+    async def _persistir_prop(self, rt: TeamRuntime, prop) -> None:
+        """Escribe-a-través UNA propuesta tentativa. Mismo patrón que
+        `_persistir_own`: el dict en memoria (rt.proposals) es la verdad
+        del hot path; esto durabiliza el cambio. Sin store: no-op."""
+        if self._proposals_store is not None:
+            await self._proposals_store.guardar(rt.team_id, prop)
+
+    async def _borrar_prop(
+        self, rt: TeamRuntime, proposal_id: str
+    ) -> None:
+        """Quita la propuesta del store (Resolve aprobó/rechazó)."""
+        if self._proposals_store is not None:
+            await self._proposals_store.borrar(rt.team_id, proposal_id)
+
+    async def _borrar_props_path(
+        self, rt: TeamRuntime, path: str
+    ) -> None:
+        """Borra todas las propuestas sobre `path` del store (Delete del
+        archivo deja la propuesta sin objeto)."""
+        if self._proposals_store is not None:
+            await self._proposals_store.borrar_path(rt.team_id, path)
+
+    async def _borrar_props_todo(self, rt: TeamRuntime) -> None:
+        """Limpia el set entero del equipo (clone destructivo: el
+        workspace es otro repo, las propuestas viejas no aplican)."""
+        if self._proposals_store is not None:
+            await self._proposals_store.borrar_todo(rt.team_id)
 
     # --- Envío scopeado al equipo (rt) ---
 
@@ -735,6 +779,7 @@ class SyncServer:
                     author_name=etiqueta,
                     content=propuesto,
                 )
+                await self._persistir_prop(rt, prop)
                 await self._enviar_a(
                     rt, dueño, encode(ProposalMessage(proposal=prop))
                 )
@@ -779,6 +824,7 @@ class SyncServer:
         rt.reciclar_lsp()  # capa 17: el índice de pyright quedó obsoleto
         await self._persistir_own(rt)  # el ownership viejo ya no aplica
         rt.proposals = Proposals()
+        await self._borrar_props_todo(rt)  # set entero invalidado
         init = encode(InitMessage(files=rt.workspace.snapshot()))
         own = encode(OwnershipMessage(owners=rt.ownership.snapshot()))
         gs = await self._git_status_encoded(rt)
@@ -1056,6 +1102,8 @@ class SyncServer:
         """
         rt = await self._runtime_para(team_id)
         rt.clients.add(websocket)
+        # Alguien entró: el runtime ya no está ocioso, cancelar la marca.
+        rt._vacio_desde = None
         yo = rt.roster.asignar(usuario)
         rt._ids[websocket] = yo.client_id
         rt._conns[yo.client_id] = websocket
@@ -1169,6 +1217,13 @@ class SyncServer:
                 "usuario %s salió del equipo %s — %d en el equipo",
                 yo.client_id, team_id, len(rt.clients),
             )
+            # Si fue el último, marca el momento — el barrido de
+            # `_barrer_runtimes_ociosos` evicta el runtime entero tras
+            # TTL si sigue vacío. Liberar RAM en lugar de retener
+            # workspace + ownership + presencia + propuestas para un
+            # equipo que ya nadie está usando.
+            if not rt.clients:
+                rt._vacio_desde = time.monotonic()
 
 
     # Mensajes que mutan estado compartido del equipo (workspace/ownership/
@@ -1234,6 +1289,24 @@ class SyncServer:
         else:
             await self._aplicar(rt, websocket, yo, team_id, message)
 
+    async def _es_admin_o_logear(
+        self, team_id: str, client_id: str, accion: str,
+    ) -> bool:
+        """Compuerta admin con audit log al rechazar. Antes, las acciones
+        admin (assign de ownership, invite) se ignoraban silenciosas si
+        las pedía un member — sin rastro en logs. Compliance + diagnóstico
+        necesitan saber QUIÉN intentó QUÉ y cuándo, aunque no haya
+        consecuencia. Devuelve True si pasa (es admin), False si no
+        (loguea WARN y deja al caller seguir/return)."""
+        rol = await self.teams.rol(team_id, client_id)
+        if rol == "admin":
+            return True
+        logger.warning(
+            "admin-rechazado: %s (rol=%s) intentó %r en equipo %s",
+            client_id, rol or "no-miembro", accion, team_id,
+        )
+        return False
+
     async def _aplicar(
         self,
         rt: TeamRuntime,
@@ -1265,6 +1338,7 @@ class SyncServer:
                     author_name=yo.name,
                     content=message.content,
                 )
+                await self._persistir_prop(rt, prop)
                 await self._enviar_a(
                     rt, dueño, encode(ProposalMessage(proposal=prop))
                 )
@@ -1373,6 +1447,7 @@ class SyncServer:
                         yo.client_id, message.path, team_id,
                     )
                     rt.proposals.drop_path(message.path)
+                    await self._borrar_props_path(rt, message.path)
                     # Capa 19: si se recrea, re-basea desde cero.
                     rt._analizado.pop(message.path, None)
                     cambio_owner = rt.ownership.liberar(message.path)
@@ -1399,11 +1474,16 @@ class SyncServer:
             )
         elif isinstance(message, AdminAssignMessage):
             # Capa 12/15: el admin DEL EQUIPO reparte ownership. Sólo
-            # el admin del equipo; un no-admin se ignora en silencio.
-            # `username` vacío = revocar. El destino debe ser miembro
-            # del equipo (asignar a alguien de afuera no tiene sentido
-            # y rompería el aislamiento).
-            if await self.teams.rol(team_id, yo.client_id) == "admin":
+            # el admin del equipo; un no-admin se ignora (con audit log
+            # — un member intentando admin queda en el WARN para
+            # compliance + diagnóstico). `username` vacío = revocar. El
+            # destino debe ser miembro del equipo (asignar a alguien de
+            # afuera no tiene sentido y rompería el aislamiento).
+            if await self._es_admin_o_logear(
+                team_id, yo.client_id,
+                f"admin_assign(path={message.path!r}, "
+                f"username={message.username!r})",
+            ):
                 aplicado = False
                 if message.username:
                     destino = normalizar(message.username)
@@ -1425,7 +1505,11 @@ class SyncServer:
         elif isinstance(message, AdminAssignManyMessage):
             # Capa 13/15: reparto masivo, un solo broadcast. Misma
             # compuerta (admin del equipo) y reglas que admin_assign.
-            if await self.teams.rol(team_id, yo.client_id) == "admin":
+            if await self._es_admin_o_logear(
+                team_id, yo.client_id,
+                f"admin_assign_many(n={len(message.paths)}, "
+                f"username={message.username!r})",
+            ):
                 destino = (
                     normalizar(message.username)
                     if message.username else ""
@@ -1459,9 +1543,12 @@ class SyncServer:
                     )
         elif isinstance(message, CreateInviteMessage):
             # Capa 15: el admin del equipo genera un código para
-            # invitar. Sólo el admin; un no-admin se ignora (igual
-            # que toda acción no autorizada: no se delata).
-            if await self.teams.rol(team_id, yo.client_id) == "admin":
+            # invitar. Sólo el admin; un no-admin se ignora pero
+            # queda en el audit log (un member sondeando "puedo invitar"
+            # es señal útil para diagnóstico).
+            if await self._es_admin_o_logear(
+                team_id, yo.client_id, "create_invite",
+            ):
                 try:
                     code = await self.teams.crear_invitacion(
                         team_id, yo.client_id
@@ -1480,6 +1567,7 @@ class SyncServer:
                 prop.path
             ) == yo.client_id:
                 rt.proposals.pop(message.proposal_id)
+                await self._borrar_prop(rt, message.proposal_id)
                 if message.accept:
                     viejo = rt.workspace.snapshot().get(prop.path, "")
                     rt.workspace.update(prop.path, prop.content)
@@ -1644,6 +1732,81 @@ class SyncServer:
                         int(ttl), tid, ", ".join(ev),
                     )
 
+    def _runtime_evictable(self, rt: TeamRuntime, ttl: float, ahora: float) -> bool:
+        """¿Es seguro evictar este runtime ahora?
+
+        Reglas (todas deben cumplirse):
+        - Sin conexiones vivas (`rt.clients` vacío) — obvio.
+        - Ocioso desde hace > `ttl` (`_vacio_desde` no None y suficientemente viejo).
+        - Sus propuestas tentativas están persistidas (`proposals_store`),
+          O no tiene propuestas pendientes. Sin persistencia, evictar
+          significa PERDER propuestas; en modo dev preferimos retener RAM.
+        - Sin trabajo en vuelo: si el git_lock o el estado_lock están
+          tomados, alguien está procesando un mensaje justo ahora — no
+          tocar. (Race contra `_runtime_para` la cubre el lock por team_id
+          arriba en `evictar_runtimes_ociosos`.)
+        """
+        if rt.clients:
+            return False
+        if rt._vacio_desde is None:
+            return False
+        if ahora - rt._vacio_desde < ttl:
+            return False
+        if rt.proposals._pendientes and self._proposals_store is None:
+            return False
+        if rt._git_lock.locked() or rt._estado_lock.locked():
+            return False
+        return True
+
+    async def _evictar_runtime(self, team_id: str) -> bool:
+        """Saca el runtime del registro y libera sus sesiones LSP.
+        Re-chequea bajo el lock por team_id que sigue siendo evictable
+        (otra conexión pudo entrar entre el barrido y acá). Devuelve True
+        si efectivamente lo evictó."""
+        lock = self._rt_locks.get(team_id)
+        if lock is None:
+            return False
+        async with lock:
+            rt = self._runtimes.get(team_id)
+            if rt is None:
+                return False
+            # Re-check defensivo: si una conexión entró justo entre el
+            # barrido y este lock, abortar.
+            if rt.clients or rt._vacio_desde is None:
+                return False
+            rt.reciclar_lsp()  # cierra subprocesos LSP (cientos de MB)
+            del self._runtimes[team_id]
+        # Limpieza fuera del lock (otras conexiones del MISMO equipo van
+        # a crear locks nuevos al volver, vía `setdefault`).
+        self._rt_locks.pop(team_id, None)
+        self._asientos_locks.pop(team_id, None)
+        return True
+
+    async def _barrer_runtimes_ociosos(self, ttl: float) -> None:
+        """Tarea de fondo: cada minuto evicta runtimes sin conexiones desde
+        hace > `ttl`. Sin esto, `_runtimes` crece sin techo (cada equipo
+        que se conectó alguna vez retiene RAM hasta que el proceso muera).
+
+        Al volver alguien al equipo, `_runtime_para` reconstruye el
+        runtime y rehidrata ownership + propuestas desde Postgres (capa
+        15 y persistencia de propuestas). El usuario no ve diferencia
+        más allá de un instante de "primer mensaje" un poco más caro
+        (igual que la primera conexión al deploy).
+        """
+        while True:
+            await asyncio.sleep(60)
+            ahora = time.monotonic()
+            candidatos = [
+                tid for tid, rt in list(self._runtimes.items())
+                if self._runtime_evictable(rt, ttl, ahora)
+            ]
+            for tid in candidatos:
+                if await self._evictar_runtime(tid):
+                    logger.info(
+                        "runtime evictado por ocioso (%ds) equipo %s",
+                        int(ttl), tid,
+                    )
+
     async def run(self, host: str = "localhost", port: int = 8765) -> None:
         """Arranca el server WebSocket y lo deja escuchando para siempre.
 
@@ -1659,6 +1822,16 @@ class SyncServer:
         # latencia-de-reentrada. Pagar el reindex ocasional << retener
         # cientos de MB de equipos que ya no están.
         ttl = _env_float("ORUX_LSP_IDLE_SEC", 1200.0, 60.0, 24 * 3600.0)
+        # TTL de runtime ocioso (default 1h): un equipo SIN nadie
+        # conectado desde hace una hora se evicta entero. Más holgado que
+        # el TTL de LSP porque tirar un runtime invalida más cosas
+        # (presencia, baseline de análisis); reconstruirlo desde el store
+        # (ownership + propuestas) es barato pero el primer mensaje
+        # paga la rehidratación. Floor en 5 min para que tests/dev no
+        # esperen demasiado.
+        rt_ttl = _env_float(
+            "ORUX_RUNTIME_IDLE_SEC", 3600.0, 300.0, 7 * 24 * 3600.0,
+        )
         async with serve(
             self.handle, host, port,
             max_size=WS_MAX_SIZE, max_queue=WS_MAX_QUEUE,
@@ -1668,4 +1841,5 @@ class SyncServer:
                 host, port, WS_MAX_SIZE, WS_MAX_QUEUE,
             )
             asyncio.create_task(self._barrer_lsp_ociosas(ttl))
+            asyncio.create_task(self._barrer_runtimes_ociosos(rt_ttl))
             await asyncio.Future()

@@ -282,3 +282,41 @@ def params_actualizar_cantidad(seats: int) -> dict[str, str]:
         "quantity": str(max(1, int(seats))),
         "proration_behavior": "create_prorations",
     }
+
+
+def event_id_de(evento: dict) -> str:
+    """Saca el `id` del evento de Stripe (`evt_...`), o `""` si no lo trae.
+
+    Cada evento de Stripe tiene un id único y estable: si Stripe reentrega
+    el webhook (por timeout, por orden, manualmente desde el dashboard), el
+    id es el mismo. Eso lo hace la base para idempotencia.
+    """
+    v = evento.get("id")
+    return v if isinstance(v, str) and v else ""
+
+
+# --- Store en memoria de webhooks ya aplicados (tests / dev) --------------
+#
+# `PgWebhooksStore` (db/stores.py) es la implementación real para deploy;
+# este es el equivalente en memoria. Mismo contrato async para que el
+# servicio (`aplicar_evento_stripe`) hable con uno u otro sin saberlo.
+
+
+class MemWebhooksStore:
+    """Tracking en memoria de event_id ya procesados (tests sin Postgres).
+    No persiste cross-restart — ese es justamente el caso del store real
+    en Postgres."""
+
+    def __init__(self) -> None:
+        self._vistos: set[str] = set()
+
+    async def marcar(self, event_id: str) -> bool:
+        """True = primera vez; False = ya lo procesamos (replay)."""
+        if event_id in self._vistos:
+            return False
+        self._vistos.add(event_id)
+        return True
+
+    async def purgar(self, antes_de_segundos: int = 0) -> int:
+        """No-op en memoria (los tests no necesitan TTL real)."""
+        return 0
