@@ -134,14 +134,19 @@
    sumar `X` en el template (o un nuevo row). Default 2 columnas. */
 .hub-grid {
   position: relative; z-index: 1;
-  display: grid; gap: 1rem;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  display: grid; gap: 1.1rem;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   grid-template-areas:
     "teams id"
     "teams new"
     "sys   sys";
-  padding: 1.4rem clamp(1.2rem, 3vw, 2rem) 2rem;
-  max-width: 1200px; width: 100%; margin: 0 auto;
+  /* Capa 33: el hub deja de ser una "ventana flotante" de 1200px en el
+     centro de la pantalla. Subimos a 1600px y nos comemos los márgenes
+     laterales con clamp() para que en monitores anchos se sienta un
+     dashboard, no una tarjeta flotando. Por debajo de 1600 quedamos
+     contenidos sin tocar nada. */
+  padding: 1.5rem clamp(1.4rem, 4vw, 2.4rem) 2.2rem;
+  max-width: 1600px; width: 100%; margin: 0 auto;
   animation: rise-in .5s var(--ease-in) both;
 }
 .hc-teams { grid-area: teams; }
@@ -190,8 +195,11 @@
    / .ht-* se reusan del diseño previo (lo único que rescatamos: la fila
    ya estaba bien). */
 .hub-teams {
-  display: flex; flex-direction: column; gap: 8px;
-  max-height: 540px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  /* Capa 33: subimos el tope para aprovechar la altura del hub
+     pantalla-completa. Antes 540px obligaba a scrollear con 5-6 equipos;
+     ahora se ve la lista entera en pantallas estándar. */
+  max-height: min(720px, calc(100vh - 280px)); overflow-y: auto;
   list-style: none; padding: 0; margin: 0;
   scrollbar-width: thin;
 }
@@ -426,12 +434,107 @@
   font: 800 10px/1 var(--font-ui);
 }
 
-/* Costura entre los dos formularios. */
+/* Costura entre los dos formularios (sigue usándose como helper en otros
+   sitios; el Hub ya no la pinta porque los forms son alternativos, no
+   apilados). */
 .hub-sep {
   height: 1px; margin: 0.95rem 0 0.85rem;
   background: linear-gradient(90deg,
     transparent, var(--border-soft) 12%, var(--border-soft) 88%, transparent);
 }
+
+/* ── Capa 33: PICKER de Crear/Unirme ────────────────────────────────────
+   Antes los dos formularios estaban siempre desplegados con placeholders
+   que no comunicaban la acción. Ahora arrancamos con dos "cards-botón"
+   que explican el destino (crear vs unirme con código); el formulario
+   sólo se expande al elegir. */
+.hub-pick {
+  display: flex; flex-direction: column; gap: 0.55rem;
+  animation: fade-in 220ms var(--ease-in) both;
+}
+.hub-pick-card {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; text-align: left;
+  padding: 0.95rem 1.05rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: background var(--tr), border-color var(--tr),
+    transform var(--tr), box-shadow var(--tr);
+}
+.hub-pick-card:hover {
+  background: var(--surface-3);
+  border-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 10px 24px -20px rgba(0, 0, 0, 0.6);
+  transform: translateY(-1px);
+}
+.hub-pick-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent),
+    0 0 0 2px var(--bg-deep), 0 0 0 3.5px var(--accent-soft);
+}
+.hpc-ic {
+  display: grid; place-items: center; flex: none;
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+}
+.hpc-tx {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.hpc-tx b {
+  font-size: var(--t-md); font-weight: 650; color: var(--text);
+  letter-spacing: -0.01em; line-height: 1.2;
+}
+.hpc-tx span {
+  font-size: 11.5px; color: var(--faint); line-height: 1.45;
+}
+.hpc-go {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 999px;
+  color: var(--faint);
+  background: var(--bg); border: 1px solid var(--border-soft);
+  transition: background var(--tr), color var(--tr), transform var(--tr), border-color var(--tr);
+}
+.hub-pick-card:hover .hpc-go {
+  background: var(--accent); color: var(--steel-ink, var(--bg-deep));
+  border-color: var(--accent); transform: translateX(2px);
+}
+
+/* Formulario expandido (cuando ya eligió crear o unirme). */
+.hub-form {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  animation: fade-in 220ms var(--ease-in) both;
+}
+.hub-back-link {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
+  padding: 4px 9px 4px 7px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--border-soft);
+  cursor: pointer;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.hub-back-link:hover {
+  color: var(--accent); border-color: var(--accent-soft);
+  background: var(--accent-weak);
+}
+.hub-switch-link {
+  align-self: flex-start; margin-top: 0.2rem;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 500;
+  color: var(--accent);
+  background: transparent; border: none;
+  padding: 4px 0; cursor: pointer;
+  transition: color var(--tr), transform var(--tr);
+}
+.hub-switch-link:hover { color: var(--accent-2); transform: translateX(2px); }
 .hub-row { display: flex; gap: 0.5rem; }
 .hub-row input {
   flex: 1; min-width: 0;

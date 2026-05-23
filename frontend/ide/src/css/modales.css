@@ -115,14 +115,30 @@
 }
 .modal-foot button.secundario:hover { background: var(--surface-2); }
 
-/* ── Modal invitación ── */
-.inv-modal { max-width: 480px; }
+/* ── Modal invitación ──
+   Capa 33: se comparten DOS opciones (link y código) en bloques separados,
+   por eso el modal crece un poco. Cada bloque tiene su label propia y su
+   row input+copiar (los estados de "copiado" son independientes). */
+.inv-modal { max-width: 540px; }
+.inv-share {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.45rem 1rem 0.2rem;
+}
+.inv-share-block {
+  display: flex; flex-direction: column; gap: 0.32rem;
+}
+.inv-share-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 600 9.5px/1 var(--font-mono);
+  letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--muted);
+}
+.inv-share-label svg { color: var(--accent); opacity: 0.85; }
 .inv-code-row {
   display: flex; gap: 0.4rem; align-items: stretch;
-  padding: 0.5rem 1rem 0.4rem;
 }
 .inv-code {
-  flex: 1;
+  flex: 1; min-width: 0;
   font: 700 16px/1.15 var(--font-mono);
   letter-spacing: 0.08em;
   background: var(--surface-2);
@@ -132,6 +148,19 @@
   padding: 0.55rem 0.7rem;
   text-align: center;
   user-select: all;
+  transition: border-color var(--tr), background var(--tr);
+}
+.inv-code:focus { outline: none; border-color: var(--accent); background: var(--bg-deep); }
+/* El link es largo (URL): texto más compacto + alineado a la izquierda
+   para que la cola se vea sin scroll horizontal forzado. El código
+   queda con su look monoespaciado grande y centrado, que invita a leerlo. */
+.inv-code-link {
+  font-size: 12.5px; letter-spacing: 0.02em;
+  text-align: left; padding-left: 0.85rem;
+}
+.inv-code-raw {
+  font-size: 17px; letter-spacing: 0.14em;
+  color: var(--accent);
 }
 .inv-btn {
   display: inline-flex; align-items: center; gap: 0.35rem;

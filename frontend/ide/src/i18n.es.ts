@@ -176,6 +176,12 @@ export const es = {
     hub_upgrade_title: (n: number) =>
       `Premium se cobra por miembro del equipo — ahora pagarías ${n} ${n === 1 ? "asiento" : "asientos"}`,
     hub_upgrade_err: "No se pudo iniciar el pago: ",
+    // Footer de upgrade integrado en la card del workspace (capa 33).
+    // Antes el botón era hermano de la tarjeta y se veía desligado — ahora
+    // vive dentro y explica qué se obtiene y cómo se cobra.
+    hub_upgrade_what: "Premium · equipo sin tope, análisis a fondo y rename en cascada",
+    hub_upgrade_seats: (n: number) =>
+      `se cobra por miembro · ${n} ${n === 1 ? "asiento" : "asientos"} hoy`,
     hub_pay_ok: "Pago recibido. Tu equipo pasará a Premium en unos segundos.",
     hub_pay_cancel: "Pago cancelado — no se hizo ningún cobro.",
     hub_empty_title: "Aún no estás en ningún equipo.",
@@ -195,6 +201,17 @@ export const es = {
     hub_join_placeholder: "código de invitación",
     hub_join_btn: "unirme",
     hub_join_hint: "El admin del equipo te pasó el código.",
+    // Capa 33: la sección "crear o unirme" arranca con dos botones grandes
+    // (cards de elección). El formulario aparece SOLO al elegir. Antes los
+    // dos formularios estaban siempre desplegados y el usuario tenía que
+    // adivinar cuál usar — pesado visualmente.
+    hub_pick_create_title: "Crear un equipo nuevo",
+    hub_pick_create_desc: "Quedas como admin. Invitas a tu gente con un link.",
+    hub_pick_join_title: "Unirme con un código",
+    hub_pick_join_desc: "Un admin ya te pasó el código o el link de invitación.",
+    hub_pick_back: "volver",
+    hub_pick_or_create: "o crear un equipo nuevo",
+    hub_pick_or_join: "o unirme con un código",
     hub_sys_eyebrow: "sistema",
     hub_sys1_pre: "sesión",
     hub_sys1_label: "HMAC",
@@ -228,17 +245,24 @@ export const es = {
 
     // Invite modal
     inv_title: "invitar a este equipo",
-    inv_intro: "Comparte este link de invitación. Es de un solo uso: en cuanto alguien lo abre y entra, generamos uno nuevo.",
+    inv_intro: "Comparte el link (un clic y entran) o el código (lo escriben en el hub). Cualquiera de los dos vale; son de un solo uso.",
     inv_copy: "copiar",
     inv_copied: "copiado",
     inv_copy_failed: "no se pudo copiar — selecciónalo a mano",
-    inv_regenerate: "generar otro link",
+    inv_regenerate: "generar otro",
     inv_close: "cerrar",
     inv_how_title: "cómo se usa",
-    inv_how_1: "Copia el link y mándaselo a quien quieras invitar.",
-    inv_how_2: "Tu invitado lo abre y entra (con GitHub o usuario y contraseña).",
+    inv_how_1: "Mándales el link (un clic y abren Orux) o el código (lo pegan en \"unirme con un código\").",
+    inv_how_2: "Tu invitado entra (con GitHub o usuario y contraseña).",
     inv_how_3: "Aparece dentro de este equipo con el rol \"member\".",
     inv_limit_note: "Plan free: 5 devs por equipo. Premium: sin tope, se cobra por miembro.",
+    // Capa 33: mostramos AMBOS, link y código, lado a lado. El link es
+    // un clic; el código sirve para WhatsApp/voz/papel — depende del canal
+    // que use el admin para invitar.
+    inv_link_label: "Link · un clic y entran",
+    inv_code_label: "Código · lo pegan en el hub",
+    inv_link_copied: "link copiado",
+    inv_code_copied: "código copiado",
     // Empty-state del workspace (primera sesión guiada)
     ews_title: "Tu equipo está listo — falta el código.",
     ews_sub: "Orux trabaja sobre tu repositorio de Git. Traé tu código para arrancar, o creá un archivo si solo querés probar.",

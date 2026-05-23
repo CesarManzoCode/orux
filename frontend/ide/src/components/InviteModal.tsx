@@ -1,11 +1,10 @@
-// Modal de invitación — el botón "invitar" del TopBar abre esta vista: el
-// LINK de invitación (no el código suelto), botón copiar con feedback,
-// microcopy de cómo se usa, y CTA para regenerar. El invitado hace clic en
-// el link, entra (GitHub o usuario/contraseña) y se une al equipo solo —
-// store.ts canjea el ?invite= al llegar al lobby. El flujo del server
-// (capa 15) no cambia: el link sólo envuelve el código de un solo uso.
+// Modal de invitación — el botón "invitar" del TopBar abre esta vista.
+// Capa 33: ahora muestra LOS DOS — link de un clic Y código en limpio.
+// El admin elige según el canal (WhatsApp / voz / papel / DM) y la persona
+// invitada lo abre o lo pega en el hub. El link siempre fue posible, pero
+// el código quedaba implícito en el URL y la gente ni lo veía.
 import { useEffect, useRef, useState } from "react";
-import { Copy, Check, RefreshCw, X } from "lucide-react";
+import { Copy, Check, RefreshCw, X, Link2, KeyRound } from "lucide-react";
 import { crearInvite, emitToast } from "../store";
 import { copiarTexto } from "../validate";
 import { useI18n } from "../i18n";
@@ -19,22 +18,24 @@ export function InviteModal({
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  // Lo que se comparte es un LINK, no el código suelto. location.origin +
-  // pathname = la URL de la app (prod /app/, dev /). Si todavía no llegó el
-  // código del server, link queda "" (el input se ve vacío, igual que antes).
+  // Lo que se comparte puede ser un LINK (un clic) o el CÓDIGO suelto (lo
+  // pegan en "unirme con código"). Ambos envuelven el mismo token de un solo
+  // uso del server (capa 15). Si todavía no llegó del server, link queda ""
+  // y el input se ve vacío hasta que llega `invite_created`.
   const link = code
     ? location.origin + location.pathname + "?invite=" + encodeURIComponent(code)
     : "";
-  // Estados del botón "copiar": idle / ok / failed. `ok` se resetea solo
-  // a los 1.5s para que el botón vuelva a su estado normal sin ruido.
-  const [estado, setEstado] = useState<"idle" | "ok" | "failed">("idle");
-  // Foco a la caja del código al abrir (lo lee NVDA/JAWS, deja Tab pulida
-  // y permite Ctrl+A para seleccionar todo si el usuario prefiere no usar
-  // el botón). El usuario que no quiere usar nuestro botón puede copiar a
-  // mano sin pelear con el foco del editor de abajo.
+  // Dos estados independientes (link / code) — copiar uno no debe poner
+  // "copiado" en el otro: el feedback visual tiene que coincidir con el
+  // botón que realmente clickeaste.
+  const [estLink, setEstLink] = useState<"idle" | "ok" | "failed">("idle");
+  const [estCode, setEstCode] = useState<"idle" | "ok" | "failed">("idle");
+  // Foco al primer input al abrir — el link es la opción "por default" que
+  // queremos resaltar (más rápido para el invitado), por eso enfocamos ese.
+  const linkRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    codeRef.current?.select();
+    linkRef.current?.select();
   }, []);
 
   // Esc cierra el modal — convención universal. preventDefault para que
@@ -47,19 +48,19 @@ export function InviteModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const onCopiar = async () => {
-    const ok = await copiarTexto(link);
+  const copiar = async (
+    valor: string,
+    setEstado: (v: "idle" | "ok" | "failed") => void,
+    okMsg: string,
+  ) => {
+    const ok = await copiarTexto(valor);
     setEstado(ok ? "ok" : "failed");
-    // Doble feedback: el botón cambia a "copiado" (afordancia local que
-    // el ojo ya estaba mirando) Y un toast confirma a quien no apuntaba
-    // al botón (accesibilidad lector de pantalla incluida vía role=status
-    // en App.tsx).
-    emitToast(
-      ok ? t.toast_invite_copied : t.toast_invite_failed,
-      ok ? "ok" : "bad",
-    );
+    emitToast(ok ? okMsg : t.toast_invite_failed, ok ? "ok" : "bad");
     if (ok) setTimeout(() => setEstado("idle"), 1500);
   };
+
+  const onCopiarLink = () => copiar(link, setEstLink, t.toast_invite_copied);
+  const onCopiarCode = () => copiar(code, setEstCode, t.toast_invite_copied);
 
   const onRegenerar = () => {
     // El server (capa 15) crea uno nuevo y manda `invite_created`. El
@@ -67,7 +68,8 @@ export function InviteModal({
     // siendo válido en el server hasta que alguien lo redima (un solo
     // uso) — esto es honestidad de alcance, no inventamos revocación.
     crearInvite();
-    setEstado("idle");
+    setEstLink("idle");
+    setEstCode("idle");
   };
 
   return (
@@ -92,28 +94,57 @@ export function InviteModal({
 
         <p className="modal-intro">{t.inv_intro}</p>
 
-        <div className="inv-code-row">
-          <input
-            ref={codeRef}
-            className="inv-code"
-            value={link}
-            readOnly
-            aria-label={t.inv_title}
-            // Click sobre el campo selecciona todo: muscle memory de
-            // "compartir cosa importante" desde formularios.
-            onFocus={(e) => e.currentTarget.select()}
-            onClick={(e) => e.currentTarget.select()}
-          />
-          <button
-            className={"inv-btn " + (estado === "ok" ? "ok" : "")}
-            onClick={onCopiar}
-          >
-            {estado === "ok" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-            {estado === "ok" ? t.inv_copied : t.inv_copy}
-          </button>
+        <div className="inv-share">
+          <div className="inv-share-block">
+            <div className="inv-share-label">
+              <Link2 size={11} strokeWidth={2.4} aria-hidden /> {t.inv_link_label}
+            </div>
+            <div className="inv-code-row">
+              <input
+                ref={linkRef}
+                className="inv-code inv-code-link"
+                value={link}
+                readOnly
+                aria-label={t.inv_link_label}
+                onFocus={(e) => e.currentTarget.select()}
+                onClick={(e) => e.currentTarget.select()}
+              />
+              <button
+                className={"inv-btn " + (estLink === "ok" ? "ok" : "")}
+                onClick={onCopiarLink}
+              >
+                {estLink === "ok" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+                {estLink === "ok" ? t.inv_copied : t.inv_copy}
+              </button>
+            </div>
+          </div>
+
+          <div className="inv-share-block">
+            <div className="inv-share-label">
+              <KeyRound size={11} strokeWidth={2.4} aria-hidden /> {t.inv_code_label}
+            </div>
+            <div className="inv-code-row">
+              <input
+                ref={codeRef}
+                className="inv-code inv-code-raw"
+                value={code}
+                readOnly
+                aria-label={t.inv_code_label}
+                onFocus={(e) => e.currentTarget.select()}
+                onClick={(e) => e.currentTarget.select()}
+              />
+              <button
+                className={"inv-btn " + (estCode === "ok" ? "ok" : "")}
+                onClick={onCopiarCode}
+              >
+                {estCode === "ok" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+                {estCode === "ok" ? t.inv_copied : t.inv_copy}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {estado === "failed" && (
+        {(estLink === "failed" || estCode === "failed") && (
           <div className="inv-err" role="alert">{t.inv_copy_failed}</div>
         )}
 

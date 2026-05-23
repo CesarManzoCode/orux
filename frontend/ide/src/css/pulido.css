@@ -301,30 +301,80 @@
   content: "★"; font-size: 8px; margin-right: 4px;
 }
 
-/* Botón "Mejorar a Premium" — debajo de la tarjeta del equipo. Acción
-   secundaria: acento tenue, no compite con la tarjeta (que es el botón
-   primario "abrir"). */
-.ht-upgrade {
+/* Capa 33: el upgrade DEJA DE SER hermano de la tarjeta. Ahora vive como
+   footer DENTRO de un contenedor `.hub-team-card` que también envuelve
+   la fila clickeable del workspace. Así la pertenencia visual al
+   workspace es obvia (antes el botón flotaba entre tarjetas y el usuario
+   no sabía a qué equipo aplicaba). Además, el footer explica QUÉ se
+   obtiene y CÓMO se cobra — antes era sólo "Upgrade to Premium" sin
+   contexto.
+
+   El estilo viejo `.ht-upgrade` (botón pleno-ancho hermano) queda como
+   referencia eliminada: sustituye `.ht-upgrade-foot` + `.htu-cta`. */
+.hub-team-card {
+  display: flex; flex-direction: column;
+}
+.hub-team-card.with-upgrade .hub-team {
+  /* Cuando hay footer de upgrade, redondeamos solo arriba para que el
+     conjunto se lea como una unidad (card de dos pisos). */
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+.ht-upgrade-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0.7rem 0.95rem 0.75rem 1.05rem;
+  background:
+    linear-gradient(180deg, rgba(93, 127, 166, 0.06), rgba(93, 127, 166, 0.12)),
+    var(--surface-2);
+  border: 1px solid var(--accent-soft);
+  border-top: 1px dashed var(--accent-soft);
+  border-radius: 0 0 var(--r) var(--r);
+  /* "Filo" lateral de acento — la misma señal de la tarjeta hover, pero
+     permanente acá: marca "este bloque tiene una acción premium". */
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.htu-info {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+}
+.htu-spark {
+  flex: none; color: var(--accent);
+}
+.htu-tx {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.htu-tx b {
+  font-size: var(--t-sm); font-weight: 650; color: var(--text);
+  letter-spacing: -0.005em; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.htu-tx span {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.06em; color: var(--faint); text-transform: uppercase;
+}
+.htu-cta {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: 6px; width: 100%; margin-top: 6px;
-  padding: 0.5rem 0.7rem; border-radius: var(--r);
+  gap: 6px; flex: none;
+  padding: 0.5rem 0.95rem; border-radius: var(--r);
   font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 650;
   letter-spacing: -0.005em; cursor: pointer;
-  color: var(--accent);
-  background: var(--accent-weak);
-  border: 1px solid var(--accent-soft);
-  transition: background var(--tr), border-color var(--tr),
-    color var(--tr), transform var(--tr), filter var(--tr);
+  color: var(--steel-ink, #eef4fb);
+  background: var(--grad, var(--accent));
+  border: 1px solid var(--accent-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 8px 18px -12px rgba(60, 90, 126, 0.7);
+  transition: filter var(--tr), transform var(--tr), opacity var(--tr);
 }
-.ht-upgrade:hover {
-  background: var(--accent-soft); border-color: var(--accent-line);
-  transform: translateY(-1px);
-}
-.ht-upgrade:active { transform: translateY(0); }
-.ht-upgrade:disabled {
+.htu-cta:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.htu-cta:active { transform: translateY(0); }
+.htu-cta:disabled {
   opacity: 0.6; cursor: progress; transform: none; filter: saturate(0.7);
 }
-.ht-upgrade svg { display: block; flex: none; }
+.htu-cta svg { display: block; flex: none; }
+@media (max-width: 540px) {
+  .ht-upgrade-foot { flex-direction: column; align-items: stretch; gap: 9px; }
+  .htu-cta { width: 100%; }
+}
 
 /* ── Login con GitHub (OAuth) ────────────────────────────────────────────
    Botón "Continuar con GitHub" + separador, dentro del login-card. Bloque

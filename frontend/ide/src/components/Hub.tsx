@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Shield, Users, ChevronRight, ArrowRight, ArrowLeft, ArrowUpCircle,
+  Plus, KeyRound, Sparkles,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
@@ -40,6 +41,12 @@ export function Hub() {
   // (vía useEffect) o cuando llega un `lobby` con error (vía equipoError).
   const [creando, setCreando] = useState(false);
   const [uniendo, setUniendo] = useState(false);
+  // Capa 33: la sección "crear o unirme" arranca colapsada (mode=null) con
+  // dos botones grandes. El form aparece sólo al elegir uno — antes los dos
+  // formularios estaban siempre desplegados con placeholders crípticos.
+  // Si el usuario llega con ?invite= en la URL (caso del invitado), el
+  // store ya canjea solo, así que acá no hacemos nada especial.
+  const [pickerMode, setPickerMode] = useState<"crear" | "unirme" | null>(null);
   // Capa 30: id del equipo cuyo upgrade a Premium está en curso (esperando
   // a que la API devuelva la URL de Stripe). Bloquea el doble-click.
   const [upgrading, setUpgrading] = useState<string>("");
@@ -247,68 +254,83 @@ export function Hub() {
                 const rolLabel = esAdmin ? t.hub_role_admin_label : t.hub_role_member_label;
                 const rolTitle = esAdmin ? t.hub_role_admin_title : t.hub_role_member_title;
                 const ariaLabel = t.hub_open_aria(e.nombre, rolLabel);
+                // Capa 33: la tarjeta del workspace pasa a ser un
+                // contenedor (`.hub-team-card`) con dos zonas: la fila
+                // principal (botón que abre el workspace) y un footer
+                // OPCIONAL para el upgrade. Antes el upgrade era hermano
+                // del `<li>` y se veía desligado — ahora vive dentro y la
+                // pertenencia al workspace es visualmente obvia.
+                const showUpgrade = esAdmin && !esPremium;
+                const asientosCobro = Math.max(asientos, 1);
                 return (
                   <li key={e.id}>
-                    <button
-                      className="hub-team"
-                      onClick={() => seleccionarEquipo(e.id)}
-                      title={t.hub_open_title}
-                      aria-label={ariaLabel}
-                    >
-                      <span
-                        className="ht-ava"
-                        style={{ background: colorEquipo(e.id) }}
-                        aria-hidden
-                      >
-                        {(e.nombre || "?").trim().charAt(0).toUpperCase() || "?"}
-                      </span>
-                      <span className="ht-meta">
-                        <span className="ht-name">{e.nombre}</span>
-                        <span
-                          className={"ht-rol r-" + (esAdmin ? "admin" : "member")}
-                          title={rolTitle}
-                        >
-                          {esAdmin
-                            ? <Shield size={10} strokeWidth={2.3} aria-hidden />
-                            : <Users size={10} strokeWidth={2.3} aria-hidden />}
-                          {rolLabel}
-                        </span>
-                        {/* Badge de plan: Premium destaca en acento,
-                            Free queda sobrio (no es un error, es el
-                            estado base). Capa 31: si es premium, el badge
-                            muestra los asientos cobrados ("Premium · 4")
-                            — el cobro es por miembro. */}
-                        <span
-                          className={"ht-plan p-" + (esPremium ? "premium" : "free")}
-                          title={esPremium ? t.hub_plan_premium_title : t.hub_plan_free_title}
-                        >
-                          {esPremium
-                            ? (asientos > 0
-                                ? t.hub_plan_premium_seats(asientos)
-                                : t.hub_plan_premium)
-                            : t.hub_plan_free}
-                        </span>
-                      </span>
-                      <span className="ht-go" aria-hidden>
-                        <span className="ht-go-tx">{t.hub_open_short}</span>
-                        <ChevronRight size={14} strokeWidth={2.4} />
-                      </span>
-                    </button>
-                    {/* Upgrade: solo el admin de un equipo free. Va FUERA
-                        del botón-tarjeta (un <button> no puede anidar
-                        otro): es hermano dentro del <li>, así su click no
-                        abre el equipo. */}
-                    {esAdmin && !esPremium && (
+                    <div className={"hub-team-card" + (showUpgrade ? " with-upgrade" : "")}>
                       <button
-                        className="ht-upgrade"
-                        onClick={() => onUpgrade(e.id)}
-                        disabled={upgrading === e.id}
-                        title={t.hub_upgrade_title(asientos || 1)}
+                        className="hub-team"
+                        onClick={() => seleccionarEquipo(e.id)}
+                        title={t.hub_open_title}
+                        aria-label={ariaLabel}
                       >
-                        <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
-                        {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}
+                        <span
+                          className="ht-ava"
+                          style={{ background: colorEquipo(e.id) }}
+                          aria-hidden
+                        >
+                          {(e.nombre || "?").trim().charAt(0).toUpperCase() || "?"}
+                        </span>
+                        <span className="ht-meta">
+                          <span className="ht-name">{e.nombre}</span>
+                          <span
+                            className={"ht-rol r-" + (esAdmin ? "admin" : "member")}
+                            title={rolTitle}
+                          >
+                            {esAdmin
+                              ? <Shield size={10} strokeWidth={2.3} aria-hidden />
+                              : <Users size={10} strokeWidth={2.3} aria-hidden />}
+                            {rolLabel}
+                          </span>
+                          {/* Badge de plan: Premium destaca en acento,
+                              Free queda sobrio (no es un error, es el
+                              estado base). Capa 31: si es premium, el badge
+                              muestra los asientos cobrados ("Premium · 4")
+                              — el cobro es por miembro. */}
+                          <span
+                            className={"ht-plan p-" + (esPremium ? "premium" : "free")}
+                            title={esPremium ? t.hub_plan_premium_title : t.hub_plan_free_title}
+                          >
+                            {esPremium
+                              ? (asientos > 0
+                                  ? t.hub_plan_premium_seats(asientos)
+                                  : t.hub_plan_premium)
+                              : t.hub_plan_free}
+                          </span>
+                        </span>
+                        <span className="ht-go" aria-hidden>
+                          <span className="ht-go-tx">{t.hub_open_short}</span>
+                          <ChevronRight size={14} strokeWidth={2.4} />
+                        </span>
                       </button>
-                    )}
+                      {showUpgrade && (
+                        <div className="ht-upgrade-foot">
+                          <div className="htu-info">
+                            <Sparkles size={13} strokeWidth={2.1} aria-hidden className="htu-spark" />
+                            <div className="htu-tx">
+                              <b>{t.hub_upgrade_what}</b>
+                              <span>{t.hub_upgrade_seats(asientosCobro)}</span>
+                            </div>
+                          </div>
+                          <button
+                            className="htu-cta"
+                            onClick={() => onUpgrade(e.id)}
+                            disabled={upgrading === e.id}
+                            title={t.hub_upgrade_title(asientosCobro)}
+                          >
+                            <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
+                            {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -368,71 +390,137 @@ export function Hub() {
             <span className="hc-h-eyebrow">{t.hub_new_eyebrow}</span>
           </header>
 
-          <div className="fg">
-            <label htmlFor="hb-new">{t.hub_create_label}</label>
-            <div className="hub-row">
-              <input
-                ref={refNombre}
-                id="hb-new"
-                placeholder={t.hub_create_placeholder}
-                value={nombre}
-                onChange={(e) => {
-                  setNombre(e.target.value);
-                  if (errLocal) setErrLocal("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && nombre.trim() && !creando) onCrear();
-                }}
-                maxLength={40}
-                aria-invalid={!!errLocal}
-                aria-describedby={errLocal ? "hb-new-err" : undefined}
-                autoComplete="off"
-                spellCheck={false}
-              />
+          {/* Capa 33: estado inicial — dos cards-botón grandes. El
+              formulario aparece sólo al elegir uno (más ligero
+              visualmente, intención más clara). */}
+          {pickerMode === null && (
+            <div className="hub-pick">
               <button
-                className="primario"
-                disabled={!nombre.trim() || creando}
-                onClick={onCrear}
+                className="hub-pick-card"
+                onClick={() => {
+                  setPickerMode("crear");
+                  setTimeout(() => refNombre.current?.focus(), 30);
+                }}
               >
-                {creando ? t.hub_create_busy : t.hub_create_btn}
+                <span className="hpc-ic" aria-hidden><Plus size={18} strokeWidth={2.3} /></span>
+                <span className="hpc-tx">
+                  <b>{t.hub_pick_create_title}</b>
+                  <span>{t.hub_pick_create_desc}</span>
+                </span>
+                <span className="hpc-go" aria-hidden><ChevronRight size={14} strokeWidth={2.4} /></span>
+              </button>
+              <button
+                className="hub-pick-card"
+                onClick={() => {
+                  setPickerMode("unirme");
+                  setTimeout(() => refCode.current?.focus(), 30);
+                }}
+              >
+                <span className="hpc-ic" aria-hidden><KeyRound size={17} strokeWidth={2.2} /></span>
+                <span className="hpc-tx">
+                  <b>{t.hub_pick_join_title}</b>
+                  <span>{t.hub_pick_join_desc}</span>
+                </span>
+                <span className="hpc-go" aria-hidden><ChevronRight size={14} strokeWidth={2.4} /></span>
               </button>
             </div>
-            {errLocal ? (
-              <div id="hb-new-err" className="fg-err" role="alert">{errLocal}</div>
-            ) : (
-              <p className="fg-hint">{t.hub_create_hint}</p>
-            )}
-          </div>
+          )}
 
-          <div className="hub-sep" />
-
-          <div className="fg">
-            <label htmlFor="hb-code">{t.hub_join_label}</label>
-            <div className="hub-row">
-              <input
-                ref={refCode}
-                id="hb-code"
-                placeholder={t.hub_join_placeholder}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && code.trim() && !uniendo) onUnirse();
-                }}
-                maxLength={64}
-                autoComplete="off"
-                spellCheck={false}
-                autoCapitalize="off"
-              />
+          {pickerMode === "crear" && (
+            <div className="hub-form">
               <button
-                className="secundario"
-                disabled={!code.trim() || uniendo}
-                onClick={onUnirse}
+                className="hub-back-link"
+                onClick={() => { setPickerMode(null); setErrLocal(""); }}
               >
-                {uniendo ? t.hub_join_busy : t.hub_join_btn}
+                <ArrowLeft size={11} aria-hidden /> {t.hub_pick_back}
+              </button>
+              <div className="fg">
+                <label htmlFor="hb-new">{t.hub_create_label}</label>
+                <div className="hub-row">
+                  <input
+                    ref={refNombre}
+                    id="hb-new"
+                    placeholder={t.hub_create_placeholder}
+                    value={nombre}
+                    onChange={(e) => {
+                      setNombre(e.target.value);
+                      if (errLocal) setErrLocal("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && nombre.trim() && !creando) onCrear();
+                    }}
+                    maxLength={40}
+                    aria-invalid={!!errLocal}
+                    aria-describedby={errLocal ? "hb-new-err" : undefined}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    className="primario"
+                    disabled={!nombre.trim() || creando}
+                    onClick={onCrear}
+                  >
+                    {creando ? t.hub_create_busy : t.hub_create_btn}
+                  </button>
+                </div>
+                {errLocal ? (
+                  <div id="hb-new-err" className="fg-err" role="alert">{errLocal}</div>
+                ) : (
+                  <p className="fg-hint">{t.hub_create_hint}</p>
+                )}
+              </div>
+              <button
+                className="hub-switch-link"
+                onClick={() => { setPickerMode("unirme"); setErrLocal(""); setTimeout(() => refCode.current?.focus(), 30); }}
+              >
+                {t.hub_pick_or_join} →
               </button>
             </div>
-            <p className="fg-hint">{t.hub_join_hint}</p>
-          </div>
+          )}
+
+          {pickerMode === "unirme" && (
+            <div className="hub-form">
+              <button
+                className="hub-back-link"
+                onClick={() => { setPickerMode(null); }}
+              >
+                <ArrowLeft size={11} aria-hidden /> {t.hub_pick_back}
+              </button>
+              <div className="fg">
+                <label htmlFor="hb-code">{t.hub_join_label}</label>
+                <div className="hub-row">
+                  <input
+                    ref={refCode}
+                    id="hb-code"
+                    placeholder={t.hub_join_placeholder}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && code.trim() && !uniendo) onUnirse();
+                    }}
+                    maxLength={64}
+                    autoComplete="off"
+                    spellCheck={false}
+                    autoCapitalize="off"
+                  />
+                  <button
+                    className="secundario"
+                    disabled={!code.trim() || uniendo}
+                    onClick={onUnirse}
+                  >
+                    {uniendo ? t.hub_join_busy : t.hub_join_btn}
+                  </button>
+                </div>
+                <p className="fg-hint">{t.hub_join_hint}</p>
+              </div>
+              <button
+                className="hub-switch-link"
+                onClick={() => { setPickerMode("crear"); setTimeout(() => refNombre.current?.focus(), 30); }}
+              >
+                {t.hub_pick_or_create} →
+              </button>
+            </div>
+          )}
 
           {/* equipoError = mensaje del SERVER (longitud, ya existe, código
               inválido, plan lleno...). Lo mostramos con role=alert para
