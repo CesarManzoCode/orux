@@ -84,7 +84,7 @@ def crear_sesion_checkout(secret: str, params: dict[str, str]) -> str:
 
 
 def actualizar_cantidad(
-    secret: str, subscription_id: str, seats: int
+    secret: str, subscription_id: str, seats: int, *, team_id: str = ""
 ) -> bool:
     """Capa 31: deja la suscripción `subscription_id` en `seats` asientos
     (cobro por usuario). Devuelve True si lo logró, False si no.
@@ -95,6 +95,11 @@ def actualizar_cantidad(
     fija es ABSOLUTA (= miembros actuales), el próximo ajuste la corrige
     sola. Por eso se loguea y se sigue.
 
+    `team_id` es opcional y SOLO para correlación en logs (no afecta la
+    llamada a Stripe); el caller lo pasa con `functools.partial` desde
+    `run_in_executor` para que un operador pueda rastrear qué equipo
+    desencadenó el ajuste fallido.
+
     Dos llamadas a Stripe: (1) GET la suscripción para encontrar el id de
     su único subscription item (`si_...`); (2) POST ese item con la
     cantidad nueva. Son raras (entra un miembro a un equipo premium), así
@@ -103,6 +108,7 @@ def actualizar_cantidad(
     """
     if not secret or not subscription_id:
         return False
+    ctx = f" (team={team_id})" if team_id else ""
     try:
         sub = _get(
             f"{billing.URL_SUSCRIPCIONES}/{subscription_id}", secret
@@ -111,7 +117,7 @@ def actualizar_cantidad(
         if not item_id:
             logger.warning(
                 "Stripe: la suscripción %s no tiene items; no se ajustan "
-                "asientos", subscription_id,
+                "asientos%s", subscription_id, ctx,
             )
             return False
         _post(
@@ -120,13 +126,15 @@ def actualizar_cantidad(
             billing.params_actualizar_cantidad(seats),
         )
         logger.info(
-            "Stripe: suscripción %s -> %d asiento(s)",
-            subscription_id, max(1, int(seats)),
+            "Stripe: suscripción %s -> %d asiento(s)%s",
+            subscription_id, max(1, int(seats)), ctx,
         )
         return True
     except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as e:
+        # `URLError` engloba HTTP 4xx/5xx (HTTPError es subclase) y errores
+        # de red puros — el `repr` deja claro cuál fue.
         logger.warning(
-            "Stripe: no se pudo ajustar los asientos de %s: %r",
-            subscription_id, e,
+            "Stripe: no se pudo ajustar los asientos de %s%s: %r",
+            subscription_id, ctx, e,
         )
         return False

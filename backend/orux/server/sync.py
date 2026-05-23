@@ -32,6 +32,7 @@ import inspect
 import logging
 import os
 import time
+from functools import partial
 from secrets import token_hex
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -184,14 +185,14 @@ def _ip_cliente(websocket: ServerConnection) -> str:
             xff = req.headers.get("X-Forwarded-For", "")
             if xff:
                 return xff.split(",")[0].strip()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 - diagnóstico opcional
+        logger.debug("X-Forwarded-For ilegible: %r", e)
     try:
         addr = websocket.remote_address
         if addr:
             return str(addr[0])
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001
+        logger.debug("remote_address ilegible: %r", e)
     return "desconocida"
 
 
@@ -364,9 +365,15 @@ class SyncServer:
                     return
                 n = await self.teams.contar_miembros(team_id)
                 loop = asyncio.get_running_loop()
+                # `functools.partial` para pasar `team_id` como kwarg de
+                # contexto (solo afecta logs): `run_in_executor` no acepta
+                # kwargs directos.
                 await loop.run_in_executor(
-                    None, stripe_client.actualizar_cantidad,
-                    self._stripe_secret, sub, n,
+                    None,
+                    partial(
+                        stripe_client.actualizar_cantidad,
+                        self._stripe_secret, sub, n, team_id=team_id,
+                    ),
                 )
         except Exception:  # noqa: BLE001 - best-effort, nunca propaga
             logger.exception(
@@ -945,7 +952,17 @@ class SyncServer:
                     if listar is not None:
                         try:
                             actuales = await listar() if inspect.iscoroutinefunction(listar) else listar()
-                        except Exception:
+                        except Exception as e:  # noqa: BLE001
+                            # Si no podemos enumerar (p.ej. DB caída), tratamos
+                            # como "no hay cap aplicable" — registro abierto
+                            # antes que bloquear la plataforma. Pero NUNCA
+                            # silencioso: el operador debe enterarse.
+                            logger.warning(
+                                "ORUX_REGISTRO_CERRADO_TRAS=%d activo pero "
+                                "no puedo enumerar usuarios (%r); permito "
+                                "registro este intento",
+                                cap, e,
+                            )
                             actuales = []
                         if len(actuales) >= cap:
                             if await _fallo(
@@ -1878,6 +1895,13 @@ class SyncServer:
                 "servidor escuchando en ws://%s:%d (max_size=%d max_queue=%d)",
                 host, port, WS_MAX_SIZE, WS_MAX_QUEUE,
             )
-            asyncio.create_task(self._barrer_lsp_ociosas(ttl))
-            asyncio.create_task(self._barrer_runtimes_ociosos(rt_ttl))
+            # Mismo patrón que `_ajustar_asientos_bg` (linea 341): guardar la
+            # referencia en `_tareas_fondo` evita que el GC tire la tarea con
+            # el log "Task was destroyed but it is pending" si algo falla.
+            tarea_lsp = asyncio.create_task(self._barrer_lsp_ociosas(ttl))
+            self._tareas_fondo.add(tarea_lsp)
+            tarea_lsp.add_done_callback(self._tareas_fondo.discard)
+            tarea_rt = asyncio.create_task(self._barrer_runtimes_ociosos(rt_ttl))
+            self._tareas_fondo.add(tarea_rt)
+            tarea_rt.add_done_callback(self._tareas_fondo.discard)
             await asyncio.Future()

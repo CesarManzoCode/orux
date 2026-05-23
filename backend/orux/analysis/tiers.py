@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import Protocol
 
-_log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 from . import go, javascript, python, rust
 from .modelo import Simbolo, cambios_que_importan_modelo
@@ -148,11 +148,11 @@ def _treesitter_tier(clase: str) -> Tier | None:
         }[clase]
         t = cls()
         if not t.disponible():
-            _log.info("tree-sitter %s no disponible (grammar)", clase)
+            logger.info("tree-sitter %s no disponible (grammar)", clase)
             return None
         return t
     except Exception as e:  # noqa: BLE001
-        _log.info("tree-sitter %s no se pudo cargar: %r", clase, e)
+        logger.info("tree-sitter %s no se pudo cargar: %r", clase, e)
         return None
 
 
@@ -268,7 +268,7 @@ def archivos_afectados(
                 af_tok = _scan(s)
                 if af_tok:
                     out[s] = af_tok
-                    _log.info(
+                    logger.info(
                         "fan-out LSP vacío para %r en %s; rescate token-scan: %s",
                         s, path, af_tok,
                     )

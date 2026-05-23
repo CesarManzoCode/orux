@@ -20,10 +20,14 @@ Hardening (auditoría):
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
 
@@ -49,22 +53,40 @@ class Database:
         # (en el sandbox no lo está; los tests no llaman acá).
         import asyncpg  # noqa: PLC0415
 
-        pool = await asyncpg.create_pool(
-            dsn,
-            min_size=_env_int("ORUX_DB_POOL_MIN", 1, 1, 100),
-            max_size=_env_int("ORUX_DB_POOL_MAX", 10, 1, 200),
-            command_timeout=_env_int("ORUX_DB_CMD_TIMEOUT", 30, 1, 600),
-            max_inactive_connection_lifetime=_env_int(
-                "ORUX_DB_IDLE_SEC", 300, 30, 3600,
-            ),
+        pool_min = _env_int("ORUX_DB_POOL_MIN", 1, 1, 100)
+        pool_max = _env_int("ORUX_DB_POOL_MAX", 10, 1, 200)
+        cmd_to = _env_int("ORUX_DB_CMD_TIMEOUT", 30, 1, 600)
+        idle = _env_int("ORUX_DB_IDLE_SEC", 300, 30, 3600)
+        # Loguear sin el DSN: tiene credenciales. Solo los parámetros del
+        # pool, que son útiles para diagnosticar saturación.
+        logger.info(
+            "Postgres: conectando pool min=%d max=%d cmd_timeout=%ds idle=%ds",
+            pool_min, pool_max, cmd_to, idle,
         )
+        t0 = time.monotonic()
+        try:
+            pool = await asyncpg.create_pool(
+                dsn,
+                min_size=pool_min,
+                max_size=pool_max,
+                command_timeout=cmd_to,
+                max_inactive_connection_lifetime=idle,
+            )
+        except Exception:
+            logger.exception("Postgres: create_pool falló")
+            raise
         db = cls(pool)
         try:
             await db._aplicar_schema()
         except Exception:
             # Si la migración falla, no dejar el pool huérfano (resource leak).
+            logger.exception("Postgres: _aplicar_schema falló — cerrando pool")
             await pool.close()
             raise
+        logger.info(
+            "Postgres: pool listo y esquema aplicado en %.0f ms",
+            (time.monotonic() - t0) * 1000.0,
+        )
         return db
 
     async def _aplicar_schema(self) -> None:
@@ -102,6 +124,7 @@ class Database:
                 yield con
 
     async def cerrar(self) -> None:
+        logger.info("Postgres: cerrando pool")
         await self._pool.close()
 
     async def ping(self) -> bool:
@@ -111,5 +134,6 @@ class Database:
         try:
             val = await self.fetchval("SELECT 1")
             return val == 1
-        except Exception:
+        except Exception as e:  # noqa: BLE001 - el HC nunca propaga
+            logger.warning("Postgres: ping falló (%r)", e)
             return False

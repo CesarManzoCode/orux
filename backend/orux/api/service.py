@@ -171,13 +171,16 @@ async def aplicar_evento_stripe(
         # un equipo borrado. Se loguea y se ignora (no es un error que
         # deba hacer reintentar a Stripe).
         logger.warning(
-            "Stripe: evento %r para un equipo inexistente (%r); ignorado",
-            evento.get("type"), team_id,
+            "Stripe: evento %r (id=%s) para equipo inexistente (%r); ignorado",
+            evento.get("type"), event_id or "?", team_id,
         )
         return None
     # Solo el alta trae una suscripción que valga la pena guardar; la baja
     # la borra (se persiste "" -> NULL).
     sub_id = suscripcion_de_evento(evento) if plan == "premium" else ""
     await teams.actualizar_suscripcion(team_id, plan, sub_id)
-    logger.info("Stripe: equipo %s -> plan %s", team_id, plan)
+    logger.info(
+        "Stripe: equipo %s -> plan %s (event_id=%s)",
+        team_id, plan, event_id or "?",
+    )
     return {"team_id": team_id, "plan": plan, "subscription_id": sub_id}

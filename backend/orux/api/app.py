@@ -339,7 +339,17 @@ def _intercambiar(code: str) -> dict:
     """Bloqueante (urllib, stdlib — cero deps): canjea `code` por un token y
     lee el perfil de GitHub. Vive en la cáscara y se corre en el threadpool;
     se ejercita en el VPS (sandbox sin internet), igual que toda la I/O de
-    `api/app.py`. Timeouts cortos: un GitHub colgado no cuelga al worker."""
+    `api/app.py`. Timeouts cortos: un GitHub colgado no cuelga al worker.
+
+    Errores propagados (los atrapa el caller en `_gh_callback`):
+    - `urllib.error.URLError`: GitHub inalcanzable / DNS / TLS.
+    - `TimeoutError`: respuesta por encima del timeout.
+    - `ValueError`: body no-JSON o GitHub devolvió un error en el body
+      (p.ej. `{"error":"bad_verification_code"}` con HTTP 200).
+    - `KeyError`: body JSON pero sin `access_token` (forma inesperada).
+    El mensaje del error incluye la etapa (token/perfil) para diagnóstico.
+    Nunca se loguean ni `code` ni `tok`: son material sensible.
+    """
     datos = urllib.parse.urlencode({
         "client_id": _GH_CLIENT_ID,
         "client_secret": _GH_CLIENT_SECRET,
@@ -350,7 +360,20 @@ def _intercambiar(code: str) -> dict:
         URL_TOKEN, data=datos, headers={"Accept": "application/json"}
     )
     with urllib.request.urlopen(r1, timeout=10) as resp:
-        tok = json.loads(resp.read())["access_token"]
+        body = resp.read()
+    try:
+        token_payload = json.loads(body)
+    except ValueError as e:
+        raise ValueError(f"OAuth token: respuesta no-JSON ({e})") from e
+    if not isinstance(token_payload, dict):
+        raise ValueError("OAuth token: payload no es objeto JSON")
+    if "access_token" not in token_payload:
+        # GitHub señala fallos con campo `error` (p.ej. bad_verification_code).
+        # Lo logueamos como contexto pero NO el body completo (puede traer
+        # `error_description` con URLs/IDs internos).
+        motivo = token_payload.get("error", "campo access_token ausente")
+        raise ValueError(f"OAuth token: {motivo}")
+    tok = token_payload["access_token"]
     r2 = urllib.request.Request(
         URL_PERFIL,
         headers={
@@ -360,7 +383,14 @@ def _intercambiar(code: str) -> dict:
         },
     )
     with urllib.request.urlopen(r2, timeout=10) as resp:
-        return json.loads(resp.read())
+        body = resp.read()
+    try:
+        perfil = json.loads(body)
+    except ValueError as e:
+        raise ValueError(f"OAuth perfil: respuesta no-JSON ({e})") from e
+    if not isinstance(perfil, dict):
+        raise ValueError("OAuth perfil: payload no es objeto JSON")
+    return perfil
 
 
 async def _gh_login(_req: Request):
@@ -379,13 +409,24 @@ async def _gh_login(_req: Request):
 
 # BACKEND-AUDIT-0015: set efímero de states ya consumidos para evitar replay
 # dentro de la ventana de validez (120s). Es un set local del proceso: si en
-# el futuro hay réplicas múltiples, esto se externaliza. GC perezoso.
+# el futuro hay réplicas múltiples (uvicorn --workers >1 o multi-pod), esto
+# se externaliza a Postgres. GC perezoso.
+#
+# Seguridad de concurrencia: `_state_consumir` es 100% sync (cero `await`),
+# por lo que el event-loop de asyncio NO la puede pre-emptar a mitad. El
+# patrón "comprobar si está, agregar si no" es atómico dentro de un mismo
+# proceso CPython. Si algún día se introduce un `await` aquí adentro, hay
+# que añadir un `asyncio.Lock` o externalizar el estado.
 _oauth_states_usados: dict[str, float] = {}
 
 
 def _state_consumir(state: str, ahora: float) -> bool:
     """True si pudo consumir (primer uso); False si ya estaba usado (replay).
-    Limpia entradas viejas (>5min) en cada llamada."""
+    Limpia entradas viejas (>5min) en cada llamada.
+
+    INVARIANTE: esta función debe permanecer 100% sync (sin `await`) — ver
+    nota sobre `_oauth_states_usados` arriba. Si necesita I/O async, hay
+    que añadir un `asyncio.Lock` global o externalizar el set."""
     # GC: borra states con >300s de antigüedad.
     if len(_oauth_states_usados) > 1024:
         corte = ahora - 300.0
@@ -641,12 +682,25 @@ async def _billing_webhook(req: Request) -> JSONResponse:
     if not billing.verificar_firma_webhook(
         payload, firma, _STRIPE_WEBHOOK_SECRET,
     ):
-        logger.warning("webhook de Stripe con firma inválida")
+        # Intentamos extraer event_id sin validar firma (best-effort, solo
+        # para correlación en logs; el evento NO se aplica).
+        evt_id = ""
+        try:
+            evt_id = billing.event_id_de(billing.evento_de_payload(payload))
+        except ValueError:
+            pass
+        logger.warning(
+            "webhook de Stripe con firma inválida (event_id=%s)",
+            evt_id or "?",
+        )
         return JSONResponse({"error": "firma inválida"}, status_code=400)
     try:
         evento = billing.evento_de_payload(payload)
     except ValueError:
+        logger.warning("webhook de Stripe con payload inválido")
         return JSONResponse({"error": "payload inválido"}, status_code=400)
+    evt_id = billing.event_id_de(evento)
+    evt_tipo = str(evento.get("type", "?"))
     try:
         res = await service.aplicar_evento_stripe(
             req.app.state.teams, evento,
@@ -657,7 +711,10 @@ async def _billing_webhook(req: Request) -> JSONResponse:
         # propósito: Stripe reintenta el webhook con backoff y el upgrade
         # se aplica cuando la DB vuelva. El evento es reproducible desde
         # el dashboard de Stripe si hiciera falta.
-        logger.exception("error aplicando evento de Stripe; Stripe reintentará")
+        logger.exception(
+            "error aplicando evento Stripe (id=%s type=%s); Stripe reintentará",
+            evt_id or "?", evt_tipo,
+        )
         return JSONResponse({"error": "error interno"}, status_code=500)
     return JSONResponse({"recibido": True, "aplicado": res is not None})
 

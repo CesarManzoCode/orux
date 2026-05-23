@@ -392,7 +392,10 @@ class GitRepo:
             except subprocess.TimeoutExpired:
                 logger.warning("git %s (con credenciales) excedió %.0fs", op, timeout)
                 return 1, "la operación con el remoto tardó demasiado"
-            except (FileNotFoundError, OSError):
+            except (FileNotFoundError, OSError) as e:
+                # Antes era silencioso: si git desaparece del PATH o el FS
+                # rechaza el spawn, el operador no sabe la causa.
+                logger.warning("git %s (con credenciales) no se pudo invocar: %s", op, e)
                 return 1, "git no disponible"
         finally:
             shutil.rmtree(askdir, ignore_errors=True)

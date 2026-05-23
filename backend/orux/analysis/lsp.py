@@ -36,7 +36,7 @@ from typing import Protocol
 
 from .modelo import Simbolo
 
-_log = logging.getLogger("orux.lsp")
+logger = logging.getLogger(__name__)
 
 
 class Transporte(Protocol):
@@ -485,28 +485,33 @@ class _TransporteProceso:
         try:
             if self._p.stdin is not None:
                 self._p.stdin.close()
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("cerrar stdin LSP pid=%s: %r", self._p.pid, e)
         try:
             self._p.kill()
-        except Exception:  # noqa: BLE001 - ya estaba muerto
-            pass
+        except Exception as e:  # noqa: BLE001 - ya estaba muerto
+            logger.debug("kill LSP pid=%s: %r", self._p.pid, e)
         # `wait(timeout)` cosecha el zombie (BACKEND-AUDIT-0107): sin esto
         # cada LSP que matamos deja una entrada zombie en Linux hasta el cosecha
         # global del padre. 2s es generoso (kill ya disparó).
         try:
             self._p.wait(timeout=2.0)
         except subprocess.TimeoutExpired:
-            pass
-        except Exception:  # noqa: BLE001
-            pass
+            logger.warning(
+                "LSP pid=%s no terminó tras 2s post-kill (zombie posible)",
+                self._p.pid,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.debug("wait LSP pid=%s: %r", self._p.pid, e)
         # Cerrar stdout/stderr/stdin para no fugar FDs.
         for h in (self._p.stdout, self._p.stderr, self._p.stdin):
             try:
                 if h is not None:
                     h.close()
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug(
+                    "cerrar FD LSP pid=%s: %r", self._p.pid, e,
+                )
 
 
 # Servidor LSP por clave de lenguaje (la misma que usa `tiers`): lista de
@@ -603,22 +608,23 @@ def arrancar_lsp(
         try:
             cliente = ClienteLSP(_TransporteProceso(proc, timeout))
             cliente.iniciar("file://" + raiz.rstrip("/"))
-            _log.info(
+            logger.info(
                 "LSP %s arrancado (%s) sobre %s", lang, cmd[0], raiz
             )
             return SesionLSP(cliente, raiz)
         except Exception as e:  # noqa: BLE001 - handshake falló
             try:
                 proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as ek:  # noqa: BLE001
+                logger.debug("kill LSP %s tras handshake fallido: %r", lang, ek)
             try:
                 err.seek(0)
                 cola = err.read()[-800:].decode("utf-8", "replace").strip()
                 # BACKEND-AUDIT-0243: scrubear posibles secrets ORUX_GIT_TOKEN
                 # u otros si el LSP dumpea su env por error.
                 cola = _scrubear_stderr(cola)
-            except Exception:  # noqa: BLE001
+            except Exception as ee:  # noqa: BLE001
+                logger.debug("lectura de stderr LSP %s: %r", lang, ee)
                 cola = ""
             ultimo = (
                 f"{cmd[0]}: handshake falló ({type(e).__name__}: {e})"
@@ -627,7 +633,7 @@ def arrancar_lsp(
             )
         finally:
             err.close()
-    _log.warning(
+    logger.warning(
         "LSP %s NO disponible -> el análisis degrada a tree-sitter/ast. "
         "Razón: %s", lang, ultimo or "binario no encontrado en PATH",
     )

@@ -37,6 +37,8 @@ from .sync import SyncServer, TeamRuntime
 # ownership y el secreto de firma como archivos hermanos.
 BASE_POR_DEFECTO = Path.home() / ".orux"
 
+logger = logging.getLogger(__name__)
+
 
 def _secreto(base: Path) -> str:
     """Secreto para firmar tokens de sesión, estable entre reinicios.
@@ -58,7 +60,7 @@ def _secreto(base: Path) -> str:
     """
     env = os.environ.get("ORUX_SESSION_SECRET", "").strip()
     f = base / "secret"
-    log = logging.getLogger(__name__)
+    log = logger
     if env and f.exists():
         try:
             del_archivo = f.read_text(encoding="utf-8").strip()
@@ -124,7 +126,7 @@ def _secreto(base: Path) -> str:
 
 
 async def _amain() -> None:
-    log = logging.getLogger(__name__)
+    log = logger
     env = os.environ.get("ORUX_DATA")
     base = Path(env) if env else BASE_POR_DEFECTO
     base.mkdir(parents=True, exist_ok=True)
