@@ -608,4 +608,26 @@ export const es = {
     confirm_discard_msg:
       "Vas a descartar tu borrador local. Lo que escribiste no se enviará a la dueña del archivo y se pierde. Esta acción no se puede deshacer.",
     confirm_discard_ok: "descartar",
+    // ── Tutorial guiado (OruxBot) ────────────────────────────────────────
+    // Onboarding cinematográfico: la primera vez que un admin entra a un
+    // workspace vacío, el bot conduce un recorrido de <60s mostrando los
+    // diferenciadores con un proyecto fake (no toca el backend).
+    tut_aria: "Tutorial guiado de Orux",
+    tut_skip: "Saltar",
+    tut_skip_aria: "Saltar el tutorial",
+    tut_cta_start: "Empezar",
+    tut_hello: "Hola. Soy Orux.",
+    tut_intro: "Trabajo encima de Git. No lo reemplazo: coordino lo que tu equipo hace sobre él.",
+    tut_skip_hint: "Te muestro lo importante en menos de un minuto. Podés saltar cuando quieras.",
+    tut_open_git: "Acá traés tu repo. Clic.",
+    tut_clone: "Clicá clonar — traigo un repo de muestra.",
+    tut_code_here: "Tu código está acá.",
+    tut_open_file: "Abrí cualquier archivo.",
+    tut_ana_joins: "Ana entra al mismo archivo. La ves en vivo en presencia.",
+    tut_ana_proposes: "Te propone un cambio. Aparece en cambios propuestos.",
+    tut_accept_prop: "Aceptás con un clic.",
+    tut_impact: "El cambio renombró una función. Orux detectó que impacta otros archivos.",
+    tut_autofix: "Orux Premium te propone el rename en cascada.",
+    tut_accept_fix: "Aceptás también.",
+    tut_close: "Listo. Mismo Git, sin colisiones. Coordinación viva sobre tu repo de verdad.",
 } as const;

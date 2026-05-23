@@ -59,12 +59,23 @@ function Sec(props: {
   // a11y queda intacta (aria-expanded sigue siendo la única verdad).
   // aria-hidden cuando está plegado para que screen readers no lean
   // contenido oculto.
+  // data-tour-id permite al tutorial anclar el spotlight a cada sección
+  // (presencia, ownership, impacto, propuestas, actividad) sin filtrar la
+  // implementación de coordenadas en el guión.
+  const tourMap: Record<string, string> = {
+    pres: "inspector-presencia",
+    own: "inspector-ownership",
+    imp: "inspector-impacto",
+    prop: "inspector-propuestas",
+    act: "inspector-actividad",
+  };
   return (
     <section
       className={
         "insec" + (props.tono ? " " + props.tono : "") +
         (plegada ? " plegada" : "")
       }
+      data-tour-id={tourMap[props.k]}
     >
       <button
         type="button"
@@ -188,6 +199,7 @@ function PropCard({
               onClick={() => resolver(p.id, true)}
               aria-label={t.tr_approve}
               title={t.kbd_btn_hint_approve}
+              data-tour-id="prop-accept"
             >
               {t.tr_approve}
             </button>
@@ -247,6 +259,18 @@ export function Inspector({
   const c = path ? chipDe(path) : null;
 
   const [colapsadas, setColapsadas] = useState<Set<string>>(leerColapso);
+  // Listener para el tutorial: cuando arranca, despliega TODAS las
+  // secciones del inspector. Se necesita porque `colapsadas` se hidrata
+  // de localStorage al montar — un `removeItem` desde el Tutorial llega
+  // tarde si el Inspector ya se montó con secciones plegadas.
+  useEffect(() => {
+    function onReset() {
+      setColapsadas(new Set());
+      try { localStorage.removeItem(COLAPSO_KEY); } catch {}
+    }
+    window.addEventListener("orux:reset-inspector-colapso", onReset);
+    return () => window.removeEventListener("orux:reset-inspector-colapso", onReset);
+  }, []);
   // Confirmación de "descartar borrador" — antes era window.confirm(): roto
   // visualmente vs el resto del IDE (gramática única ConfirmDialog), no
   // estilable, sin foco gestionado. Tono danger: descartar borra trabajo
