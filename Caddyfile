@@ -7,13 +7,15 @@
 
 	# Cabeceras de seguridad en TODAS las respuestas — el frontend estático
 	# (SPA, landing, panel de operador) no tenía ninguna; la API ya pone las
-	# suyas. nosniff corta el MIME-sniffing, DENY corta el clickjacking, HSTS
-	# fuerza HTTPS, y se quita el banner Server. Sin CSP a propósito: una CSP
-	# mal puesta rompe el SPA y no se puede verificar desde acá — eso queda
-	# para una pasada con el navegador.
+	# suyas. nosniff corta el MIME-sniffing, SAMEORIGIN permite que la
+	# landing embeba el demo del IDE (orux.space → orux.space/app?demo=1)
+	# sin abrir a terceros (clickjacking sigue bloqueado), HSTS fuerza HTTPS,
+	# y se quita el banner Server. Sin CSP a propósito: una CSP mal puesta
+	# rompe el SPA y no se puede verificar desde acá — eso queda para una
+	# pasada con el navegador.
 	header {
 		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
+		X-Frame-Options SAMEORIGIN
 		Referrer-Policy strict-origin-when-cross-origin
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server

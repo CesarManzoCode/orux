@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { T, cargaLang, guardaLang, type Lang, type Traducciones } from "./i18n";
 
@@ -490,6 +490,71 @@ function Stage({ t }: { t: Traducciones }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * DemoFrame — iframe del IDE real corriendo en modo demo (?demo=1).
+ *
+ * Estrategia: lazy-load con IntersectionObserver. Mientras el iframe no
+ * carga (o nunca entra al viewport), mostramos el Stage animado que ya
+ * teníamos como skeleton/fallback. Al cargar, cross-fade al iframe.
+ *
+ * Same-origin (/app/...) → no hace falta CORS ni postMessage; sólo el
+ * Caddyfile tiene que permitir embed same-origin (X-Frame-Options
+ * SAMEORIGIN; ver Caddyfile en la raíz).
+ *
+ * En dev local el iframe va a 404 a menos que tengas el IDE servido en
+ * /app/ del mismo origen. Para probar el demo en dev, lo natural es
+ * abrir el IDE directo (http://localhost:5174/?demo=1). En producción
+ * (orux.space) funciona out of the box.
+ * ───────────────────────────────────────────────────────────────────── */
+function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+    const el = containerRef.current;
+    if (!el) return;
+    // rootMargin 300px: empezar a cargar el bundle del IDE antes de que
+    // el visitante haga scroll hasta el hero (en mobile el hero está
+    // arriba del fold; en desktop también pero IO permite preload).
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setShouldLoad(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [shouldLoad]);
+
+  // Si el iframe falla en cargar (sin red, sin /app/, etc.) el Stage de
+  // fallback se queda visible — el visitante igual ve algo del producto.
+  const src = `/app/?demo=1&lang=${lang}`;
+
+  return (
+    <div className="hero-demo" ref={containerRef}>
+      {shouldLoad && (
+        <iframe
+          className={"hero-demo-iframe" + (iframeReady ? " is-ready" : "")}
+          src={src}
+          title="Orux demo"
+          onLoad={() => setIframeReady(true)}
+          loading="lazy"
+        />
+      )}
+      {/* Stage de fallback: visible siempre hasta que el iframe esté listo.
+          También cubre el caso "iframe falla en cargar" sin código extra. */}
+      <div className={"hero-demo-fallback" + (iframeReady ? " is-hidden" : "")}>
+        <Stage t={t} />
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const reduce = useReducedMotion();
   // Dos disparadores distintos para dos efectos distintos:
@@ -595,7 +660,7 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Stage t={t} />
+            <DemoFrame lang={lang} t={t} />
             <p className="stage-cap" aria-label={t.stage_cap_aria}>
               <span className="dotg" aria-hidden /><b>{t.stage_cap_1}</b>{" "}
               <span className="dotp" aria-hidden />{t.stage_cap_2}{" "}
