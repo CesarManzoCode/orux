@@ -18,36 +18,50 @@
 @import "./css/bloques.css";
 
 /* ── DemoFrame del hero ──────────────────────────────────────────────────
- * iframe del IDE real corriendo en /app/?demo=1. Hereda el "slot" del
- * stage (mismo wrapper .hero-stage-col), pero NO comparte su perspective
- * 3D — el iframe es plano. El Stage queda debajo como fallback hasta que
- * el iframe carga, y se desvanece con cross-fade.
+ * iframe del IDE real corriendo en /app/?demo=1. El IDE necesita ~1280px
+ * de ancho mínimo para que sidebar + editor + inspector entren sin
+ * recortes (los paneles tienen min-width internos no negociables); por
+ * eso renderizamos el iframe SIEMPRE a 1280×820 (ver DEMO_W/DEMO_H en
+ * App.tsx) y lo encogemos con `transform: scale()` calculado en JS para
+ * llenar el slot sin recortar nada. El IDE se ve completo, sólo más
+ * chico — el visitante igual lee y reconoce los hitos por los halos.
+ *
+ * El Stage anterior queda como fallback debajo: si el iframe no carga,
+ * el visitante igual ve algo en lugar de un rectángulo negro.
  * ────────────────────────────────────────────────────────────────────── */
 .hero-demo {
   position: relative;
   width: 100%;
-  /* Mismo tamaño aproximado del stage (16:11 funciona para mostrar IDE
-     completo con sidebar+editor+inspector sin recortar). */
-  aspect-ratio: 16 / 11;
-  min-height: 420px;
+  /* Match al ratio del iframe nativo (1280/820 ≈ 16:10.25 ≈ 16:10) para
+     que el scale fit no deje espacio sobrante grande arriba o abajo. */
+  aspect-ratio: 16 / 10;
+  min-height: 440px;
   margin-right: clamp(-220px, -10vw, -56px);
-}
-.hero-demo-iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
+  overflow: hidden;
   border-radius: var(--r-isla, 14px);
   background: #08090b;
   box-shadow:
     0 30px 80px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+/* Wrapper que se escala: tiene dimensiones FIJAS del IDE nativo, el JS
+   le ajusta `transform: scale()` para que entre en .hero-demo. */
+.hero-demo-scale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  z-index: 2;
+}
+.hero-demo-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #08090b;
   opacity: 0;
   transition: opacity 720ms cubic-bezier(0.16, 1, 0.3, 1);
-  /* z-index sobre el fallback */
-  z-index: 2;
   pointer-events: none;  /* visitante mira, no interactúa */
+  display: block;
 }
 .hero-demo-iframe.is-ready {
   opacity: 1;
@@ -66,13 +80,14 @@
 @media (max-width: 1080px) {
   .hero-demo {
     margin-right: 0;
-    max-width: 760px;
-    aspect-ratio: 16 / 12;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 @media (max-width: 600px) {
   .hero-demo {
-    min-height: 320px;
-    aspect-ratio: 4 / 3;
+    min-height: 280px;
+    aspect-ratio: 16 / 11;
   }
 }

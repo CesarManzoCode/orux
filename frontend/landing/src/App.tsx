@@ -506,18 +506,25 @@ function Stage({ t }: { t: Traducciones }) {
  * abrir el IDE directo (http://localhost:5174/?demo=1). En producción
  * (orux.space) funciona out of the box.
  * ───────────────────────────────────────────────────────────────────── */
+// Tamaño "natural" del IDE: ancho mínimo para que sidebar + editor +
+// inspector se vean sin recortes (los paneles tienen min-width internos
+// que no podemos negociar). El iframe se renderiza a este tamaño y luego
+// se ESCALA con CSS transform para encajar en el slot del hero.
+const DEMO_W = 1280;
+const DEMO_H = 820;
+
 function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
+  const [scale, setScale] = useState(0.5);
 
   useEffect(() => {
     if (shouldLoad) return;
     const el = containerRef.current;
     if (!el) return;
     // rootMargin 300px: empezar a cargar el bundle del IDE antes de que
-    // el visitante haga scroll hasta el hero (en mobile el hero está
-    // arriba del fold; en desktop también pero IO permite preload).
+    // el visitante haga scroll hasta el hero.
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -531,6 +538,26 @@ function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
     return () => obs.disconnect();
   }, [shouldLoad]);
 
+  // Scale dinámico: el iframe siempre se renderiza a DEMO_W × DEMO_H, pero
+  // se encoge con transform: scale() para llenar el slot disponible sin
+  // recortar. Usamos el min entre el fit-por-ancho y fit-por-alto, así
+  // siempre se ve el IDE entero (puede sobrar algo de espacio, mejor eso
+  // que recortar el Inspector).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const calc = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w === 0 || h === 0) return;
+      setScale(Math.min(w / DEMO_W, h / DEMO_H));
+    };
+    calc();
+    const ro = new ResizeObserver(calc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Si el iframe falla en cargar (sin red, sin /app/, etc.) el Stage de
   // fallback se queda visible — el visitante igual ve algo del producto.
   const src = `/app/?demo=1&lang=${lang}`;
@@ -538,13 +565,22 @@ function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
   return (
     <div className="hero-demo" ref={containerRef}>
       {shouldLoad && (
-        <iframe
-          className={"hero-demo-iframe" + (iframeReady ? " is-ready" : "")}
-          src={src}
-          title="Orux demo"
-          onLoad={() => setIframeReady(true)}
-          loading="lazy"
-        />
+        <div
+          className="hero-demo-scale"
+          style={{
+            width: DEMO_W + "px",
+            height: DEMO_H + "px",
+            transform: `scale(${scale})`,
+          }}
+        >
+          <iframe
+            className={"hero-demo-iframe" + (iframeReady ? " is-ready" : "")}
+            src={src}
+            title="Orux demo"
+            onLoad={() => setIframeReady(true)}
+            loading="lazy"
+          />
+        </div>
       )}
       {/* Stage de fallback: visible siempre hasta que el iframe esté listo.
           También cubre el caso "iframe falla en cargar" sin código extra. */}
