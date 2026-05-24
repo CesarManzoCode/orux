@@ -671,4 +671,20 @@ export const es = {
     tut_autofix: "Orux Premium te propone el rename en cascada.",
     tut_accept_fix: "También la aceptas.",
     tut_close: "Listo. Mismo Git, sin colisiones. Coordinación viva sobre tu repo de verdad.",
+
+    // Demo cinematográfico de la landing (ruta ?demo=1). Las claves son
+    // intencionalmente cortas — el badge de fase tiene espacio limitado.
+    demo_label: "Demo · ejemplo automático",
+    demo_step_setup: "Cargando workspace de muestra",
+    demo_step_ana_enters: "Ana se conecta a procesar_pago.py",
+    demo_step_ana_editing: "Ana edita procesar_pago.py",
+    demo_step_ana_proposes: "Ana propone cambios",
+    demo_step_approved: "Aprobada · queda en Git",
+    demo_step_impact: "Impacto detectado en 2 archivos",
+    demo_step_focus_impact: "Abriendo api/cobros.py (el afectado)",
+    demo_step_premium_enters: "Orux Premium prepara el auto-fix",
+    demo_step_autofix: "Orux Premium · auto-fix listo",
+    demo_step_resolved: "Resuelto · sin impactos pendientes",
+    demo_step_calm: "Todo en orden",
+    demo_cursor_label: "tú",
 } as const;

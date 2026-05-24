@@ -106,6 +106,11 @@ export interface State {
   // que la status bar y el inspector lo muestren.
   actividad: ActItem[];
   caret: { line: number; col: number };
+  // Demo cinematográfico para la landing: si es true, el IDE corre en modo
+  // "kiosk" — sin conexión WS, con datos fake del mock loop y un overlay que
+  // bloquea cualquier interacción del visitante. Se activa con `?demo=1` y
+  // se inyecta desde main.tsx vía __setForTutorial.
+  demoMode: boolean;
 }
 
 const inicial: State = {
@@ -117,7 +122,7 @@ const inicial: State = {
     location.hostname && location.hostname !== "localhost"
       ? location.hostname : "local",
   fase: "auth", equipos: [], equipoError: "", equipo: null, inviteCode: "",
-  actividad: [], caret: { line: 1, col: 1 },
+  actividad: [], caret: { line: 1, col: 1 }, demoMode: false,
 };
 
 let state: State = inicial;
@@ -132,13 +137,16 @@ export function subscribe(l: () => void) {
 }
 export function getState() { return state; }
 
-// Tutorial-only: setter expuesto para que el guión interactivo del onboarding
-// pueda inyectar estado fake (archivos, propuestas, ownership, impacto)
-// directamente en el cliente — sin tocar el servidor. Se llama desde
-// src/tutorial/mock.ts y SOLO se debe usar mientras el tutorial está activo,
-// que a su vez sólo arranca con `files` vacío (workspace virgen). El cleanup
-// resetea todos esos campos a vacío al saltar/terminar, así no queda
-// residuo. NO usar fuera del tutorial — saltea protocolo y broadcast.
+// Setter expuesto para usos que necesitan inyectar estado fake en el cliente
+// sin tocar el servidor — saltea protocolo y broadcast. Usos legítimos:
+//
+//   1) Tutorial guiado del onboarding (src/tutorial/mock.ts), que solo arranca
+//      con `files` vacío (workspace virgen) y limpia al saltar/terminar.
+//   2) Modo demo cinematográfico (?demo=1, ver main.tsx + tutorial/DemoLoop):
+//      sin conexión WS, mocks en bucle infinito, overlay anti-interacción.
+//
+// NO usar para otros flujos: cualquier estado inyectado bypasea protocol/
+// broadcast y los otros clientes nunca van a verlo.
 export function __setForTutorial(patch: Partial<State>): void { set(patch); }
 
 // ── Toast emitter (cliente puro, fuera del estado React) ────────────────

@@ -19,6 +19,7 @@ import { Inspector } from "./components/Inspector";
 import { Splitter } from "./components/Splitter";
 import { KbdHelp } from "./components/KbdHelp";
 import { Tutorial } from "./tutorial/Tutorial";
+import { DemoLoop } from "./tutorial/DemoLoop";
 import { useI18n } from "./i18n";
 
 // Capa 27 — Anchos redimensionables del Sidebar y el Inspector.
@@ -101,6 +102,7 @@ export function App() {
   // `tutorialOn=true` se queda hasta que el componente avise `onDone`.
   const [tutorialOn, setTutorialOn] = useState(false);
   useEffect(() => {
+    if (s.demoMode) return;  // demo cinematográfico — no disparar tutorial.
     if (s.fase !== "team") return;
     if (!s.esAdmin) return;
     if (Object.keys(s.files).length > 0) return;
@@ -371,7 +373,8 @@ export function App() {
   if (s.fase !== "team") return <Lobby />;
 
   return (
-    <div className={"app" + (inspOpen ? "" : " sin-insp")}>
+    <div className={"app" + (inspOpen ? "" : " sin-insp") + (s.demoMode ? " demo-mode" : "")}>
+      {s.demoMode && <DemoLoop />}
       <TopBar inspOpen={inspOpen} toggleInsp={toggleInsp} />
       <div className="layout">
         <Rail
@@ -421,6 +424,18 @@ export function App() {
         >
           {toast.text}
         </div>
+      )}
+      {/* Modo demo: overlay invisible que captura cualquier clic/tecla del
+          visitante. La animación corre desde JS (setTimeout en DemoLoop), así
+          que bloquear la interacción no afecta lo que se muestra. Sin esto
+          un visitante curioso podría disparar acciones reales o el modal
+          de borrar archivos, rompiendo el bucle. */}
+      {s.demoMode && (
+        <div
+          className="demo-overlay"
+          aria-hidden="true"
+          onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        />
       )}
     </div>
   );

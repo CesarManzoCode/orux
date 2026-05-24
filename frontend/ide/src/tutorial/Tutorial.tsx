@@ -120,8 +120,8 @@ export function Tutorial({
   api: TutorialAPI;
   onDone: () => void;
 }) {
-  const { t } = useI18n();
-  const steps = useMemo<Step[]>(() => construirGuion(api), [api]);
+  const { t, lang } = useI18n();
+  const steps = useMemo<Step[]>(() => construirGuion(api, lang), [api, lang]);
   const [idx, setIdx] = useState(0);
   const step = steps[idx];
   const isLast = idx === steps.length - 1;

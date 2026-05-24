@@ -10,11 +10,11 @@
 // NO define `after`, el click sí se propaga al target (delega en la app
 // real — usado para el paso "abrir panel git", donde dejamos que el
 // `setVista` real del Rail haga el cambio).
-import type { Traducciones } from "../i18n";
+import type { Lang, Traducciones } from "../i18n";
 import {
   mockSeedRepo, mockOpenFile, mockAnaEntra,
   mockPropuestaDeAna, mockAprobar, mockImpactoCascada,
-  mockAutoFixPremium, mockLimpiarImpactos,
+  mockAutoFixPremium, mockLimpiarImpactos, pathsPorLang,
 } from "./mock";
 
 export type StepMode = "say" | "click";
@@ -43,7 +43,8 @@ export interface TutorialAPI {
 let propAna = "";
 let propAutoFix = "";
 
-export function construirGuion(api: TutorialAPI): Step[] {
+export function construirGuion(api: TutorialAPI, lang: Lang = "es"): Step[] {
+  const paths = pathsPorLang(lang);
   return [
     {
       id: "hello",
@@ -81,7 +82,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       target: "git-clone",
       side: "der",
       after: () => {
-        mockSeedRepo();
+        mockSeedRepo(lang);
         api.setVista("archivos");
       },
     },
@@ -99,9 +100,9 @@ export function construirGuion(api: TutorialAPI): Step[] {
       id: "open-file",
       mode: "click",
       text: (t) => t.tut_open_file,
-      target: "file-procesar_pago.py",
+      target: "file-" + paths.main,
       side: "der",
-      after: () => { mockOpenFile("procesar_pago.py"); },
+      after: () => { mockOpenFile(paths.main); },
     },
     // ── Paso 8: Ana entra al mismo archivo. Pulso vivo en el inspector. ──
     {
@@ -111,7 +112,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       target: "inspector-presencia",
       side: "izq",
       wait: 6000,
-      before: () => { mockAnaEntra("procesar_pago.py", 4); },
+      before: () => { mockAnaEntra(paths.main, 4); },
     },
     // ── Paso 9: propuesta de Ana llega al inspector. ──
     {
@@ -121,7 +122,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       target: "inspector-propuestas",
       side: "izq",
       wait: 6000,
-      before: () => { propAna = mockPropuestaDeAna(); },
+      before: () => { propAna = mockPropuestaDeAna(lang); },
     },
     // ── Paso 10: usuario aprueba. ──
     {
@@ -144,8 +145,8 @@ export function construirGuion(api: TutorialAPI): Step[] {
       side: "izq",
       wait: 7500,
       before: () => {
-        mockImpactoCascada();
-        mockOpenFile("api/cobros.py");
+        mockImpactoCascada(lang);
+        mockOpenFile(paths.api);
       },
     },
     // ── Paso 12: auto-fix premium aparece como propuesta. ──
@@ -156,7 +157,7 @@ export function construirGuion(api: TutorialAPI): Step[] {
       target: "inspector-propuestas",
       side: "izq",
       wait: 6500,
-      before: () => { propAutoFix = mockAutoFixPremium(); },
+      before: () => { propAutoFix = mockAutoFixPremium(lang); },
     },
     // ── Paso 13: aprobar el auto-fix → limpia impactos. ──
     {
