@@ -312,14 +312,21 @@ export function App() {
   // sólo abre el diálogo si la decisión está pendiente ("default"); si ya se
   // concedió o denegó, no molesta. También reinicia el registro de avisos:
   // es por-equipo (cambiar de equipo empieza de cero).
+  //
+  // Bypass en modo demo (?demo=1, iframe del hero de la landing): el demo
+  // simula un equipo para satisfacer los gates del App, así que esta rama
+  // se dispararía pidiendo permiso de notificaciones al visitante de la
+  // landing — invasivo y fuera de contexto, además de que el DemoLoop crea
+  // propuestas que después caerían como avisos reales del navegador.
   useEffect(() => {
     if (s.fase !== "team") return;
+    if (s.demoMode) return;
     notifSeen.current.clear();
     if ("Notification" in window && Notification.permission === "default") {
       try { Notification.requestPermission().catch(() => {}); }
       catch { /* navegador sin la API */ }
     }
-  }, [s.fase]);
+  }, [s.fase, s.demoMode]);
 
   // Avisos del navegador — dispara una notificación cuando llega algo que te
   // NECESITA (una propuesta sobre un archivo tuyo, o un impacto sobre uno
@@ -327,7 +334,11 @@ export function App() {
   // ya lo ves en vivo. `notifSeen` evita re-notificar lo mismo en cada
   // render; al entrar a un equipo la pestaña está enfocada, así que las
   // propuestas pendientes que cargan en el handshake no disparan aviso.
+  // En demo no aplica: el iframe vive dentro de la landing y document.hidden
+  // se vuelve true en cuanto el visitante deja esa pestaña, así que el demo
+  // disparaba avisos reales por las propuestas simuladas del DemoLoop.
   useEffect(() => {
+    if (s.demoMode) return;
     const yo = s.yo?.client_id;
     if (!yo) return;
     const puede =
@@ -364,7 +375,7 @@ export function App() {
         } catch { /* algunos navegadores restringen el constructor */ }
       }
     }
-  }, [s.proposals, s.impacts, s.owners, s.yo, t]);
+  }, [s.proposals, s.impacts, s.owners, s.yo, s.demoMode, t]);
 
   // La app está cerrada por dos compuertas: sin autenticar -> login;
   // autenticado pero sin equipo -> lobby (capa 15). Sólo dentro de un
