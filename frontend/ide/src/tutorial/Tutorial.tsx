@@ -21,33 +21,92 @@ import { Spotlight } from "./Spotlight";
 import { construirGuion, type Step, type StepSide, type TutorialAPI } from "./script";
 import { mockClearAll } from "./mock";
 
-function posJuntoA(el: Element, side: StepSide): BotPos {
+// Estimación del bounding box del bot (avatar 44 + gap 12 + bubble max 320
+// = 376; alto promedio con 2-3 líneas de texto + posible CTA ~140). No es
+// exacto (el bubble crece con el texto), pero alcanza para decidir flip y
+// clamp: si nos quedamos cortos por unos píxeles, el clamp tira al borde —
+// preferimos al bot pegado al borde que fuera del viewport.
+const BOT_W = 376;
+const BOT_H = 140;
+const PAD = 12;
+
+// Mantiene el bot DENTRO del viewport. Cada anchor define qué punto del bot
+// se posa en (left, top); el bbox real del bot depende de eso. El clamp
+// ajusta left/top para que el bbox completo quepa con un padding chico.
+// Fix anti-overflow para zoom in del browser (ctrl+): con poco viewport,
+// el bot se salía por el borde inferior o lateral y dejaba de verse.
+function clampDentro(pos: BotPos): BotPos {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  let left = pos.left;
+  let top = pos.top;
+  switch (pos.anchor) {
+    case "tr":
+      left = Math.max(BOT_W + PAD, Math.min(left, w - PAD));
+      top = Math.max(PAD, Math.min(top, h - BOT_H - PAD));
+      break;
+    case "bl":
+      left = Math.max(PAD, Math.min(left, w - BOT_W - PAD));
+      top = Math.max(BOT_H + PAD, Math.min(top, h - PAD));
+      break;
+    case "br":
+      left = Math.max(BOT_W + PAD, Math.min(left, w - PAD));
+      top = Math.max(BOT_H + PAD, Math.min(top, h - PAD));
+      break;
+    case "center":
+      left = Math.max(BOT_W / 2 + PAD, Math.min(left, w - BOT_W / 2 - PAD));
+      top = Math.max(BOT_H / 2 + PAD, Math.min(top, h - BOT_H / 2 - PAD));
+      break;
+    case "tl":
+    default:
+      left = Math.max(PAD, Math.min(left, w - BOT_W - PAD));
+      top = Math.max(PAD, Math.min(top, h - BOT_H - PAD));
+      break;
+  }
+  return { ...pos, left, top };
+}
+
+function posJuntoA(el: Element, sideDeseado: StepSide): BotPos {
   const r = el.getBoundingClientRect();
   // Margen entre el target y el bot. El logomark tiene 32px + glow, así
   // que 20-24px de separación deja espacio para que el ojo conecte ambos.
   const gap = 24;
-  // Default: anchor top-left (top/left = esquina superior izquierda del bot).
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // Flip anti-overflow: si el lado pedido no entra (zoom in, target pegado
+  // a un borde), probamos el opuesto. Si ninguno entra, caemos a centro —
+  // preferible a un bot invisible fuera del viewport.
+  let side = sideDeseado;
+  if (side === "izq" && r.left - gap - BOT_W < PAD) {
+    side = r.right + gap + BOT_W <= w - PAD ? "der" : "centro";
+  } else if (side === "der" && r.right + gap + BOT_W > w - PAD) {
+    side = r.left - gap - BOT_W >= PAD ? "izq" : "centro";
+  } else if (side === "abajo" && r.bottom + gap + BOT_H > h - PAD) {
+    side = r.top - gap - BOT_H >= PAD ? "arriba" : "centro";
+  } else if (side === "arriba" && r.top - gap - BOT_H < PAD) {
+    side = r.bottom + gap + BOT_H <= h - PAD ? "abajo" : "centro";
+  }
   switch (side) {
     case "der":
-      return { top: r.top + r.height / 2 - 18, left: r.right + gap, anchor: "tl" };
+      return clampDentro({ top: r.top + r.height / 2 - 18, left: r.right + gap, anchor: "tl" });
     case "izq":
-      return { top: r.top + r.height / 2 - 18, left: r.left - gap, anchor: "tr" };
+      return clampDentro({ top: r.top + r.height / 2 - 18, left: r.left - gap, anchor: "tr" });
     case "abajo":
-      return { top: r.bottom + gap, left: r.left + r.width / 2, anchor: "tl" };
+      return clampDentro({ top: r.bottom + gap, left: r.left + r.width / 2, anchor: "tl" });
     case "arriba":
-      return { top: r.top - gap, left: r.left + r.width / 2, anchor: "bl" };
+      return clampDentro({ top: r.top - gap, left: r.left + r.width / 2, anchor: "bl" });
     case "centro":
     default:
-      return { top: window.innerHeight / 2 - 32, left: window.innerWidth / 2, anchor: "center" };
+      return posCentral();
   }
 }
 
 function posCentral(): BotPos {
-  return {
+  return clampDentro({
     top: window.innerHeight / 2 - 60,
     left: window.innerWidth / 2,
     anchor: "center",
-  };
+  });
 }
 
 function posSame(a: BotPos, b: BotPos): boolean {
