@@ -33,7 +33,14 @@ export function LegalModal({
   // legal largo: dejaba al usuario de teclado/lector al FINAL del texto.
   // Deps [] = solo al montar.
   const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { closeRef.current?.focus(); }, []);
+  // El body es el contenedor scrollable; si el usuario abrió un doc, scrolleó
+  // hasta abajo, cerró y volvió a abrir, sin esto reaparecería al final.
+  // Resetear scrollTop al mount lo asienta siempre en el principio del texto.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [doc]);
 
   // Esc cierra — convención universal. preventDefault para que ningún
   // atajo de OS interfiera mientras el modal tiene el foco lógico.
@@ -111,7 +118,7 @@ export function LegalModal({
             </button>
           </header>
 
-          <div className="legal-body">
+          <div className="legal-body" ref={bodyRef}>
             <p className="legal-updated">
               {t.legal_updated_prefix} {t.legal_updated_date}
             </p>

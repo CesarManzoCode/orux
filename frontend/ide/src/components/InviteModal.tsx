@@ -56,7 +56,11 @@ export function InviteModal({
     const ok = await copiarTexto(valor);
     setEstado(ok ? "ok" : "failed");
     emitToast(ok ? okMsg : t.toast_invite_failed, ok ? "ok" : "bad");
-    if (ok) setTimeout(() => setEstado("idle"), 1500);
+    // 2200ms: el ojo necesita confirmar el cambio (check + label) antes
+    // de que el botón vuelva al estado base. A 1500 el ack se sentía un
+    // parpadeo; ahora coincide con la longitud del toast (2400ms App.tsx)
+    // para que ambos feedbacks vivan en sincronía.
+    if (ok) setTimeout(() => setEstado("idle"), 2200);
   };
 
   const onCopiarLink = () => copiar(link, setEstLink, t.toast_invite_copied);

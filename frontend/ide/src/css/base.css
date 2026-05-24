@@ -86,6 +86,16 @@
                                         del CTA acero (login/hub/landing). */
   --steel-ink: #eef4fb;
 
+  /* ── GitHub OAuth: tinta institucional del botón "Continuar con GitHub".
+       Vive aquí (no en el bloque de marca) porque la convención del botón
+       "Sign in with GitHub" reclama una paleta propia — gris carbón con
+       hairline más claro. Tokenizados para que un retoque (p.ej. modo
+       claro futuro) mueva el botón en un punto, no en cuatro hex sueltos. */
+  --gh-bg: #1f2328;
+  --gh-bg-hover: #2c333b;
+  --gh-border: #3a4048;
+  --gh-border-hover: #4a525c;
+
   /* ── Superficie de código: tokens NUEVOS y aislados (no tocan la
        geometría sagrada, sólo el aspecto del "pozo" donde se escribe).
        Las guías de indentación son la firma de un IDE de verdad: muy

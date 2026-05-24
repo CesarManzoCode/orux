@@ -324,7 +324,11 @@ h1 {
    dependía del wrap del navegador y la frase secundaria quedaba pegada
    a "Qué rompe.", matando el ritmo del titular. */
 h1 .h1-top { display: block; }
-h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 600; }
+/* Segundo compás del titular: declara contexto, no el titular en sí. El
+   peso baja un escalón (500 vs 680 del h1-top) para que la jerarquía
+   interna sea visible — antes ambos pisaban en 600 y la frase se leía
+   "bifurcada", como si dos titulares compitieran por la misma respiración. */
+h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 500; }
 .sub {
   margin-top: 32px; max-width: 50ch; color: var(--ink-2);
   font-size: clamp(15.5px, 1.5vw, 18px); line-height: 1.72;

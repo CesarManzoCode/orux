@@ -120,7 +120,11 @@
 }
 .aud-card {
   display: flex; flex-direction: column; gap: 12px;
-  padding: 28px 26px 30px;
+  /* Clamp uniforme (22→28px) reemplaza el padding asimétrico anterior
+     `28 26 30` y el override mobile en @media — la regla escala sola con
+     el viewport y queda alineada con la escala de respiración del resto
+     de las cards (.sec-card / .price). */
+  padding: clamp(22px, 2.6vw, 28px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-isla);
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
@@ -181,7 +185,10 @@
 }
 .sec-card {
   display: flex; flex-direction: column; gap: 10px;
-  padding: 24px 24px 26px;
+  /* Clamp uniforme: ver nota en .aud-card. La rampa baja un escalón
+     (20→26px) porque la card de seguridad lleva un ítem menos por
+     tarjeta — la densidad queda equivalente. */
+  padding: clamp(20px, 2.4vw, 26px);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-isla);
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
@@ -293,8 +300,9 @@
   .security { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
-  .aud-card { padding: 24px 22px 26px; }
-  .sec-card { padding: 22px 22px 24px; }
+  /* .aud-card / .sec-card: el clamp() del padding base ya escala — sin
+     overrides aquí. El hero-aud mantiene su override (el pill cambia su
+     densidad horizontal proporcional al texto, no al viewport). */
   .hero-aud { font-size: 10.5px; padding: 6px 12px 6px 10px; }
 }
 

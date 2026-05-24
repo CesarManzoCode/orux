@@ -151,7 +151,11 @@
   align-items: start;
 }
 .price {
-  position: relative; border-radius: var(--r-isla); padding: 36px;
+  position: relative; border-radius: var(--r-isla);
+  /* Clamp coherente con .aud-card/.sec-card; el techo es más alto (36px)
+     porque pricing es la card más cargada del producto y respira un punto
+     más. En mobile baja sola al piso (26px) sin overrides. */
+  padding: clamp(26px, 3.4vw, 36px);
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
   border: 1px solid var(--line-soft); box-shadow: inset 0 1px 0 var(--hair);
   display: flex; flex-direction: column;
@@ -162,7 +166,11 @@
     0 34px 76px -44px rgba(0, 0, 0, 0.82);
 }
 .badge {
-  position: absolute; top: -11px; left: 36px;
+  position: absolute; top: -11px;
+  /* Mismo clamp que el padding de .price para que el badge se alinee con
+     el borde interno de la card en todo viewport. Si la rampa del padding
+     cambia, esta sigue sola. */
+  left: clamp(26px, 3.4vw, 36px);
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
   letter-spacing: 0.08em; color: var(--steel-ink); padding: 5px 12px;
   border-radius: var(--r-pill); background: var(--steel-fill);
