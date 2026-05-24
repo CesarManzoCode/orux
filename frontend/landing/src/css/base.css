@@ -285,7 +285,9 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
 .hero {
   padding-top: clamp(60px, 8vw, 104px);
   padding-bottom: clamp(64px, 9vw, 128px);
-  overflow: hidden;
+  /* overflow: visible — el body ya tiene overflow-x: hidden, así que el
+     scroll horizontal sigue bloqueado, pero el .hero-demo del hero puede
+     extenderse hacia el borde derecho del viewport sin recortarse. */
 }
 .hero .wrap {
   display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(0, 1.16fr);

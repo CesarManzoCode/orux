@@ -37,11 +37,12 @@
   aspect-ratio: 16 / 10;
   min-height: 560px;
   /* Extender el slot HACIA LA DERECHA del viewport, rompiendo el
-     max-width del .wrap padre (1240px). En viewports anchos esto recupera
-     hasta ~340px extra de espacio (la mitad del gutter del wrap), dejando
-     ~24px de respiro al borde. En viewports ≤1240 no se extiende (min con
-     -56px asegura un margen mínimo coherente con el diseño viejo). */
-  margin-right: min(-56px, calc((1240px - 100vw) / 2 + 24px));
+     max-width del .wrap padre (1240px). El calc da -340px en viewport
+     1920 (mitad del gutter del wrap), dejando ~12px al borde. El min con
+     -56px asegura un margen mínimo coherente con el diseño viejo en
+     viewports ≤1240. Necesita que .hero tenga overflow visible (ver base.css)
+     para que el extender no se recorte. */
+  margin-right: min(-56px, calc((1240px - 100vw) / 2 + 12px));
   overflow: hidden;
   border-radius: var(--r-isla, 14px);
   background: #08090b;
