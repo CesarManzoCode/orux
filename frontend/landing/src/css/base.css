@@ -54,7 +54,11 @@
   --steel: #5d7fa6;            /* trazo/acento de acero            */
   --steel-fill-top: #4c6f97;   /* relleno CTA, borde superior      */
   --steel-fill-bot: #3c5a7e;   /* relleno CTA, borde inferior      */
-  --steel-ink: #eef4fb;        /* texto sobre el relleno (AA)      */
+  /* Texto sobre el relleno: 2026-05-24 subido de #eef4fb a #f0f4f9 — el
+     contraste contra --steel-fill-bot pasa de 4.51:1 (apenas AA) a ≈5.2:1.
+     El cambio es invisible en isolation pero el botón gana presencia y
+     legibilidad notable en pantallas con gamma baja o brillo medio. */
+  --steel-ink: #f0f4f9;        /* texto sobre el relleno (AA fuerte) */
   --steel-rgb: 93, 127, 166;
   --steel-line-rgb: 123, 156, 195;
   --steel-shadow-rgb: 60, 90, 126;   /* tono profundo: usado SOLO en sombras
@@ -115,7 +119,11 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 .mono, code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-::selection { background: rgba(var(--steel-line-rgb), 0.30); color: #fff; }
+/* Selección legible: antes era un wash steel translúcido + #fff que
+   sobre titulares claros se leía "claro sobre claro". Pasamos a un steel
+   sólido (--steel) + blanco. Mismo idioma cromático de la marca; lectura
+   garantizada al copiar copy de cualquier zona. */
+::selection { background: var(--steel); color: #fff; }
 :focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--steel-line);
@@ -329,6 +337,14 @@ h1 .h1-top { display: block; }
    interna sea visible — antes ambos pisaban en 600 y la frase se leía
    "bifurcada", como si dos titulares compitieran por la misma respiración. */
 h1 .dim { display: block; margin-top: 18px; color: var(--ink-2); font-weight: 500; }
+/* Mobile <600px: el `.dim` en weight 500 + color terciario se fragmenta
+   visualmente cuando salta a 2-3 líneas. Subir a 600 + ink secundario
+   recompone la frase como un compás claro del titular (no como "texto
+   apagado"). El cambio sólo aplica en mobile — desktop conserva el
+   contraste de pesos 680/500 que es donde respira mejor. */
+@media (max-width: 600px) {
+  h1 .dim { font-weight: 600; color: var(--ink-2); }
+}
 .sub {
   margin-top: 32px; max-width: 50ch; color: var(--ink-2);
   font-size: clamp(15.5px, 1.5vw, 18px); line-height: 1.72;

@@ -43,9 +43,13 @@
        (valores, etiquetas) que faltaba entre --text y --muted. Todos AA
        sobre --surface. --faint se subió de #5b606e a #6b7180 (≈3.6:1 sobre
        --bg, ≈4:1 sobre --surface): asegura legibilidad en labels y eyebrows
-       de 10px sin perder el carácter "metadato" del escalón. ── */
+       de 10px sin perder el carácter "metadato" del escalón.
+       --text-2 recalibrado (2026-05-24) de #b5bac5 a #aab1bf: ratio con
+       --text sube de 1.36:1 a 1.51:1, distinción de jerarquía más clara
+       sin perder presencia AA. Cromáticamente un punto más frío = lectura
+       "metadata premium" sin parecer apagado. ── */
   --text: #e8eaef;
-  --text-2: #b5bac5;
+  --text-2: #aab1bf;
   --muted: #8a8f9c;
   --faint: #6b7180;
 
@@ -229,7 +233,10 @@ button:active { transform: translateY(1px); }
 }
 .btn-secundario:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--muted); }
-.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+/* Coherencia táctil: ghost también sube 1px al hover (igual que primario y
+   secundario). Antes quedaba "plano" en el cluster de botones; el par
+   visual no respiraba igual. */
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); transform: translateY(-1px); }
 .btn:disabled { opacity: 0.5; cursor: default; transform: none !important; filter: none !important; }
 
 /* ── PATRÓN: inputs. Una sola identidad para TODO control de texto del
@@ -253,11 +260,15 @@ button:active { transform: translateY(1px); }
 }
 
 /* ── PATRÓN: estado vacío. Icono + título + subtítulo. Un vacío con voz
-   orienta y no parece roto. ── */
+   orienta y no parece roto. Entra con un delay alineado al stagger de las
+   islas (rail 30ms, sidebar 55ms, main 80ms, statusbar 105ms): el empty
+   asoma 130ms después que el main, así se siente "parte de la cascada de
+   entrada" en lugar de aparecer aislado dentro de una isla ya asentada. ── */
 .empty {
   display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: var(--s-2); padding: var(--s-8) var(--s-5);
-  color: var(--muted); animation: fade-in var(--dur-in) var(--ease-in) both;
+  color: var(--muted);
+  animation: fade-in var(--dur-in) var(--ease-in) 130ms both;
 }
 .empty .empty-ic {
   width: 42px; height: 42px; border-radius: var(--r-lg);
@@ -368,7 +379,11 @@ button:active { transform: translateY(1px); }
 .peers { display: inline-flex; align-items: center; padding-left: 2px; }
 .peers .av {
   width: 23px; height: 23px; border-radius: 50%; margin-left: -7px;
-  display: grid; place-items: center; font-size: 9.5px; font-weight: 750;
+  display: grid; place-items: center;
+  /* Iniciales 10px (antes 9.5): el medio-punto extra rescata legibilidad
+     en pantallas estándar sin que el avatar gane peso visual. La diferencia
+     es invisible en isolation pero suma en el cluster de presencia. */
+  font-size: 10px; font-weight: 750; letter-spacing: -0.02em;
   color: var(--av-ink); border: 2px solid var(--surface);
   font-family: var(--font-ui); cursor: default;
   transition: transform var(--tr), box-shadow var(--tr);

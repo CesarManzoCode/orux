@@ -136,10 +136,17 @@
   background: var(--bg-1); border: 1px solid var(--line-soft);
   border-left: 2px solid var(--line-strong);
 }
+/* La sección "lo que NO somos" no es una alerta — es una declaración de
+   límite deliberado. Cambiamos los íconos de rojo (--bad: tono "error")
+   a steel (tono "marca"): se lee como "límite intencional", no como
+   advertencia. Compatibilidad cromática con el resto del lenguaje del
+   landing (acero = identidad). */
 .not span {
   flex: none; width: 22px; height: 22px; border-radius: var(--r-xs);
-  display: grid; place-items: center; color: var(--bad); font-weight: 800;
-  font-size: 12px; background: var(--bad-bg);
+  display: grid; place-items: center;
+  color: var(--steel); font-weight: 800;
+  font-size: 12px; background: var(--steel-weak);
+  border: 1px solid var(--steel-line);
 }
 
 /* ─────────────────────────────────────────────────────────────────────

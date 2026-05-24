@@ -608,12 +608,29 @@ export function App() {
   const setLang = (l: Lang) => { guardaLang(l); setLangState(l); };
 
   useEffect(() => {
+    // El sticky CTA se asoma SOLO cuando el visitante va hacia abajo y
+    // pasó el hero — no compite con scroll-up (cuando el usuario está
+    // releyendo, su intención no es accionar). Esto reduce el "ruido
+    // permanente" del botón flotante: aparece como sugerencia útil, no
+    // como persecución. Se mantiene visible si el usuario se queda
+    // quieto (sin scroll). Si vuelve hacia arriba, se retira; al
+    // bajar otra vez vuelve a aparecer.
+    let lastY = window.scrollY;
+    const heroDown = Math.min(window.innerHeight * 0.8, 720);
+    const heroReleased = Math.min(window.innerHeight * 0.5, 460);
     const on = () => {
       const y = window.scrollY;
+      const dy = y - lastY;
+      lastY = y;
       setScrolled(y > 16);
-      // Umbral móvil: ~80% del viewport. El sticky entra cuando el
-      // visitante DEJÓ el hero, no cuando movió el dedo.
-      setPastHero(y > Math.min(window.innerHeight * 0.8, 720));
+      // Por debajo del hero release: jamás visible (escena del hero
+      // hacia arriba o cerca de él).
+      if (y < heroReleased) { setPastHero(false); return; }
+      // Por encima del umbral down + bajando: visible.
+      if (dy > 2 && y > heroDown) { setPastHero(true); return; }
+      // Subiendo claramente: ocultar.
+      if (dy < -6) { setPastHero(false); return; }
+      // Sin movimiento neto: conservar estado.
     };
     on();
     window.addEventListener("scroll", on, { passive: true });
