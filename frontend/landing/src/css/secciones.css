@@ -345,16 +345,18 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
  * sola frase mono. Hairline arriba lo ata visualmente al stage sin
  * caja. Color ink-2 (no --mut: la frase es densa, tiene que leerse).
  * ───────────────────────────────────────────────────────────────────── */
-/* En desktop el stage queda alineado al CENTRO vertical del grid del
-   hero, pero la columna de copy (eyebrow + h1 + sub + cta + time +
-   signals) es mucho más larga que el stage, así que el centro caía un
-   poco bajo respecto al peso visual del titular. Subimos el mockup un
-   pelo para que su línea de horizonte (la barra superior del IDE) se
-   asiente al nivel del h1, no debajo. En ≤1080px se anula: ahí la
-   página colapsa a una columna y este offset descolocaría todo. */
+/* En desktop el stage se pega al TOP del wrap (align-self: start) en vez
+   de centrarse verticalmente. Con la demo ahora muy grande (ancho
+   expandido hasta el borde del viewport, alto por aspect-ratio 16:10),
+   align-items: center la mandaba demasiado abajo — quedaba al nivel del
+   CTA, no del h1. align-self: start la sube hasta el padding-top del
+   .hero, que es exactamente donde queremos que arranque la línea de
+   horizonte del IDE (top del eyebrow / h1). En ≤1080px el grid colapsa
+   a una columna y align-self: start ya no aplica (no hay nada que
+   alinear). */
 .hero-stage-col {
   display: flex; flex-direction: column;
-  transform: translateY(-32px);
+  align-self: start;
 }
 .stage-cap {
   margin-top: 26px;

@@ -31,7 +31,6 @@
  * ────────────────────────────────────────────────────────────────────── */
 .hero-demo {
   position: relative;
-  width: 100%;
   /* Match exacto al iframe nativo (1280/800 = 16:10) para que el scale
      fit no deje franjas negras. El alto lo determina el aspect-ratio
      sobre el ancho disponible — NO ponemos min-height alto: si el slot
@@ -41,17 +40,32 @@
      wrap colapsado por contenido. */
   aspect-ratio: 16 / 10;
   min-height: 380px;
-  /* Extender el slot HACIA LA DERECHA del viewport, rompiendo el
-     max-width del .wrap padre (1240px). El calc da -340px en viewport
-     1920 (mitad del gutter del wrap), dejando ~12px al borde. El min con
-     -56px asegura un margen mínimo coherente con el diseño viejo en
-     viewports ≤1240. Necesita que .hero tenga overflow visible (ver base.css)
-     para que el extender no se recorte. */
-  margin-right: min(-56px, calc((1240px - 100vw) / 2 + 12px));
-  /* Y un empujón hacia la IZQUIERDA dentro del gap del grid: el copy ya
-     se hizo más estrecho (max-width 460), así que tenemos margen para
-     que la demo invada un poco el gap sin chocar con el texto. */
-  margin-left: clamp(-72px, -3vw, -16px);
+
+  /* EXPANSIÓN HACIA EL VIEWPORT — antes usábamos margin-right negativo
+     solo, pero con width: 100% el ancho computed seguía siendo el de la
+     columna del grid: el margen negativo MOVÍA la caja, no la expandía,
+     así que el slot quedaba en la misma columna trasladado un toque a
+     la izquierda y dejaba un boquete enorme entre la demo y el borde
+     derecho del viewport. La forma correcta es width: calc() — agranda
+     el ancho de verdad — combinado con márgenes negativos que cancelan
+     el desplazamiento para que el slot no se "vea" salido del grid en
+     términos de origen.
+
+     --extra-right: distancia desde el borde derecho del wrap-content
+     (padding interno incluido) hasta 0px del viewport. La fórmula
+     (100vw - 1200) / 2 ya cuenta los 32px de padding del wrap más
+     un colchón visual de 12px. En viewports ≤1200 colapsa a 0 — no
+     hay nada que extender. */
+  --extra-right: max(0px, calc((100vw - 1200px) / 2));
+  /* --extra-left: invasión hacia la izquierda dentro del gap del grid.
+     El gap real es clamp(24, 3vw, 56); este clamp es un toque más
+     generoso para que la demo pise también un dedito de la columna
+     del copy y se sienta "fuera" del grid. */
+  --extra-left: clamp(20px, 4vw, 96px);
+  width: calc(100% + var(--extra-right) + var(--extra-left));
+  margin-left: calc(-1 * var(--extra-left));
+  margin-right: calc(-1 * var(--extra-right));
+
   overflow: hidden;
   border-radius: var(--r-isla, 14px);
   background: #08090b;
@@ -94,7 +108,12 @@
 /* En mobile el stage colapsa: matchemos esa lógica. */
 @media (max-width: 1080px) {
   .hero-demo {
-    margin-right: 0;
+    /* Reset de la expansión desktop (width: calc + márgenes negativos
+       + custom props). En una sola columna ya no hay viewport "extra"
+       que ganar — el slot se centra dentro del wrap. */
+    --extra-right: 0px;
+    --extra-left: 0px;
+    width: 100%;
     max-width: 900px;
     margin-left: auto;
     margin-right: auto;
