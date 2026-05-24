@@ -241,10 +241,7 @@ function Faq({ items }: { items: readonly FaqItem[] }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
- * STAGE — el "video sin video" del hero. Loop de ~12s, infinito, SIEMPRE
- * activo: sin observer que lo apague fuera de viewport, sin pausa al
- * hover, sin honor a prefers-reduced-motion. La animación es parte de
- * la identidad del producto; el visitante debe verla pase lo que pase.
+ * STAGE — el "video sin video" del hero. Loop de ~12s, infinito.
  *
  * Las 4 fases:
  *   1) edit    — Ana modifica la firma de claim() en vivo (typing).
@@ -257,6 +254,11 @@ function Faq({ items }: { items: readonly FaqItem[] }) {
  * div.float interior mantiene su perspectiva 3D estática (rotateY -11deg)
  * en CSS. Así no hay choque de transforms y los media queries de mobile
  * siguen funcionando (apuntan al .card-slot, no al .float).
+ *
+ * Accesibilidad: con prefers-reduced-motion el loop NO rota. Montamos en
+ * "synced" desde el primer render — el frame final muestra todo el flujo
+ * (código + card impacto con 4 usos + propuesta aprobada + chip "sincronizado"),
+ * que comunica el pitch sin un solo movimiento.
  * ───────────────────────────────────────────────────────────────────── */
 type StagePhase = "edit" | "detect" | "propose" | "synced";
 const PHASE_ORDER: readonly StagePhase[] = ["edit", "detect", "propose", "synced"];
@@ -273,14 +275,18 @@ const PHASE_MS: Record<StagePhase, number> = {
 };
 const TYPE_TARGET = ", user";
 
-function useStagePhase(): StagePhase {
-  const [phase, setPhase] = useState<StagePhase>("edit");
+function useStagePhase(reduce: boolean | null): StagePhase {
+  // Con reduced-motion arrancamos directo en "synced" y NO rotamos: el
+  // frame final ya cuenta el flujo entero. La rotación se reactiva si la
+  // preferencia cambia en runtime (poco común, pero gratis sostenerlo).
+  const [phase, setPhase] = useState<StagePhase>(reduce ? "synced" : "edit");
   useEffect(() => {
+    if (reduce) return;
     const t = setTimeout(() => {
       setPhase((p) => PHASE_ORDER[(PHASE_ORDER.indexOf(p) + 1) % PHASE_ORDER.length]);
     }, PHASE_MS[phase]);
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, reduce]);
   return phase;
 }
 
@@ -323,7 +329,8 @@ const cardEnterTransition = {
 };
 
 function Stage({ t }: { t: Traducciones }) {
-  const phase = useStagePhase();
+  const reduce = useReducedMotion();
+  const phase = useStagePhase(reduce);
   const typed = useTyping(phase);
 
   const showImpact = phase !== "edit";
@@ -387,14 +394,14 @@ function Stage({ t }: { t: Traducciones }) {
           <span className="s push">Python · UTF-8</span>
         </div>
 
-        <AnimatePresence>
+        <AnimatePresence initial={!reduce}>
           {synced && (
             <motion.div
               className="synced-chip"
               initial={{ opacity: 0, y: 14, scale: 0.88 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.92 }}
-              transition={{ type: "spring", damping: 20, stiffness: 380, mass: 0.7 }}
+              transition={reduce ? { duration: 0 } : { type: "spring", damping: 20, stiffness: 380, mass: 0.7 }}
             >
               <span className="check" aria-hidden>✓</span>
               <span>{t.stage_synced}</span>
@@ -408,14 +415,14 @@ function Stage({ t }: { t: Traducciones }) {
           parte haga UNA cosa y no chocar transforms. */}
       <motion.div
         className="card-slot card-slot-impact"
-        initial={{ opacity: 0, y: 24, scale: 0.92, filter: "blur(10px)" }}
+        initial={reduce ? false : { opacity: 0, y: 24, scale: 0.92, filter: "blur(10px)" }}
         animate={{
           opacity: showImpact ? 1 : 0,
           y:       showImpact ? 0 : 24,
           scale:   showImpact ? 1 : 0.92,
           filter:  showImpact ? "blur(0px)" : "blur(10px)",
         }}
-        transition={cardEnterTransition}
+        transition={reduce ? { duration: 0 } : cardEnterTransition}
       >
         <div className="float card-impact">
           <div className="ft"><span className="ic">▲</span> {t.stage_impact_title}</div>
@@ -446,14 +453,14 @@ function Stage({ t }: { t: Traducciones }) {
 
       <motion.div
         className={"card-slot card-slot-prop" + (synced ? " is-synced" : "")}
-        initial={{ opacity: 0, y: 28, scale: 0.92, filter: "blur(10px)" }}
+        initial={reduce ? false : { opacity: 0, y: 28, scale: 0.92, filter: "blur(10px)" }}
         animate={{
           opacity: showProp ? 1 : 0,
           y:       showProp ? 0 : 28,
           scale:   showProp ? 1 : 0.92,
           filter:  showProp ? "blur(0px)" : "blur(10px)",
         }}
-        transition={cardEnterTransition}
+        transition={reduce ? { duration: 0 } : cardEnterTransition}
       >
         <div className={"float card-prop" + (synced ? " is-synced" : "")}>
           <div className="ft"><span className="ic">◇</span> {t.stage_prop_title}</div>
@@ -867,7 +874,16 @@ export function App() {
               usuario que encuentra un bug no tiene dónde escribir. */}
           <div className="foot-bottom">
             <div className="foot-bottom-l">
-              <a href="mailto:hola@orux.space">hola@orux.space</a>
+              <a href="mailto:cesarmanzocode@gmail.com">cesarmanzocode@gmail.com</a>
+              <span aria-hidden>·</span>
+              <span>
+                {t.foot_built_by}{" "}
+                <a
+                  href="https://github.com/CesarManzoCode"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >github.com/CesarManzoCode</a>
+              </span>
             </div>
             <div className="foot-bottom-r">{t.foot_copy}</div>
           </div>

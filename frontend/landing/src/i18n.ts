@@ -23,12 +23,12 @@ export const T = {
     nav_seguridad: "Seguridad",
     nav_faq: "FAQ",
     nav_precio: "Precio",
-    nav_produccion: "en producción",
+    nav_produccion: "live",
     nav_entrar: "Entrar",
     nav_arr: "→",
 
     // Hero
-    hero_eyebrow: "En producción · equipos reales coordinando en vivo",
+    hero_eyebrow: "Desplegado y listo · sé uno de los primeros equipos",
     hero_audience: "Para equipos de 2 a 50 devs · gratis hasta 5",
     hero_h1_1: "Quién toca qué. De quién es. Qué rompe.",
     hero_h1_2: "En tiempo real, sobre el Git que ya usas.",
@@ -101,7 +101,7 @@ export const T = {
     s02_k: "02 · Qué hace, de verdad",
     s02_h_1: "Tres mecanismos reales,",
     s02_h_2: "funcionando hoy en producción.",
-    s02_sub: "Ninguno es humo: corren en producción con devs reales. Cada uno responde a un dolor concreto del flujo actual.",
+    s02_sub: "Ninguno es humo: corren hoy, desplegados en orux.space. Cada uno responde a un dolor concreto del flujo actual.",
     mod_labels: { what: "QUÉ", why: "QUE EVITA", benefit: "PARA EL EQUIPO" },
     mod1_title: "Presencia",
     mod1_h3: "Quién toca qué, en vivo",
@@ -182,8 +182,12 @@ export const T = {
         a: "No pasa. La presencia por línea se reserva en cuanto la primera persona la toca: la segunda lo ve antes de escribir. No usamos CRDT — la tesis es prevenir, no fusionar.",
       },
       {
+        q: "¿Y los conflictos de Git tradicionales? ¿Si dos branches tocan el mismo archivo?",
+        a: "Orux previene la colisión en vivo dentro del workspace, pero no inventa magia sobre Git. Cuando hacés push a tu rama, si otra rama de GitHub/GitLab tocó el mismo archivo, Git marca el conflicto como siempre — lo resolvés con tu flujo habitual (rebase, merge, lo que uses). Lo que Orux te ahorra es el conflicto que nace dentro del equipo: si todos coordinan en el mismo workspace, los conflictos cross-branch caen a casi cero.",
+      },
+      {
         q: "¿Qué lenguajes entiende el análisis de impacto?",
-        a: "Hoy: Python y JavaScript/TypeScript. El análisis es real (AST y resolución de referencias), no coincidencia de texto. Más lenguajes a medida que escala el uso real — sin promesas que no podamos cumplir.",
+        a: "Hoy: Python, JavaScript/TypeScript, Go y Rust — todos con análisis real (AST o tree-sitter, fan-out por LSP), no coincidencia de texto. Java y Kotlin están en camino. En Free podés activar 2 lenguajes simultáneos; Premium quita ese tope.",
       },
       {
         q: "¿Qué pasa con la privacidad del código?",
@@ -215,9 +219,9 @@ export const T = {
         b: ["Workspace en minutos, sin governance", "Gratis para siempre hasta 5 devs", "Cobro por asiento, predecible"],
       },
       {
-        t: "Somos una startup, no un proyecto",
-        d: "Orux es una startup con una tesis clara: la coordinación entre devs no debería ser una cola de PRs ni una reunión semanal. Debería ser invisible y en vivo.",
-        b: ["Prevenir colisiones en vivo, no fusionarlas en el merge", "Distribuir el conocimiento sin que el líder sea cuello de botella", "Capa sobre Git · sin lock-in ni vendor trap"],
+        t: "Cofundadores técnicos · 2 a 3 personas",
+        d: "Los dos (o tres) escriben código y deciden a la par. Sin jerarquía, sin reuniones formales. Orux les da la coordinación que un solo founder no necesita y un manager no puede dar.",
+        b: ["Sin governance impuesto", "Decisiones técnicas en vivo", "Repo único, contexto compartido"],
       },
       {
         t: "Equipo medio · 5 a 50 devs",
@@ -268,7 +272,7 @@ export const T = {
     free_sub: "El core completo de coordinación, no una versión recortada. Lo que se limita es escala — no la tesis.",
     free: [
       "Hasta 5 devs en vivo en un workspace",
-      "Análisis profundo de impacto en Python y TypeScript",
+      "2 lenguajes LSP a elegir: Python, JS/TS, Go o Rust",
       "Ownership e impacto directo · sin merge sorpresa",
       "Aislamiento por equipo · workspace separado por team",
     ],
@@ -276,14 +280,14 @@ export const T = {
     pro_badge: "Recomendado al crecer",
     pro_tier: "Premium · cuando escala",
     pro_h4: "Cuando el equipo crece",
-    pro_sub: "Sin topes de equipo, lenguajes que se suman, impacto que cruza repos y análisis siempre tibio. Para cuando el líder ya no puede ser el cuello de botella.",
+    pro_sub: "Sin topes de equipo, lenguajes que se suman, impacto que cruza repos y análisis siempre tibio. Para cuando el líder ya no puede ser el cuello de botella. Premium en early access — escribinos a cesarmanzocode@gmail.com y lo activamos, ajustamos pricing con tu feedback.",
     pro: [
       "Equipo sin tope · workspaces ilimitados por equipo",
-      "Go, Rust, Java y Kotlin con la misma profundidad",
+      "Los 4 lenguajes sin límite simultáneo · Java y Kotlin próximamente",
       "Impacto transitivo y entre repos · conocimiento distribuido",
       "Análisis siempre tibio · sin pico al volver al trabajo",
     ],
-    pro_cta: "Empezar gratis · upgrade cuando importe",
+    pro_cta: "Empezar gratis · Premium en early access",
 
     // Final CTA
     final_h2: "Tu equipo ya coordina. Mal.",
@@ -304,6 +308,7 @@ export const T = {
     foot_faq: "FAQ",
     foot_price: "Precio",
     foot_copy: "© 2026 Orux",
+    foot_built_by: "Construido por Cesar Manzo ·",
 
     // Lang
     lang_es: "Español",
@@ -318,12 +323,12 @@ export const T = {
     nav_seguridad: "Security",
     nav_faq: "FAQ",
     nav_precio: "Pricing",
-    nav_produccion: "in production",
+    nav_produccion: "live",
     nav_entrar: "Sign in",
     nav_arr: "→",
 
     // Hero
-    hero_eyebrow: "In production · real teams coordinating live",
+    hero_eyebrow: "Deployed and ready · be one of the first teams",
     hero_audience: "For teams of 2 to 50 devs · free up to 5",
     hero_h1_1: "Who touches what. Who owns it. What breaks.",
     hero_h1_2: "In real time, on the Git you already use.",
@@ -396,7 +401,7 @@ export const T = {
     s02_k: "02 · What it really does",
     s02_h_1: "Three real mechanisms,",
     s02_h_2: "running in production today.",
-    s02_sub: "Not smoke: running in production with real devs. Each one answers a concrete pain in today's flow.",
+    s02_sub: "Not smoke: live today, deployed at orux.space. Each one answers a concrete pain in today's flow.",
     mod_labels: { what: "WHAT", why: "AVOIDS", benefit: "FOR THE TEAM" },
     mod1_title: "Presence",
     mod1_h3: "Who's touching what, live",
@@ -477,8 +482,12 @@ export const T = {
         a: "It doesn't happen. Per-line presence reserves the line the moment the first person touches it: the second sees it before typing. We don't use CRDT — the thesis is to prevent, not to merge.",
       },
       {
+        q: "What about traditional Git conflicts? If two branches touch the same file?",
+        a: "Orux prevents collisions live inside the workspace, but doesn't invent magic on top of Git. When you push to your branch, if another GitHub/GitLab branch touched the same file, Git marks the conflict as always — you resolve it with your usual flow (rebase, merge, whatever). What Orux saves you is the conflict that's born inside the team: if everyone coordinates in the same workspace, cross-branch conflicts drop to nearly zero.",
+      },
+      {
         q: "What languages does impact analysis understand?",
-        a: "Today: Python and JavaScript/TypeScript. The analysis is real (AST and reference resolution), not text matching. More languages as usage scales — no promises we can't keep.",
+        a: "Today: Python, JavaScript/TypeScript, Go and Rust — all with real analysis (AST or tree-sitter, fan-out via LSP), not text matching. Java and Kotlin are on the way. On Free you can activate 2 languages at a time; Premium removes that cap.",
       },
       {
         q: "What about code privacy?",
@@ -510,9 +519,9 @@ export const T = {
         b: ["Workspace in minutes, no governance", "Free forever up to 5 devs", "Per-seat billing, predictable"],
       },
       {
-        t: "We're a startup, not a project",
-        d: "Orux is a startup with a clear thesis: coordination between devs shouldn't be a PR queue or a weekly meeting. It should be invisible and live.",
-        b: ["Prevent collisions live, not merge them away", "Distribute knowledge so the lead isn't the bottleneck", "Layer over Git · no lock-in, no vendor trap"],
+        t: "Technical cofounders · 2 to 3 people",
+        d: "Both (or all three) write code and decide as peers. No hierarchy, no formal meetings. Orux gives you the coordination a solo founder doesn't need and a manager can't provide.",
+        b: ["No imposed governance", "Technical decisions live", "Single repo, shared context"],
       },
       {
         t: "Mid-sized team · 5 to 50 devs",
@@ -563,7 +572,7 @@ export const T = {
     free_sub: "The full coordination core, not a stripped version. What gets tiered is scale — not the thesis.",
     free: [
       "Up to 5 devs live in one workspace",
-      "Deep impact analysis for Python and TypeScript",
+      "2 LSP languages of your choice: Python, JS/TS, Go or Rust",
       "Live ownership and direct impact · no surprise merges",
       "Per-team isolation · separate workspace per team",
     ],
@@ -571,14 +580,14 @@ export const T = {
     pro_badge: "Recommended as you grow",
     pro_tier: "Premium · when it scales",
     pro_h4: "When the team grows",
-    pro_sub: "No team caps, languages that compound, impact that crosses repos and always-warm analysis. For when the lead can no longer be the bottleneck.",
+    pro_sub: "No team caps, languages that compound, impact that crosses repos and always-warm analysis. For when the lead can no longer be the bottleneck. Premium in early access — email cesarmanzocode@gmail.com and we activate it, pricing adjusted with your feedback.",
     pro: [
       "No team cap · unlimited workspaces per team",
-      "Go, Rust, Java and Kotlin with the same depth",
+      "All 4 languages without simultaneous limit · Java and Kotlin coming soon",
       "Transitive and cross-repo impact · distributed knowledge",
       "Always-warm analysis · no cold-start when you return",
     ],
-    pro_cta: "Start free · upgrade when it matters",
+    pro_cta: "Start free · Premium in early access",
 
     // Final
     final_h2: "Your team already coordinates. Badly.",
@@ -599,6 +608,7 @@ export const T = {
     foot_faq: "FAQ",
     foot_price: "Pricing",
     foot_copy: "© 2026 Orux",
+    foot_built_by: "Built by Cesar Manzo ·",
 
     // Lang
     lang_es: "Español",
