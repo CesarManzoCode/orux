@@ -41,27 +41,24 @@
   aspect-ratio: 16 / 10;
   min-height: 380px;
 
-  /* EXPANSIÓN HACIA EL VIEWPORT — antes usábamos margin-right negativo
-     solo, pero con width: 100% el ancho computed seguía siendo el de la
-     columna del grid: el margen negativo MOVÍA la caja, no la expandía,
-     así que el slot quedaba en la misma columna trasladado un toque a
-     la izquierda y dejaba un boquete enorme entre la demo y el borde
-     derecho del viewport. La forma correcta es width: calc() — agranda
-     el ancho de verdad — combinado con márgenes negativos que cancelan
-     el desplazamiento para que el slot no se "vea" salido del grid en
-     términos de origen.
+  /* EXPANSIÓN HACIA EL VIEWPORT — width: calc() agranda el ancho de
+     verdad (no como margin-right negativo, que solo mueve), combinado
+     con márgenes negativos que cancelan el desplazamiento para que el
+     slot no se "vea" salido del grid en términos de origen.
 
-     --extra-right: distancia desde el borde derecho del wrap-content
-     (padding interno incluido) hasta 0px del viewport. La fórmula
-     (100vw - 1200) / 2 ya cuenta los 32px de padding del wrap más
-     un colchón visual de 12px. En viewports ≤1200 colapsa a 0 — no
-     hay nada que extender. */
-  --extra-right: max(0px, calc((100vw - 1200px) / 2));
+     --extra-right: cuánto se extiende la demo más allá de su columna del
+     grid hacia el borde derecho del viewport. Antes era max(0, (100vw-1200)/2)
+     = el slot LLEGABA hasta el borde del viewport en monitores anchos
+     (~360px extra en viewport 1920), y se sentía monstruoso: el alto
+     subía a ~780px por el aspect-ratio y el demo ocupaba más fold que
+     toda la copy. Ahora cap duro en 120px: el slot todavía rompe el
+     wrap visualmente, pero no llega al borde — queda holgura de
+     respiración a la derecha y la altura se mantiene razonable. */
+  --extra-right: clamp(0px, calc((100vw - 1240px) / 2), 120px);
   /* --extra-left: invasión hacia la izquierda dentro del gap del grid.
-     El gap real es clamp(24, 3vw, 56); este clamp es un toque más
-     generoso para que la demo pise también un dedito de la columna
-     del copy y se sienta "fuera" del grid. */
-  --extra-left: clamp(20px, 4vw, 96px);
+     Antes hasta 96px = la demo pisaba la columna del copy y aplastaba
+     el h1 a 3-4 líneas. Ahora dieta — un toque al gap, no a la copy. */
+  --extra-left: clamp(0px, 1.5vw, 28px);
   width: calc(100% + var(--extra-right) + var(--extra-left));
   margin-left: calc(-1 * var(--extra-left));
   margin-right: calc(-1 * var(--extra-right));
