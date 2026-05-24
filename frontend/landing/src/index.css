@@ -32,11 +32,16 @@
 .hero-demo {
   position: relative;
   width: 100%;
-  /* Match al ratio del iframe nativo (1280/820 ≈ 16:10.25 ≈ 16:10) para
-     que el scale fit no deje espacio sobrante grande arriba o abajo. */
+  /* Match exacto al iframe nativo (1280/800 = 16:10) para que el scale
+     fit no deje franjas negras. */
   aspect-ratio: 16 / 10;
-  min-height: 440px;
-  margin-right: clamp(-220px, -10vw, -56px);
+  min-height: 560px;
+  /* Extender el slot HACIA LA DERECHA del viewport, rompiendo el
+     max-width del .wrap padre (1240px). En viewports anchos esto recupera
+     hasta ~340px extra de espacio (la mitad del gutter del wrap), dejando
+     ~24px de respiro al borde. En viewports ≤1240 no se extiende (min con
+     -56px asegura un margen mínimo coherente con el diseño viejo). */
+  margin-right: min(-56px, calc((1240px - 100vw) / 2 + 24px));
   overflow: hidden;
   border-radius: var(--r-isla, 14px);
   background: #08090b;

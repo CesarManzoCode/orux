@@ -506,12 +506,12 @@ function Stage({ t }: { t: Traducciones }) {
  * abrir el IDE directo (http://localhost:5174/?demo=1). En producción
  * (orux.space) funciona out of the box.
  * ───────────────────────────────────────────────────────────────────── */
-// Tamaño "natural" del IDE: ancho mínimo para que sidebar + editor +
-// inspector se vean sin recortes (los paneles tienen min-width internos
-// que no podemos negociar). El iframe se renderiza a este tamaño y luego
-// se ESCALA con CSS transform para encajar en el slot del hero.
+// Tamaño "natural" del IDE: ancho mínimo cómodo para mostrar sidebar +
+// editor + inspector con texto legible. El iframe se renderiza siempre a
+// este tamaño y se ESCALA con CSS transform para encajar en el slot del
+// hero. 16:10 exacto (1280/800) para que el slot no tenga franjas.
 const DEMO_W = 1280;
-const DEMO_H = 820;
+const DEMO_H = 800;
 
 function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
   const containerRef = useRef<HTMLDivElement>(null);
