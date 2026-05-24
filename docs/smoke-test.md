@@ -35,7 +35,7 @@ Browser principal en **modo incógnito** (para emular un visitante real sin cook
 3. **Hacer scroll completo**. Mirar:
    - Hero cinemático corre el loop completo (~12s) sin parpadeos.
    - Pilares, cómo funciona, FAQ, precio. Ningún string raro tipo "undefined" o `[object Object]`.
-   - Footer: link a GitHub abre `github.com/CesarManzoCode/laidea` en pestaña nueva, mailto a `hola@orux.space` abre cliente de correo.
+   - Footer: link a GitHub abre `github.com/CesarManzoCode/laidea` en pestaña nueva, mailto a `cesarmanzocode@gmail.com` abre cliente de correo.
 4. **Probar share preview** (opcional pero útil):
    - Pegar `https://orux.space` en Twitter compose (sin publicar) → ve preview con og.png + título + descripción.
    - Idem en WhatsApp Web a un grupo de prueba.

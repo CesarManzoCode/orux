@@ -308,7 +308,7 @@ export const T = {
     foot_faq: "FAQ",
     foot_price: "Precio",
     foot_copy: "© 2026 Orux",
-    foot_built_by: "Construido por Cesar Manzo ·",
+    foot_built_by: "Construido por Cesar Manzo (16) ·",
 
     // Lang
     lang_es: "Español",
@@ -608,7 +608,7 @@ export const T = {
     foot_faq: "FAQ",
     foot_price: "Pricing",
     foot_copy: "© 2026 Orux",
-    foot_built_by: "Built by Cesar Manzo ·",
+    foot_built_by: "Built by Cesar Manzo (16) ·",
 
     // Lang
     lang_es: "Español",

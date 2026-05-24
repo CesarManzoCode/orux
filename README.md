@@ -4,7 +4,7 @@ Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rá
 
 ## Estado actual
 
-Orux está **desplegado y en uso** en [orux.space](https://orux.space). Es un producto multi-equipo: cada equipo tiene su propio workspace aislado (un repositorio git real), con su presencia, ownership, propuestas y análisis. Construido por capas — **33** hasta hoy. **429 tests** en el backend.
+Orux está **desplegado y en uso** en [orux.space](https://orux.space). Es un producto multi-equipo: cada equipo tiene su propio workspace aislado (un repositorio git real), con su presencia, ownership, propuestas y análisis. Construido por capas — **33** hasta hoy. **478 tests** en el backend.
 
 Funciona, end to end: registro y login (con OAuth de GitHub), lobby de equipos (crear equipo, invitar por código, unirse), edición colaborativa en tiempo real, presencia por archivo y línea, ownership con edición tentativa y aprobación de un clic, prevención de colisiones, análisis de impacto semántico multi-lenguaje (Python, JS/TS, Go, Rust), integración con Git (estado, commit, clone y push desde la web), un panel de operador, un tutorial guiado que arranca solo la primera vez que un admin entra a un equipo nuevo, y un modelo freemium con cobro por Stripe.
 
@@ -59,7 +59,7 @@ cd backend && pytest
 - `backend/orux/identity/` — autenticación: contraseñas, tokens de sesión, OAuth con GitHub.
 - `backend/orux/git/` — la integración con Git.
 - `backend/orux/api/` — la API del operador, OAuth y el billing de Stripe.
-- `backend/tests/` — 429 tests de protocolo, estado, análisis, equipos e integración.
+- `backend/tests/` — 478 tests de protocolo, estado, análisis, equipos e integración.
 - `frontend/ide/` — el cliente React del IDE. `frontend/landing/` — la landing de marketing. `frontend/ops/` — el panel de operador.
 
 ---

@@ -20,7 +20,7 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 > **Este documento envejece rápido** — el proyecto avanza muy rápido. Ante cualquier duda, **el código y `git log` son la autoridad**, no este archivo. Última actualización: 2026-05-23 (post-Sprint G).
 
-Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo). Construido por capas (**33** + pulido). **477 tests** en el backend.
+Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo). Construido por capas (**33** + pulido). **478 tests** en el backend.
 
 **Es un producto multi-equipo.** Cada equipo está completamente aislado:
 
@@ -68,7 +68,7 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 
 *Pre-anuncio NO-código (D + E + og.png):*
 - **`og.png`** 1200×630 en `frontend/landing/public/` (generado por `scripts/build-og.sh` con magick puro). Source editable: `frontend/landing/og.svg`.
-- **Footer contacto** en landing: `mailto:hola@orux.space` + link al repo + copyright (clave i18n `foot_copy`).
+- **Footer contacto** en landing: `mailto:cesarmanzocode@gmail.com` + link al repo + copyright (clave i18n `foot_copy`). Email único en toda la landing y docs (no `hola@orux.space`).
 - ~~`LICENSE` (MIT)~~ — había creado uno asumiendo repo público; el usuario corrigió el 2026-05-23: **Orux es startup propietaria, repo privado**, NO open source. LICENSE eliminado, claims de "self-hostable" removidos de toda la landing (i18n + index.html + footer GitHub link). En sesiones futuras: no sugerir nada relacionado con open source / self-host / repo público / LICENSE sin que el usuario lo pida explícito.
 - **`robots.txt` + `sitemap.xml`** en `frontend/landing/public/`.
 - **Analytics propio**: `POST /api/v1/track` + `frontend/landing/src/analytics.ts` (pageview en `load`, keepalive, fire-and-forget). Sin cookies, sin IDs persistentes. Los datos están en `docker compose logs api | grep client_track`.
@@ -77,15 +77,14 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 **Sprint G — Robustez ROCA (2026-05-23):** endurecimiento pre-anuncio para que un dev curioso encuentre 0 bugs.
 - **G.1 (inputs WS):** bug semántico crítico arreglado — `validation.py:_str(permitir_vacio=False)` antes solo rechazaba `None`, ahora rechaza también `""`. Por carambola endurece todos los campos obligatorios (path, username, password, token, code, team_id, etc.). Helper nuevo `_lobby_team()` en `codec.py` valida cada team del `LobbyMessage`. +5 tests, ningún test viejo roto.
 - **G.2 (estados error UI):** (a) `claim` emite toast `t.ins_claim_timeout` tras 3s sin confirmación (antes spinner muerto en silencio). (b) `borrar(path, toastOk?)` en `store.ts` ahora trackea el delete en `Map<path, toastText>` y el toast sale al confirmar el broadcast `delete` del server, SOLO al autor.
-- **G.3 (smoke test):** guión completo en `docs/smoke-test.md` (8 fases, 36+ pasos, ~30-60 min). Pendiente de ejecución por el usuario.
-- **G.4 (housekeeping VPS):** checklist en `docs/housekeeping-pre-anuncio.md` (7 secciones, queries SQL para limpiar testing data en Postgres, verificación de secretos, backup limpio, healthchecks, cert HTTPS). Pendiente de ejecución.
+- **G.3 (smoke test):** guión completo en `docs/smoke-test.md` (8 fases, 36+ pasos, ~30-60 min). **Ejecutado por el usuario.** Queda como referencia para re-ejecutar tras cambios grandes.
+- **G.4 (housekeeping VPS):** checklist en `docs/housekeeping-pre-anuncio.md` (7 secciones, queries SQL para limpiar testing data en Postgres, verificación de secretos, backup limpio, healthchecks, cert HTTPS). **Ejecutado por el usuario.** Queda como referencia.
 - **G.5 (cross-browser):** Fase 8 dentro de `smoke-test.md` — Safari macOS/iOS, Firefox, Chrome Android, con bugs típicos a buscar por motor.
 
 **VPS upgrade del 2026-05-23:** de 2vCPU/4GB ($24/mo) a 4vCPU/8GB/160GB ($48/mo). Decisión del usuario: holgura para el primer pico de promoción no-pagada en foros de devs. Si no pega, downgrade fácil + backups ya migran. Límites de `docker-compose.yml` recalibrados (orux 3 CPU/4G, api 0.5/768M, postgres 1/1.5G, caddy 0.5/256M; total cap 5 CPU oversubscription / 6.5 GB ≈ 82% físico). Criterios numéricos de resize en `RUNBOOK.md §8`.
 
 **Pendientes conocidos:**
 - **Stripe en VPS:** el backend está listo pero falta config + validación en el VPS.
-- **Ejecutar smoke test + housekeeping antes del anuncio:** los guiones están listos en `docs/`, falta correrlos.
 - **Sprint F (comunidad / UI de status / Discord / press kit):** conscientemente diferido hasta tener usuarios reales. No roadmapearlo sin que el usuario lo pida.
 - **G.2 diferidos no urgentes:** clone toast prematuro (mitigado por panel `gitResult`), banner WS-caído-editando (sería sprint propio con buffer local de cambios).
 
