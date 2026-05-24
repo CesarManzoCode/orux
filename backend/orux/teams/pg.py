@@ -147,6 +147,18 @@ class PgTeamStore:
         )
         return [{"usuario": r["username"], "rol": r["rol"]} for r in rows]
 
+    async def borrar(self, team_id: str) -> bool:
+        # Consola de operador (capa 23): borra el equipo. CASCADE en las
+        # FK barre team_members, invites, ownership y proposals automático
+        # (ver db/schema.sql). NO toca disco — el workspace en
+        # /data/ws/<tid>/ vive aparte; el caller decide si lo borra también.
+        # NO cancela la suscripción de Stripe — eso se hace desde el
+        # dashboard del operador (acá solo borramos lo nuestro).
+        v = await self._db.fetchval(
+            "DELETE FROM teams WHERE id=$1 RETURNING id", team_id,
+        )
+        return v is not None
+
     async def crear_invitacion(self, team_id: str, por_usuario: str) -> str:
         if not await self._db.fetchval("SELECT 1 FROM teams WHERE id=$1", team_id):
             raise TeamError("ese equipo no existe")

@@ -117,7 +117,7 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 - Plataforma fase 2: ir al entorno del dev (plugins de VSCode, JetBrains) — diferido, no empezado.
 - Sobre Git: integración, no reemplazo. `git clone` debe bastar.
 - Sin modo offline. El estado compartido en tiempo real es la base.
-- Público objetivo inicial: equipos nuevos sin inercia, open source que empieza, founders técnicos de 2-3 personas.
+- Público objetivo inicial: equipos nuevos sin inercia, side projects con cofundador, founders técnicos de 2-3 personas. NO open source (Orux es SaaS propietario; ver memoria `orux_startup_propietaria`).
 - Decisor de adopción: el líder del equipo (CTO, tech lead, founder técnico).
 - **Hay base de datos: Postgres.** La decisión vieja de "sin DB" se revirtió al llegar el multi-equipo (capa 15): los metadatos (usuarios, equipos, miembros, invitaciones, ownership) viven en Postgres; el contenido de los archivos sigue siendo un repositorio git por equipo en disco, así que "un `git clone` basta" se mantiene.
 - **Nombre del producto: Orux** (decidido).

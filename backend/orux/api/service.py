@@ -101,6 +101,29 @@ async def detalle_team(teams, team_id: str) -> dict | None:
     return {**e, "miembros": await teams.miembros(team_id)}
 
 
+async def borrar_team(teams, team_id: str) -> bool:
+    """Capa 23: borra un equipo desde el panel admin. True si se borró,
+    False si no existía. CASCADE en FK barre members/invites/ownership/
+    proposals del propio store. El workspace en disco (/data/ws/<tid>/)
+    NO se toca acá — la cáscara HTTP es quien (opcionalmente) hace el `rm`
+    tras el borrado lógico."""
+    return await teams.borrar(team_id)
+
+
+async def borrar_usuario(
+    users, username: str, *, admin_user: str,
+) -> bool:
+    """Capa 23: borra un usuario desde el panel admin. True si se borró,
+    False si no existía. Levanta `ValueError` (la cáscara lo mapea a 400) si:
+    - el target es el operador (`admin_user`): nunca te disparas en el pie;
+    - el usuario es creador de un equipo o dueño de ownership (lo levanta
+      el store ante la FK RESTRICT, con mensaje legible).
+    """
+    if normalizar(username) == normalizar(admin_user):
+        raise ValueError("no se puede borrar al operador desde el panel")
+    return await users.borrar(username)
+
+
 async def cambiar_plan(teams, team_id: str, plan: str) -> dict | None:
     """Setea el plan del equipo (la acción de cobro manual: alguien pagó ->
     premium). Valida el plan contra PLANES (no se inventan planes). None si

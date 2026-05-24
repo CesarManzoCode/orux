@@ -2,8 +2,12 @@ export type Lang = "es" | "en";
 const KEY = "orux_lang";
 
 export function cargaLang(): Lang {
-  try { return (localStorage.getItem(KEY) as Lang) || "es"; }
-  catch { return "es"; }
+  try {
+    const guardado = localStorage.getItem(KEY);
+    if (guardado === "es" || guardado === "en") return guardado;
+    const nav = (navigator.language || "").toLowerCase();
+    return nav.startsWith("es") ? "es" : "en";
+  } catch { return "en"; }
 }
 
 export function guardaLang(l: Lang) {
@@ -73,7 +77,7 @@ export const T = {
       { k: "Arquitectura", v_pre: "Capa", v_b: "sobre Git", v_post: " · git clone basta" },
       { k: "Conflictos", v_pre: "Se", v_b: "previenen", v_post: ", no se fusionan · sin CRDT" },
       { k: "Granularidad", v_pre: "Presencia", v_b: "por línea", v_post: ", no por archivo" },
-      { k: "Despliegue", v_pre: "", v_b: "Self-hostable", v_post: " · Docker · tu token nunca se guarda" },
+      { k: "Privacidad", v_pre: "", v_b: "Token Git efímero", v_post: " · jamás guardado en disco, logs ni URL" },
     ],
 
     // Problema (con comparativa antes/después)
@@ -211,9 +215,9 @@ export const T = {
         b: ["Workspace en minutos, sin governance", "Gratis para siempre hasta 5 devs", "Cobro por asiento, predecible"],
       },
       {
-        t: "Open source que arranca",
-        d: "Contribuidores asíncronos, sin standups, sin Slack común. CODEOWNERS envejece mal y los conflictos los descubre el CI.",
-        b: ["Ownership vivo, no archivo desactualizado", "Self-host con Docker, repo Git real", "Visible para nuevos sin reunión de onboarding"],
+        t: "Somos una startup, no un proyecto",
+        d: "Orux es una startup con una tesis clara: la coordinación entre devs no debería ser una cola de PRs ni una reunión semanal. Debería ser invisible y en vivo.",
+        b: ["Prevenir colisiones en vivo, no fusionarlas en el merge", "Distribuir el conocimiento sin que el líder sea cuello de botella", "Capa sobre Git · sin lock-in ni vendor trap"],
       },
       {
         t: "Equipo medio · 5 a 50 devs",
@@ -266,7 +270,7 @@ export const T = {
       "Hasta 5 devs en vivo en un workspace",
       "Análisis profundo de impacto en Python y TypeScript",
       "Ownership e impacto directo · sin merge sorpresa",
-      "Self-hosted con Docker · tu código en tu infra",
+      "Aislamiento por equipo · workspace separado por team",
     ],
     free_cta: "Probar gratis",
     pro_badge: "Recomendado al crecer",
@@ -368,7 +372,7 @@ export const T = {
       { k: "Architecture", v_pre: "Layer", v_b: "on top of Git", v_post: " · git clone is enough" },
       { k: "Conflicts", v_pre: "", v_b: "Prevented", v_post: ", not merged · no CRDT" },
       { k: "Granularity", v_pre: "Presence", v_b: "by line", v_post: ", not by file" },
-      { k: "Deployment", v_pre: "", v_b: "Self-hostable", v_post: " · Docker · your token is never stored" },
+      { k: "Privacy", v_pre: "", v_b: "Ephemeral Git token", v_post: " · never stored on disk, in logs or in URLs" },
     ],
 
     // Problem
@@ -506,9 +510,9 @@ export const T = {
         b: ["Workspace in minutes, no governance", "Free forever up to 5 devs", "Per-seat billing, predictable"],
       },
       {
-        t: "Open source starting out",
-        d: "Async contributors, no standups, no shared Slack. CODEOWNERS ages badly and CI is where you find conflicts.",
-        b: ["Live ownership, not a stale file", "Self-host with Docker, real Git repo", "Visible to newcomers without onboarding meetings"],
+        t: "We're a startup, not a project",
+        d: "Orux is a startup with a clear thesis: coordination between devs shouldn't be a PR queue or a weekly meeting. It should be invisible and live.",
+        b: ["Prevent collisions live, not merge them away", "Distribute knowledge so the lead isn't the bottleneck", "Layer over Git · no lock-in, no vendor trap"],
       },
       {
         t: "Mid-sized team · 5 to 50 devs",
@@ -561,7 +565,7 @@ export const T = {
       "Up to 5 devs live in one workspace",
       "Deep impact analysis for Python and TypeScript",
       "Live ownership and direct impact · no surprise merges",
-      "Self-hosted with Docker · your code in your infra",
+      "Per-team isolation · separate workspace per team",
     ],
     free_cta: "Try it free",
     pro_badge: "Recommended as you grow",

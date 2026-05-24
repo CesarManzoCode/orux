@@ -223,6 +223,19 @@ class MemTeamStore:
             key=lambda x: x["usuario"],
         )
 
+    async def borrar(self, team_id: str) -> bool:
+        # Capa 23: simétrico al PgTeamStore.borrar. Limpia el equipo y todo
+        # lo asociado en memoria (miembros + invitaciones). Tests/dev only.
+        if team_id not in self._equipos:
+            return False
+        self._equipos.pop(team_id, None)
+        self._miembros.pop(team_id, None)
+        self._invites = {
+            c: i for c, i in self._invites.items()
+            if i["team_id"] != team_id
+        }
+        return True
+
     # --- Invitaciones (de un solo uso) ---
 
     async def crear_invitacion(self, team_id: str, por_usuario: str) -> str:

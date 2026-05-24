@@ -308,6 +308,42 @@ input::placeholder { color: var(--faint); }
   border-color: var(--border-strong);
 }
 
+/* Botón borrar — mismo tamaño que btn-plan pero con tono "bad" suave.
+   No grita rojo en reposo (no queremos que el operador apriete por error);
+   se intensifica al hover para confirmar que es destructivo. */
+.btn-borrar {
+  padding: 5px 11px; font-size: var(--t-xs); font-weight: 700;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  cursor: pointer; font-family: inherit; letter-spacing: -0.005em;
+  transition: background var(--tr), color var(--tr),
+    border-color var(--tr), transform var(--tr);
+}
+.btn-borrar:hover {
+  background: var(--bad-bg); color: var(--bad);
+  border-color: rgba(232,99,111,0.4);
+  transform: translateY(-1px);
+}
+
+/* Acción dentro del chip de usuario: aparece SOLO en hover del chip
+   (no contaminar la lista con × por todos lados). */
+.user-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  margin-left: 2px; border-radius: 50%;
+  background: transparent; color: var(--faint);
+  border: 0; cursor: pointer; padding: 0;
+  font: 700 11px/1 var(--font-mono);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--tr), background var(--tr), color var(--tr);
+}
+.user-chip:hover .user-chip-x { opacity: 1; pointer-events: auto; }
+.user-chip-x:hover { background: var(--bad-bg); color: var(--bad); }
+
+/* Acciones en columna acción de la tabla: dos botones lado a lado */
+.col-action { width: 200px; }
+.col-action-row { display: inline-flex; gap: 6px; }
+
 /* ─── MENSAJES DE FEEDBACK ──────────────────────────────────────────────── */
 .msg {
   min-height: 20px; font-size: var(--t-sm); border-radius: var(--r-sm);
@@ -747,6 +783,19 @@ const I18N = {
     teams_count: (n) => n + " equipos",
     users_count: (n) => n + " usuarios",
     plan_changed: (id, plan) => "equipo " + id + " → " + plan,
+    delete_team_btn: "Borrar",
+    delete_team_confirm: (nombre, id) =>
+      "¿Borrar el equipo \"" + nombre + "\" (id " + id + ")?\n\n" +
+      "Esto elimina sus miembros, invitaciones, ownership y propuestas. " +
+      "El workspace en disco NO se borra desde acá. La suscripción de " +
+      "Stripe (si era premium) sigue activa — cancélala desde el dashboard.",
+    team_deleted: (id) => "equipo " + id + " borrado",
+    delete_user_title: "Borrar usuario",
+    delete_user_confirm: (u) =>
+      "¿Borrar al usuario \"" + u + "\"?\n\n" +
+      "Si es creador de algún equipo o dueño de archivos, te lo va a " +
+      "rechazar (borra esos equipos primero).",
+    user_deleted: (u) => "usuario " + u + " borrado",
     err_unauth: "no autorizado: ",
     err_generic: "error: ",
     err_load: "error al cargar datos: ",
@@ -775,6 +824,18 @@ const I18N = {
     teams_count: (n) => n + " teams",
     users_count: (n) => n + " users",
     plan_changed: (id, plan) => "team " + id + " → " + plan,
+    delete_team_btn: "Delete",
+    delete_team_confirm: (nombre, id) =>
+      "Delete team \"" + nombre + "\" (id " + id + ")?\n\n" +
+      "This removes its members, invites, ownership and proposals. The " +
+      "workspace on disk is NOT deleted from here. The Stripe subscription " +
+      "(if premium) stays active — cancel it from the dashboard.",
+    team_deleted: (id) => "team " + id + " deleted",
+    delete_user_title: "Delete user",
+    delete_user_confirm: (u) =>
+      "Delete user \"" + u + "\"?\n\n" +
+      "If they own a team or files, it will refuse (delete those teams first).",
+    user_deleted: (u) => "user " + u + " deleted",
     err_unauth: "unauthorized: ",
     err_generic: "error: ",
     err_load: "error loading data: ",
@@ -915,6 +976,30 @@ async function setPlan(id, plan) {
   } catch (e) { flash(tx.err_generic + e.message, false); }
 }
 
+// Capa 23: borrar team/user desde el panel. `confirm()` nativo del browser:
+// suficiente para una consola de un solo operador; no vale el peso de un
+// modal propio (ese tipo de fricción es exactamente lo que hace al panel
+// pesado de mantener). El backend valida que no se pueda borrar al operador
+// ni a un user que sea creador-de-team / dueño-de-archivos — los mensajes
+// de error vienen ya traducidos del server.
+async function borrarTeam(id, nombre) {
+  if (!confirm(tx.delete_team_confirm(nombre, id))) return;
+  try {
+    await api("/teams/" + encodeURIComponent(id), { method: "DELETE" });
+    flash(tx.team_deleted(id), true);
+    cargar();
+  } catch (e) { flash(tx.err_generic + e.message, false); }
+}
+
+async function borrarUser(u) {
+  if (!confirm(tx.delete_user_confirm(u))) return;
+  try {
+    await api("/users/" + encodeURIComponent(u), { method: "DELETE" });
+    flash(tx.user_deleted(u), true);
+    cargar();
+  } catch (e) { flash(tx.err_generic + e.message, false); }
+}
+
 async function cargar() {
   try {
     const teams = await api("/teams");
@@ -968,11 +1053,19 @@ async function cargar() {
         tdMiembros.appendChild(spanMiembros);
 
         const tdAccion = document.createElement("td");
+        const wrap = document.createElement("span");
+        wrap.className = "col-action-row";
         const b = document.createElement("button");
         b.className = esPremium ? "btn-plan btn-plan-downgrade" : "btn-plan";
         b.textContent = esPremium ? "→ Free" : "→ Premium";
         b.onclick = () => setPlan(team.id, otro);
-        tdAccion.appendChild(b);
+        wrap.appendChild(b);
+        const bDel = document.createElement("button");
+        bDel.className = "btn-borrar";
+        bDel.textContent = tx.delete_team_btn;
+        bDel.onclick = () => borrarTeam(team.id, team.nombre);
+        wrap.appendChild(bDel);
+        tdAccion.appendChild(wrap);
 
         tr.appendChild(tdNombre);
         tr.appendChild(tdId);
@@ -1003,7 +1096,18 @@ async function cargar() {
       for (const u of us) {
         const chip = document.createElement("span");
         chip.className = "user-chip";
-        chip.textContent = u;
+        // Texto del username + botón × que aparece en hover. Separados para
+        // que el textContent del chip no se "contamine" con el ×.
+        const lbl = document.createElement("span");
+        lbl.textContent = u;
+        chip.appendChild(lbl);
+        const x = document.createElement("button");
+        x.className = "user-chip-x";
+        x.type = "button";
+        x.textContent = "×";
+        x.setAttribute("aria-label", tx.delete_user_title + ": " + u);
+        x.onclick = () => borrarUser(u);
+        chip.appendChild(x);
         wrap.appendChild(chip);
       }
       usersDiv.appendChild(wrap);

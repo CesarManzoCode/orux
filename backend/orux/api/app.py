@@ -583,6 +583,42 @@ async def _detalle(req: Request) -> JSONResponse:
     return JSONResponse(d)
 
 
+async def _borrar_team(req: Request) -> JSONResponse:
+    """Capa 23: DELETE /api/v1/teams/{tid}. Borra el equipo (CASCADE en FK
+    barre members/invites/ownership/proposals). Idempotente: si ya no
+    existía, 404. NO toca el workspace en disco — el operador, si quiere,
+    corre `rm -rf /data/ws/<tid>` aparte (ver RUNBOOK / comando de reset
+    pre-anuncio)."""
+    if (g := _gate(req)) is not None:
+        return g
+    tid = req.path_params["tid"]
+    ok = await service.borrar_team(req.app.state.teams, tid)
+    if not ok:
+        return JSONResponse({"error": "equipo inexistente"}, status_code=404)
+    logger.info("operador borró equipo: %s", tid)
+    return JSONResponse({"borrado": True, "team_id": tid})
+
+
+async def _borrar_usuario(req: Request) -> JSONResponse:
+    """Capa 23: DELETE /api/v1/users/{username}. Borra un usuario. 400 si:
+    es el operador (no te disparas en el pie), o es creador de un equipo /
+    dueño de archivos en ownership (la FK RESTRICT lo bloquea — borra los
+    equipos primero). 404 si el usuario no existía."""
+    if (g := _gate(req)) is not None:
+        return g
+    username = req.path_params["username"]
+    try:
+        ok = await service.borrar_usuario(
+            req.app.state.users, username, admin_user=_ADMIN_USER,
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if not ok:
+        return JSONResponse({"error": "usuario inexistente"}, status_code=404)
+    logger.info("operador borró usuario: %s", username)
+    return JSONResponse({"borrado": True, "username": username})
+
+
 async def _plan(req: Request) -> JSONResponse:
     if (g := _gate(req)) is not None:
         return g
@@ -811,7 +847,9 @@ _RUTAS = [
     Route("/api/v1/users", _usuarios),
     Route("/api/v1/teams", _teams),
     Route("/api/v1/teams/{tid}", _detalle),
+    Route("/api/v1/teams/{tid}", _borrar_team, methods=["DELETE"]),
     Route("/api/v1/teams/{tid}/plan", _plan, methods=["POST"]),
+    Route("/api/v1/users/{username}", _borrar_usuario, methods=["DELETE"]),
     # Stripe: cobro de la suscripción Premium. Superficie distinta de la
     # de operador (sin `_gate`): /checkout lo autentica el token de
     # sesión del usuario; /webhook lo autentica la firma HMAC de Stripe.

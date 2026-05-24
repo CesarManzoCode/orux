@@ -102,7 +102,7 @@ Y el líder del equipo: **es el cuello de botella porque es el único con la vis
 
 ## Origen
 
-La idea nació entrando a un grupo de colaboración open source y notando el flujo real:
+La idea nació viendo cómo coordinan los equipos pequeños de devs en remoto y notando el flujo real:
 
 1. Hay un tablero con tareas.
 2. Alguien agarra una tarea y la ejecuta.
@@ -259,9 +259,9 @@ No se añade una capa hasta que la anterior funcione.
 
 ## Público
 
-**Early adopters:** equipos nuevos sin inercia, proyectos open source que empiezan, estudiantes que colaboran, founders técnicos con 2-3 personas.
+**Early adopters:** equipos nuevos sin inercia, side projects con cofundador técnico, estudiantes que colaboran, founders técnicos con 2-3 personas.
 
-**Sweet spot:** startups de 5 a 50 devs, equipos open source medianos, equipos fullstack rápidos, agencias técnicas, equipos remotos o híbridos con módulos compartidos.
+**Sweet spot:** startups de 5 a 50 devs, equipos fullstack rápidos, agencias técnicas, equipos remotos o híbridos con módulos compartidos.
 
 **No es para:** enterprise grande con compliance, monorepos masivos, CODEOWNERS, CI sofisticado. Tampoco para 1-2 devs donde no hay fricción.
 

@@ -82,6 +82,36 @@ class PgUserStore:
         )
         return u
 
+    async def borrar(self, username: str) -> bool:
+        """Capa 23: borra un usuario. True si se borró, False si no existía.
+        Lanza `ValueError` si el usuario es creador de algún team o tiene
+        archivos en `ownership`: ambas FKs son ON DELETE RESTRICT, así que
+        el DELETE crudo tiraría ForeignKeyViolationError; preferimos un
+        error claro y temprano. Transacción para evitar TOCTOU entre el
+        chequeo y el borrado."""
+        u = normalizar(username)
+        async with self._db.tx() as con:
+            n_teams = await con.fetchval(
+                "SELECT count(*) FROM teams WHERE creador=$1", u,
+            )
+            if n_teams:
+                raise ValueError(
+                    f"el usuario es creador de {n_teams} equipo(s); "
+                    "borra los equipos primero"
+                )
+            n_own = await con.fetchval(
+                "SELECT count(*) FROM ownership WHERE owner=$1", u,
+            )
+            if n_own:
+                raise ValueError(
+                    f"el usuario es dueño de {n_own} archivo(s) en algún "
+                    "equipo; reasigna o borra los equipos primero"
+                )
+            v = await con.fetchval(
+                "DELETE FROM users WHERE username=$1 RETURNING username", u,
+            )
+            return v is not None
+
     async def verificar(self, username: str, password: str) -> bool:
         reg = await self._db.fetchval(
             "SELECT password_hash FROM users WHERE username=$1",
