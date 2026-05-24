@@ -156,6 +156,38 @@ export function Tutorial({
     onDone();
   }, [onDone]);
 
+  // ── scrollIntoView del target ──────────────────────────────────────────
+  // Cuando el Inspector tiene scroll interno (zoom in del browser, viewport
+  // chico) los targets que viven abajo (inspector-impacto, inspector-propuestas,
+  // prop-accept) quedan fuera del scroll visible: el spotlight termina
+  // apuntando a una franja cortada por el borde inferior. Antes de pintar
+  // el spotlight, traemos el target a la vista. Polling con RAF porque el
+  // step.before puede mutar el DOM (insertar la propuesta, abrir secciones)
+  // y queremos scrollear sólo cuando el target ya existe con bbox real —
+  // `behavior: "auto"` (sin animar) para no marear al usuario durante el
+  // recorrido. Una sola vez por step.
+  useEffect(() => {
+    if (!step?.target) return;
+    let alive = true;
+    let raf = 0;
+    let scrolled = false;
+    function tryScroll() {
+      if (!alive || scrolled) return;
+      const el = document.querySelector(`[data-tour-id="${step.target}"]`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (r.width >= 8 && r.height >= 8) {
+          el.scrollIntoView({ block: "center", inline: "nearest" });
+          scrolled = true;
+          return;
+        }
+      }
+      raf = requestAnimationFrame(tryScroll);
+    }
+    raf = requestAnimationFrame(tryScroll);
+    return () => { alive = false; cancelAnimationFrame(raf); };
+  }, [step]);
+
   // ── before-effect del paso ─────────────────────────────────────────────
   // Cada vez que entramos a un paso, corremos su `before` UNA sola vez
   // (típicamente, mutar el mock para que la UI muestre el estado que el
