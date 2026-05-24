@@ -36,16 +36,34 @@ async def barrer_lsp_ociosas(
     """Tarea de fondo: cada minuto evicta sesiones LSP sin uso hace más
     de `ttl`. La RAM escala con equipos ACTIVOS, no totales. El
     re-arranque al volver degrada a tree-sitter mientras reindexa (net
-    de capa 17): nunca se rompe."""
+    de capa 17): nunca se rompe.
+
+    Robustez: la tarea NUNCA debe morir por una excepción en una
+    iteración (un bug en `evictar_lsp_ociosas` o mutación concurrente
+    del dict). Si la tarea muere, las sesiones LSP nunca se evictan y la
+    RAM crece sin techo de forma silenciosa. Cada vuelta vive en su
+    propio try/except; CancelledError sí propaga (shutdown del server)."""
     while True:
-        await asyncio.sleep(60)
-        for tid, rt in list(runtimes.items()):
-            ev = rt.evictar_lsp_ociosas(ttl)
-            if ev:
-                logger.info(
-                    "LSP evictadas por ociosas (%ds) equipo %s: %s",
-                    int(ttl), tid, ", ".join(ev),
-                )
+        try:
+            await asyncio.sleep(60)
+            for tid, rt in list(runtimes.items()):
+                try:
+                    ev = rt.evictar_lsp_ociosas(ttl)
+                except Exception:  # noqa: BLE001 — aislar fallo por equipo
+                    logger.exception(
+                        "barrer_lsp_ociosas: fallo evictando equipo %s",
+                        tid,
+                    )
+                    continue
+                if ev:
+                    logger.info(
+                        "LSP evictadas por ociosas (%ds) equipo %s: %s",
+                        int(ttl), tid, ", ".join(ev),
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — el loop sobrevive
+            logger.exception("barrer_lsp_ociosas: error en la vuelta")
 
 
 def runtime_evictable(
@@ -133,23 +151,36 @@ async def barrer_runtimes_ociosos(
     primera conexión al deploy).
     """
     while True:
-        await asyncio.sleep(60)
-        ahora = time.monotonic()
-        candidatos = [
-            tid for tid, rt in list(runtimes.items())
-            if runtime_evictable(
-                rt, ttl, ahora,
-                tiene_proposals_store=tiene_proposals_store,
-            )
-        ]
-        for tid in candidatos:
-            if await evictar_runtime(
-                tid,
-                runtimes=runtimes,
-                rt_locks=rt_locks,
-                asientos_locks=asientos_locks,
-            ):
-                logger.info(
-                    "runtime evictado por ocioso (%ds) equipo %s",
-                    int(ttl), tid,
+        try:
+            await asyncio.sleep(60)
+            ahora = time.monotonic()
+            candidatos = [
+                tid for tid, rt in list(runtimes.items())
+                if runtime_evictable(
+                    rt, ttl, ahora,
+                    tiene_proposals_store=tiene_proposals_store,
                 )
+            ]
+            for tid in candidatos:
+                try:
+                    evicted = await evictar_runtime(
+                        tid,
+                        runtimes=runtimes,
+                        rt_locks=rt_locks,
+                        asientos_locks=asientos_locks,
+                    )
+                except Exception:  # noqa: BLE001 — aislar por equipo
+                    logger.exception(
+                        "barrer_runtimes_ociosos: fallo evictando equipo %s",
+                        tid,
+                    )
+                    continue
+                if evicted:
+                    logger.info(
+                        "runtime evictado por ocioso (%ds) equipo %s",
+                        int(ttl), tid,
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — el loop sobrevive
+            logger.exception("barrer_runtimes_ociosos: error en la vuelta")

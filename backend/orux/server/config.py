@@ -13,24 +13,15 @@ from __future__ import annotations
 import os
 import time
 
-
 # Topes y constantes de runtime ajustables por env (con clamp defensivo).
 # Sin esto, un mensaje gigante (BACKEND-AUDIT-0222 / -0272) o un cliente que
 # spamea pueden saturar el equipo entero. Los defaults son holgados.
-def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
-    try:
-        v = int(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        v = default
-    return max(minimo, min(maximo, v))
+# Los helpers viven en `orux/_env.py` (antes 3 copias en config/pool/workspace);
+# se re-exportan acá para que los imports existentes
+# (`from .config import _env_int`) sigan funcionando byte-idéntico.
+from .._env import _env_float, _env_int
 
-
-def _env_float(name: str, default: float, minimo: float, maximo: float) -> float:
-    try:
-        v = float(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        v = default
-    return max(minimo, min(maximo, v))
+__all__ = ["_env_int", "_env_float"]
 
 
 # Tope HARD del frame WS recibido. websockets.serve() lo aplica antes de

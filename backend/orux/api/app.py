@@ -229,7 +229,43 @@ _SESSION_SECRET = os.environ.get("ORUX_SESSION_SECRET", "")
 # A dónde vuelve el navegador con el token ya emitido. El front (otra
 # sesión) lo lee de `?session=` y manda `SessionMessage`, igual que el
 # auto-login con `orux_session`. Default razonable: el SPA en /app/.
-_APP_URL = os.environ.get("ORUX_APP_URL", "/app/")
+#
+# BACKEND-AUDIT-0294: si el operador setea `ORUX_APP_URL=https://atacante`
+# por error de config, el callback de OAuth redirige ahí con el token de
+# sesión (open redirect). Forzamos rutas RELATIVAS (mismo origen) o
+# absolutas con el MISMO host de `ORUX_PUBLIC_URL`. Fail-open al default
+# si la cadena es maliciosa: nunca dejamos que `_volver()` mande a otro
+# origen.
+def _sanitizar_app_url(crudo: str, public_url: str) -> str:
+    s = (crudo or "/app/").strip()
+    if not s:
+        return "/app/"
+    # Sin esquema y arrancando con `/` o sin path absoluto remoto: es
+    # relativa al origen del callback. Seguro.
+    if "://" not in s and not s.lstrip().startswith("//"):
+        return s
+    # Cadena absoluta: solo se acepta si comparte host con ORUX_PUBLIC_URL.
+    try:
+        u = urllib.parse.urlparse(s)
+        p = urllib.parse.urlparse(public_url or "")
+    except (ValueError, TypeError):
+        logger.warning(
+            "ORUX_APP_URL inválido (%r); usando /app/ por seguridad", s,
+        )
+        return "/app/"
+    if p.netloc and u.netloc == p.netloc and u.scheme in ("http", "https"):
+        return s
+    logger.warning(
+        "ORUX_APP_URL apunta a otro origen (%r vs %r); usando /app/ por "
+        "seguridad (open redirect)", u.netloc, p.netloc,
+    )
+    return "/app/"
+
+
+_APP_URL = _sanitizar_app_url(
+    os.environ.get("ORUX_APP_URL", "/app/"),
+    os.environ.get("ORUX_PUBLIC_URL", ""),
+)
 
 
 def _oauth_ok() -> bool:

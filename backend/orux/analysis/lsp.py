@@ -588,49 +588,59 @@ def arrancar_lsp(
         return None
     ultimo = ""
     for cmd in cmds:
+        # Try/finally externo: garantiza `err.close()` en TODOS los caminos
+        # — incluso si `Popen` levanta algo distinto de FileNotFoundError/
+        # OSError (MemoryError, KeyboardInterrupt) o si la rama `return`
+        # exitosa no debería cerrar `err` PERO `err` sigue siendo nuestro
+        # FD propio (el subproceso ya lo dup-ó internamente con `stderr=err`,
+        # así que cerrar el handle nuestro no afecta al hijo).
         err = tempfile.TemporaryFile()
         try:
-            # `start_new_session=True` aísla el LSP en su propio process
-            # group (BACKEND-AUDIT-0145): si el padre cae con SIGKILL, el
-            # session leader puede ser SIGTERM-eado en bloque al matar el
-            # process group, sin dejar huerfanos. `subprocess.DEVNULL` para
-            # stderr era una opción para evitar el crecimiento del temp,
-            # pero perdemos los logs de error que sí queremos; el barrido
-            # de `cerrar()` cierra el FD a tiempo.
-            proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=err, bufsize=0, start_new_session=True,
-            )
-        except (FileNotFoundError, OSError) as e:
-            ultimo = f"{cmd[0]}: no se pudo ejecutar ({e})"
-            err.close()
-            continue
-        try:
-            cliente = ClienteLSP(_TransporteProceso(proc, timeout))
-            cliente.iniciar("file://" + raiz.rstrip("/"))
-            logger.info(
-                "LSP %s arrancado (%s) sobre %s", lang, cmd[0], raiz
-            )
-            return SesionLSP(cliente, raiz)
-        except Exception as e:  # noqa: BLE001 - handshake falló
             try:
-                proc.kill()
-            except Exception as ek:  # noqa: BLE001
-                logger.debug("kill LSP %s tras handshake fallido: %r", lang, ek)
+                # `start_new_session=True` aísla el LSP en su propio process
+                # group (BACKEND-AUDIT-0145): si el padre cae con SIGKILL, el
+                # session leader puede ser SIGTERM-eado en bloque al matar el
+                # process group, sin dejar huerfanos. `subprocess.DEVNULL`
+                # para stderr era una opción para evitar el crecimiento del
+                # temp, pero perdemos los logs de error que sí queremos; el
+                # barrido de `cerrar()` cierra el FD a tiempo.
+                proc = subprocess.Popen(
+                    cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=err, bufsize=0, start_new_session=True,
+                )
+            except (FileNotFoundError, OSError) as e:
+                ultimo = f"{cmd[0]}: no se pudo ejecutar ({e})"
+                continue
             try:
-                err.seek(0)
-                cola = err.read()[-800:].decode("utf-8", "replace").strip()
-                # BACKEND-AUDIT-0243: scrubear posibles secrets ORUX_GIT_TOKEN
-                # u otros si el LSP dumpea su env por error.
-                cola = _scrubear_stderr(cola)
-            except Exception as ee:  # noqa: BLE001
-                logger.debug("lectura de stderr LSP %s: %r", lang, ee)
-                cola = ""
-            ultimo = (
-                f"{cmd[0]}: handshake falló ({type(e).__name__}: {e})"
-                + (f" | stderr: {cola}" if cola else
-                   " | stderr vacío (suele ser cache/red en el 1er uso)")
-            )
+                cliente = ClienteLSP(_TransporteProceso(proc, timeout))
+                cliente.iniciar("file://" + raiz.rstrip("/"))
+                logger.info(
+                    "LSP %s arrancado (%s) sobre %s", lang, cmd[0], raiz
+                )
+                return SesionLSP(cliente, raiz)
+            except Exception as e:  # noqa: BLE001 - handshake falló
+                try:
+                    proc.kill()
+                except Exception as ek:  # noqa: BLE001
+                    logger.debug(
+                        "kill LSP %s tras handshake fallido: %r", lang, ek,
+                    )
+                try:
+                    err.seek(0)
+                    cola = (
+                        err.read()[-800:].decode("utf-8", "replace").strip()
+                    )
+                    # BACKEND-AUDIT-0243: scrubear posibles secrets
+                    # ORUX_GIT_TOKEN u otros si el LSP dumpea su env por error.
+                    cola = _scrubear_stderr(cola)
+                except Exception as ee:  # noqa: BLE001
+                    logger.debug("lectura de stderr LSP %s: %r", lang, ee)
+                    cola = ""
+                ultimo = (
+                    f"{cmd[0]}: handshake falló ({type(e).__name__}: {e})"
+                    + (f" | stderr: {cola}" if cola else
+                       " | stderr vacío (suele ser cache/red en el 1er uso)")
+                )
         finally:
             err.close()
     logger.warning(

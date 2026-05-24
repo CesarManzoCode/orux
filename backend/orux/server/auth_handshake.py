@@ -101,8 +101,12 @@ async def autenticar(
             # El registro es público; el backoff por-conexión no frena un
             # bot que hace connect -> register en bucle. Ver
             # `_throttle_registro`.
-            if not server._throttle_registro(ip_cliente(websocket)):
-                logger.warning("registro: tope por IP alcanzado")
+            ip = ip_cliente(websocket)
+            if not server._throttle_registro(ip):
+                # Loguear la IP es lo que permite al operador correlacionar
+                # un bot que rota muchas conexiones (cada conexión nueva
+                # reinicia el bucket por-conexión, pero la IP queda).
+                logger.warning("registro: tope por IP alcanzado (ip=%s)", ip)
                 if await _fallo(
                     "demasiados registros desde tu red, esperá unos minutos",
                     "rate_limited_register",
@@ -167,8 +171,9 @@ async def autenticar(
             # Anti-fuerza-bruta: tope de logins por IP. El backoff
             # por-conexión se reinicia al reconectar; este tope no. Ver
             # `_throttle_login`.
-            if not server._throttle_login(ip_cliente(websocket)):
-                logger.warning("login: tope por IP alcanzado")
+            ip = ip_cliente(websocket)
+            if not server._throttle_login(ip):
+                logger.warning("login: tope por IP alcanzado (ip=%s)", ip)
                 if await _fallo(
                     "demasiados intentos desde tu red, esperá unos minutos",
                     "rate_limited",

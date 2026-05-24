@@ -320,8 +320,30 @@ class GitRepo:
         except subprocess.TimeoutExpired:
             logger.warning("git %s excedió el timeout de %.0fs", op, timeout)
             return 1, ""
-        except (FileNotFoundError, OSError) as e:
-            logger.warning("git no se pudo invocar: %s", e)
+        except FileNotFoundError:
+            # Git no instalado en el host: NO es bug del producto sino del
+            # deploy. Loguearlo distinto del PermissionError ayuda al operador
+            # a diagnosticar sin SSHear (BACKEND-AUDIT-0292).
+            logger.warning(
+                "git %s: binario `git` no encontrado en PATH (instala git)",
+                op,
+            )
+            return 1, ""
+        except PermissionError as e:
+            # Permisos rotos en el workspace (umask, volumen Docker mal
+            # montado): el sistema no se cae, pero git no podrá leer/escribir.
+            logger.error(
+                "git %s: permisos insuficientes en %s: %s",
+                op, self._root, e,
+            )
+            return 1, ""
+        except OSError as e:
+            # I/O error genérico (disco lleno, FS corrupto, pipe roto). Sí
+            # queremos stack trace porque es inesperado y diagnosticable.
+            logger.exception(
+                "git %s: OSError inesperado invocar git en %s: %s",
+                op, self._root, e,
+            )
             return 1, ""
 
     def asegurar(self) -> None:

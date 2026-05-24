@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 from pathlib import Path
 from secrets import token_hex
 
@@ -191,7 +192,26 @@ async def _amain() -> None:
             "estado en %s", base,
         )
 
-    await server.run(host=host, port=port)
+    # SIGTERM/SIGINT: el server WS atiende ConnectionClosed por conexión,
+    # pero el loop principal de `server.run` se cancelaría como traceback
+    # crudo de KeyboardInterrupt. Registramos handlers que cancelan la
+    # tarea principal limpiamente, así `asyncio.run` devuelve sin ruido y
+    # las tareas de fondo (`barrer_*`) reciben CancelledError ordenada.
+    # `add_signal_handler` requiere el loop corriendo: por eso va en
+    # `_amain`, no en `main` (BACKEND-AUDIT-0293).
+    tarea_principal = asyncio.create_task(server.run(host=host, port=port))
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, tarea_principal.cancel)
+        except NotImplementedError:
+            # Windows / loops alternativos: el handler estándar de Python
+            # sigue funcionando, solo perdemos el cierre 100% silencioso.
+            pass
+    try:
+        await tarea_principal
+    except asyncio.CancelledError:
+        log.info("server: shutdown limpio por señal")
 
 
 def main() -> None:

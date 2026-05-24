@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 
+from .._env import _env_int
 from .document import Document
 from .storage import DiskStorage
 
@@ -32,15 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Topes blandos (BACKEND-AUDIT-0070). Configurables vía env por si un
 # operador legítimo necesita más holgura; defaults seguros.
-import os
-
-
-def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
-    try:
-        v = int(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        v = default
-    return max(minimo, min(maximo, v))
 
 
 MAX_ARCHIVOS = _env_int("ORUX_WS_MAX_ARCHIVOS", 50_000, 100, 1_000_000)

@@ -27,6 +27,23 @@ from .. import stripe_client
 logger = logging.getLogger(__name__)
 
 
+def _log_fallo_tarea_fondo(tarea: asyncio.Task) -> None:
+    """Callback defensivo: si la coroutina explotó con una excepción que
+    `ajustar_asientos` NO atrapó (por ejemplo, un bug nuevo fuera del
+    try/except interno), el done_callback es el último sitio donde podemos
+    enterarnos. Sin esto, `add_done_callback(set.discard)` solo limpia el
+    registro y la excepción se traga (queda en `task.exception()` pero
+    nadie la consulta)."""
+    if tarea.cancelled():
+        return
+    exc = tarea.exception()
+    if exc is not None:
+        logger.error(
+            "tarea de fondo de asientos terminó con excepción no atrapada: %r",
+            exc,
+        )
+
+
 def disparar_ajuste(
     coro,
     tareas_fondo: set[asyncio.Task],
@@ -40,6 +57,7 @@ def disparar_ajuste(
     tarea = asyncio.create_task(coro)
     tareas_fondo.add(tarea)
     tarea.add_done_callback(tareas_fondo.discard)
+    tarea.add_done_callback(_log_fallo_tarea_fondo)
 
 
 async def ajustar_asientos(

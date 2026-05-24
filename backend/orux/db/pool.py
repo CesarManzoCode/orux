@@ -21,23 +21,16 @@ Hardening (auditoría):
 from __future__ import annotations
 
 import logging
-import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+from .._env import _env_int
+
 logger = logging.getLogger(__name__)
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
-
-
-def _env_int(name: str, default: int, minimo: int, maximo: int) -> int:
-    try:
-        v = int(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        v = default
-    return max(minimo, min(maximo, v))
 
 
 class Database:
@@ -73,15 +66,31 @@ class Database:
                 max_inactive_connection_lifetime=idle,
             )
         except Exception:
-            logger.exception("Postgres: create_pool falló")
+            # Sin contexto operacional, el operador no sabe si falló por DSN
+            # malformado, por DB caída, o por límites del pool. NO loguear el
+            # DSN: trae credenciales (BACKEND-AUDIT-0291).
+            logger.exception(
+                "Postgres: create_pool falló (pool_min=%d, pool_max=%d, "
+                "cmd_timeout=%ds, idle=%ds, elapsed=%.0fms)",
+                pool_min, pool_max, cmd_to, idle,
+                (time.monotonic() - t0) * 1000.0,
+            )
             raise
         db = cls(pool)
         try:
             await db._aplicar_schema()
         except Exception:
             # Si la migración falla, no dejar el pool huérfano (resource leak).
-            logger.exception("Postgres: _aplicar_schema falló — cerrando pool")
-            await pool.close()
+            # Best-effort el cierre: si pool.close() también explota (DB caída
+            # durante schema), no enmascarar la excepción original.
+            logger.exception(
+                "Postgres: _aplicar_schema falló (schema=%s) — cerrando pool",
+                _SCHEMA,
+            )
+            try:
+                await pool.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("Postgres: pool.close() también falló")
             raise
         logger.info(
             "Postgres: pool listo y esquema aplicado en %.0f ms",
