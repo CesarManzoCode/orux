@@ -1003,7 +1003,9 @@ export function App() {
                 >github.com/CesarManzoCode</a>
               </span>
             </div>
-            <div className="foot-bottom-r">{t.foot_copy}</div>
+            {/* Año dinámico: evita el "© 2026 Orux" hardcoded que envejecía
+                en cada cambio de año sin que nadie tocara el repo. */}
+            <div className="foot-bottom-r">© {new Date().getFullYear()} {t.foot_copy_suffix}</div>
           </div>
         </div>
       </footer>

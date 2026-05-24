@@ -50,8 +50,12 @@
   overflow: hidden;
   animation: modal-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Pop-in del modal: scale recalibrado 2026-05-24 (0.97 → 0.985). El salto
+   de escala anterior se leía como jitter en pantallas con frame-rate
+   variable; con .985 el "asentarse" ya es perceptible sin que parezca
+   que el modal "crece". El translateY hace el grueso del trabajo. */
 @keyframes modal-pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.97) }
+  from { opacity: 0; transform: translateY(8px) scale(0.985) }
   to { opacity: 1; transform: none }
 }
 
@@ -382,6 +386,19 @@
   .hub-head-mid { order: 3; flex-basis: 100%; }
   .modal { max-width: 100%; }
   .inv-code { font-size: 13px; letter-spacing: 0.06em; }
+}
+/* iOS Safari mete un zoom automático cuando enfoca un input con
+   font-size < 16px (lo trata como "el usuario va a leer mal y necesita
+   zoom"). Para que el modal NO salte de escala al tocar un campo,
+   subimos los inputs a 16px en mobile small. La densidad visual NO
+   cambia (los pixels lógicos son iguales) — sólo evitamos el zoom
+   visual del navegador, que era el verdadero ruido. */
+@media (max-width: 480px) {
+  .nf-modal input,
+  .inv-code,
+  .field {
+    font-size: 16px;
+  }
 }
 /* Phone pequeño: el IDE no es navegable; redirigimos visualmente al hub
    o mostramos un cartel honesto en vez de UI rota. NO ocultamos el hub:

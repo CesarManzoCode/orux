@@ -307,7 +307,10 @@ export const T = {
     foot_how: "Cómo funciona",
     foot_faq: "FAQ",
     foot_price: "Precio",
-    foot_copy: "© 2026 Orux",
+    /* foot_copy_suffix: el "© <año>" lo prefija el componente App.tsx con
+       new Date().getFullYear() — así el footer no envejece al pasar de
+       año (era "© 2026 Orux" hardcoded, se sentiría stale en 2027). */
+    foot_copy_suffix: "Orux · Todos los derechos reservados",
     foot_built_by: "Construido por Cesar Manzo (16) ·",
 
     // Lang
@@ -607,7 +610,7 @@ export const T = {
     foot_how: "How it works",
     foot_faq: "FAQ",
     foot_price: "Pricing",
-    foot_copy: "© 2026 Orux",
+    foot_copy_suffix: "Orux · All rights reserved",
     foot_built_by: "Built by Cesar Manzo (16) ·",
 
     // Lang

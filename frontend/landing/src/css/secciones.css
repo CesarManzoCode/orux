@@ -188,7 +188,14 @@
   text-transform: uppercase; color: var(--faint);
 }
 .price.pro .tier { color: var(--steel); }
-.price h4 { font-size: 23px; letter-spacing: -0.022em; color: var(--ink); margin: 13px 0 9px; }
+/* h4 con clamp: a 375px (iPhone SE / Android pequeño) el 23px fijo se
+   sentía sobredimensionado contra el .price-sub. Con clamp baja a 19px
+   en mobile y crece a 24px en desktop ancho. Mismo lenguaje que el resto
+   de titulares responsivos de la landing. */
+.price h4 {
+  font-size: clamp(19px, 2.4vw, 24px);
+  letter-spacing: -0.022em; color: var(--ink); margin: 13px 0 9px;
+}
 .price-sub { color: var(--mut); font-size: 13.5px; line-height: 1.56; margin-bottom: 26px; }
 .price ul { list-style: none; display: grid; gap: 13px; margin-bottom: 30px; flex: 1; }
 .price li { color: var(--ink-2); font-size: 13.5px; padding-left: 27px; position: relative; line-height: 1.52; }
@@ -231,9 +238,26 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   font-family: var(--font-mono); font-size: 11.5px;
   color: var(--mut); letter-spacing: 0.02em;
 }
-.foot-bottom-l { display: flex; gap: 12px; align-items: center; }
-.foot-bottom-l a { color: var(--mut); transition: color var(--tr); }
-.foot-bottom-l a:hover { color: var(--ink); }
+.foot-bottom-l {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  min-width: 0;
+}
+/* Links del sub-footer: subrayado discreto SIEMPRE para señalar que son
+   interactivos (el email "cesarmanzocode@..." sin subrayado parecía texto
+   plano y los usuarios no lo registraban como un mailto). El subrayado
+   en reposo es del color del propio link (--mut, casi tan tenue como el
+   texto) y al hover se enciende a --ink. */
+.foot-bottom-l a {
+  color: var(--mut);
+  text-decoration: underline;
+  text-decoration-color: rgba(116, 122, 137, 0.3);
+  text-underline-offset: 3px;
+  transition: color var(--tr), text-decoration-color var(--tr);
+}
+.foot-bottom-l a:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
 .foot-bottom-r { color: var(--faint); }
 
 /* ─────────────────────────────────────────────────────────────────────

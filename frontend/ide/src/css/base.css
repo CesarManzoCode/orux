@@ -51,7 +51,12 @@
   --text: #e8eaef;
   --text-2: #aab1bf;
   --muted: #8a8f9c;
-  --faint: #6b7180;
+  /* --faint recalibrado 2026-05-24: de #6b7180 a #767d8a. El valor anterior
+     daba 2.9:1 sobre --bg-deep (#050608) — por debajo del piso AA real
+     para texto de 10-11px. El nuevo tono sube a ≈3.7:1 sobre --bg-deep y
+     ≈3.4:1 sobre --bg, conservando la sensación "metadato silencioso" sin
+     perderse visualmente en eyebrows, gutters y badges chiquitos. */
+  --faint: #767d8a;
 
   /* ── Acento de marca: verde→cian. El gradiente SOLO en el logomark y el
        CTA primario; el resto usa el sólido o un tinte neutro. ── */
@@ -235,8 +240,12 @@ button:active { transform: translateY(1px); }
 .btn-ghost { background: transparent; color: var(--muted); }
 /* Coherencia táctil: ghost también sube 1px al hover (igual que primario y
    secundario). Antes quedaba "plano" en el cluster de botones; el par
-   visual no respiraba igual. */
-.btn-ghost:hover { background: var(--surface-2); color: var(--text); transform: translateY(-1px); }
+   visual no respiraba igual. El border-color hairline al hover le da
+   "cuerpo" táctil sin layout-shift (en reposo es transparente). */
+.btn-ghost:hover {
+  background: var(--surface-2); color: var(--text);
+  border-color: var(--border-soft); transform: translateY(-1px);
+}
 .btn:disabled { opacity: 0.5; cursor: default; transform: none !important; filter: none !important; }
 
 /* ── PATRÓN: inputs. Una sola identidad para TODO control de texto del
@@ -263,7 +272,10 @@ button:active { transform: translateY(1px); }
    orienta y no parece roto. Entra con un delay alineado al stagger de las
    islas (rail 30ms, sidebar 55ms, main 80ms, statusbar 105ms): el empty
    asoma 130ms después que el main, así se siente "parte de la cascada de
-   entrada" en lugar de aparecer aislado dentro de una isla ya asentada. ── */
+   entrada" en lugar de aparecer aislado dentro de una isla ya asentada.
+   Cascade interno (icon → title → sub) con offsets cortos: el ojo registra
+   la jerarquía sin que se note la animación — los tres entran "casi a la
+   vez" pero con orden, no como un bloque plano. */
 .empty {
   display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: var(--s-2); padding: var(--s-8) var(--s-5);
@@ -275,9 +287,16 @@ button:active { transform: translateY(1px); }
   display: grid; place-items: center; color: var(--faint);
   background: var(--surface-2); border: 1px solid var(--border-soft);
   margin-bottom: var(--s-1); box-shadow: var(--shadow-sm);
+  animation: fade-in var(--dur-in) var(--ease-in) 130ms both;
 }
-.empty .empty-tit { font-size: var(--t-md); font-weight: 650; color: var(--text); letter-spacing: -0.01em; }
-.empty .empty-sub { font-size: var(--t-sm); color: var(--muted); max-width: 32ch; line-height: 1.55; }
+.empty .empty-tit {
+  font-size: var(--t-md); font-weight: 650; color: var(--text); letter-spacing: -0.01em;
+  animation: fade-in var(--dur-in) var(--ease-in) 180ms both;
+}
+.empty .empty-sub {
+  font-size: var(--t-sm); color: var(--muted); max-width: 32ch; line-height: 1.55;
+  animation: fade-in var(--dur-in) var(--ease-in) 220ms both;
+}
 .empty.compacto { padding: var(--s-5) var(--s-4); }
 
 /* ── PATRÓN: pill / chip de estado genérico ── */
