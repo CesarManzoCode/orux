@@ -33,9 +33,14 @@
   position: relative;
   width: 100%;
   /* Match exacto al iframe nativo (1280/800 = 16:10) para que el scale
-     fit no deje franjas negras. */
+     fit no deje franjas negras. El alto lo determina el aspect-ratio
+     sobre el ancho disponible — NO ponemos min-height alto: si el slot
+     es estrecho, una min-height alta gana sobre el aspect-ratio y deja
+     una franja negra abajo (el iframe escala por el lado más corto).
+     Floor mínimo bajo (380) sólo para salvar el caso patológico de un
+     wrap colapsado por contenido. */
   aspect-ratio: 16 / 10;
-  min-height: 560px;
+  min-height: 380px;
   /* Extender el slot HACIA LA DERECHA del viewport, rompiendo el
      max-width del .wrap padre (1240px). El calc da -340px en viewport
      1920 (mitad del gutter del wrap), dejando ~12px al borde. El min con
@@ -43,12 +48,16 @@
      viewports ≤1240. Necesita que .hero tenga overflow visible (ver base.css)
      para que el extender no se recorte. */
   margin-right: min(-56px, calc((1240px - 100vw) / 2 + 12px));
+  /* Y un empujón hacia la IZQUIERDA dentro del gap del grid: el copy ya
+     se hizo más estrecho (max-width 460), así que tenemos margen para
+     que la demo invada un poco el gap sin chocar con el texto. */
+  margin-left: clamp(-72px, -3vw, -16px);
   overflow: hidden;
   border-radius: var(--r-isla, 14px);
   background: #08090b;
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    0 40px 110px rgba(0, 0, 0, 0.72),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 /* Wrapper que se escala: tiene dimensiones FIJAS del IDE nativo, el JS
    le ajusta `transform: scale()` para que entre en .hero-demo. */

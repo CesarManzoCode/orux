@@ -290,11 +290,11 @@ section { position: relative; padding: clamp(82px, 11vw, 148px) 0; }
      extenderse hacia el borde derecho del viewport sin recortarse. */
 }
 .hero .wrap {
-  display: grid; grid-template-columns: minmax(0, 0.84fr) minmax(0, 1.16fr);
-  gap: clamp(32px, 4.5vw, 72px); align-items: center;
-  min-height: clamp(580px, 80vh, 800px);
+  display: grid; grid-template-columns: minmax(0, 0.62fr) minmax(0, 1.38fr);
+  gap: clamp(24px, 3vw, 56px); align-items: center;
+  min-height: clamp(640px, 88vh, 940px);
 }
-.hero-copy { max-width: 520px; }
+.hero-copy { max-width: 460px; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 11px;
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
