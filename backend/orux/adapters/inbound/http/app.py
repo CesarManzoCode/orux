@@ -42,6 +42,7 @@ from starlette.routing import Route
 
 from orux import billing, stripe_client
 from orux._net import ip_proxy_confiable
+from orux._rate import permitir_evento as _permitir_evento_rate
 from orux.db.pool import Database
 from orux.db.stores import PgUserStore, PgWebhooksStore
 from orux.identity import (
@@ -89,11 +90,6 @@ _TRACK_RPM = 120  # más permisivo: la landing puede generar varios eventos
 # cambio de minuto a (por ejemplo) 30s habría requerido grep manual.
 _VENTANA_RPM_SEG = 60.0
 
-# Capacidad máxima de cada bucket-dict antes de gc perezoso. Cuando un
-# atacante rota IPs (>10k), purgar dicts vacíos no basta — el GC también
-# tira buckets cuya última muestra ya venció la ventana (ver _rate_limit_*).
-_TOPE_BUCKETS = 10_000
-
 _login_buckets: dict[str, list[float]] = {}
 _error_buckets: dict[str, list[float]] = {}
 _track_buckets: dict[str, list[float]] = {}
@@ -124,35 +120,14 @@ def _ip_de(req: Request) -> str:
     return transport_ip or "unknown"
 
 
-def _purgar_buckets(buckets: dict[str, list[float]], corte: float) -> None:
-    """GC perezoso de un bucket-dict: solo se activa si el dict superó el
-    tope `_TOPE_BUCKETS`. Descarta buckets cuya última muestra venció la
-    ventana (no solo los vacíos): un atacante rotando >10k IPs con goteo
-    los mantendría no-vacíos y el dict crecería sin control."""
-    if len(buckets) <= _TOPE_BUCKETS:
-        return
-    muertas = [k for k, v in buckets.items() if not v or v[-1] <= corte]
-    for k in muertas:
-        buckets.pop(k, None)
-
-
 def _rate_limit(
     buckets: dict[str, list[float]], ip: str, tope_rpm: int,
 ) -> bool:
     """Núcleo del rate limiter por IP. True = OK; False = superó el tope.
-    Bucket por IP con limpieza perezosa de muestras + gc del dict. Tres
-    consumidores (login, errors, track) que solo difieren en su tope.
-    Antes este bloque vivía duplicado en 3 funciones; consolidar evita
-    drift (e.g. cambiar la ventana en una y olvidar las otras)."""
-    ahora = time.monotonic()
-    corte = ahora - _VENTANA_RPM_SEG
-    bucket = buckets.setdefault(ip, [])
-    bucket[:] = [t for t in bucket if t > corte]
-    if len(bucket) >= tope_rpm:
-        return False
-    bucket.append(ahora)
-    _purgar_buckets(buckets, corte)
-    return True
+    Tres consumidores (login, errors, track) que solo difieren en el tope.
+    El algoritmo (bucket + GC perezoso del dict) vive en `orux/_rate.py`,
+    compartido con el throttle del WS (`SyncServer._throttle`)."""
+    return _permitir_evento_rate(buckets, ip, tope_rpm, _VENTANA_RPM_SEG)
 
 
 def _rate_limit_login(ip: str) -> bool:

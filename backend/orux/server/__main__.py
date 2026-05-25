@@ -1,22 +1,19 @@
 """Punto de entrada: `python -m orux.server` o `orux-server`.
 
-Aquí —y solo aquí— se cablea la persistencia real (capa 3). El `SyncServer`
-no sabe de directorios por sí mismo: recibe un `DiskStorage` inyectado. Eso
-mantiene los tests arrancando en memoria y deja la decisión de "dónde se
-guarda" en un único lugar visible.
+El cableado del grafo (qué adapter cumple cada Port según la config) vive
+en `orux.composition.build_server`; acá solo: leer env, fabricar la
+`AppConfig`, arrancar el server y gestionar señales de shutdown.
 
 **Por qué el directorio por defecto está FUERA del repo** (`~/.orux/...`):
-desde capa 14 el frontend es React+Vite (un único contenedor multi-stage,
-no se sirve más con Live Server desde dentro del repo). Mantener el estado
-de runtime FUERA del árbol del repo sigue siendo correcto: evita que
-herramientas locales (linters, formatters, watchers de IDE) crucen con el
-workspace persistido, y la ruta es explícita para ops (`~/.orux/...`).
-La nota histórica sobre Live Server quedó en `CLAUDE.md` (capa 14).
+los watchers locales (linters, formatters, IDE) NO deben cruzar con el
+workspace persistido — un escritor del workspace dispararía un re-build
+del IDE o del watcher, con efectos colaterales raros (caso real ya visto
+con un static server que vigilaba la carpeta y recargaba ante cada commit
+del workspace; nota histórica en CLAUDE.md). La ruta queda explícita para
+ops y se sobreescribe con la variable de entorno `ORUX_DATA`.
 
 Cuando hay integración con Git, esta capa decide su propia ubicación
 dentro del repo del usuario; ese es su problema, no el del runtime.
-
-Se puede sobreescribir con la variable de entorno `ORUX_DATA`.
 """
 
 from __future__ import annotations

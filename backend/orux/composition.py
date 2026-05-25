@@ -27,6 +27,7 @@ from .ports import (
     TeamStorePort,
     UserStorePort,
 )
+from .server.config import DEFAULT_WS_PORT
 from .server.runtime import TeamRuntime
 from .server.sync import SyncServer
 from .state import DiskStorage
@@ -44,7 +45,7 @@ class AppConfig:
     secret: str
     dsn: str = ""
     host: str = "localhost"
-    port: int = 8765
+    port: int = DEFAULT_WS_PORT
 
     @classmethod
     def desde_env(cls, base_dir: Path, secret: str) -> "AppConfig":
@@ -53,7 +54,7 @@ class AppConfig:
             secret=secret,
             dsn=os.environ.get("ORUX_DB_DSN", "").strip(),
             host=os.environ.get("ORUX_HOST", "localhost"),
-            port=int(os.environ.get("ORUX_PORT", "8765")),
+            port=int(os.environ.get("ORUX_PORT", str(DEFAULT_WS_PORT))),
         )
 
 

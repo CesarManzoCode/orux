@@ -21,7 +21,13 @@ import time
 # (`from .config import _env_int`) sigan funcionando byte-idéntico.
 from orux._env import _env_float, _env_int
 
-__all__ = ["_env_int", "_env_float"]
+# Puerto WS por defecto. Constante centralizada (antes hardcodeada en tres
+# lugares: `composition.py:AppConfig.port`, el default del env `ORUX_PORT`
+# y la firma de `SyncServer.run`); con la constante, cambiar el puerto es
+# una sola edición y los tres consumidores convergen.
+DEFAULT_WS_PORT = 8765
+
+__all__ = ["_env_int", "_env_float", "DEFAULT_WS_PORT"]
 
 
 # Tope HARD del frame WS recibido. websockets.serve() lo aplica antes de

@@ -37,6 +37,7 @@ from secrets import token_hex
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 
+from orux._rate import permitir_evento as _permitir_evento_rate
 from orux.analysis.rename import Rename
 from orux.identity import UserStore, crear_token
 from orux.protocol import (
@@ -71,6 +72,7 @@ from orux.ports import (
 from orux.state import DiskStorage, Ownership, Proposals, path_seguro
 from orux.teams import MemTeamStore
 from .config import (
+    DEFAULT_WS_PORT,
     RATE_BURST,
     RATE_TASA,
     WS_MAX_QUEUE,
@@ -175,26 +177,10 @@ class SyncServer:
         tope: int, ventana: float,
     ) -> bool:
         """Ventana deslizante por IP: True = OK, False = la IP superó `tope`
-        eventos en `ventana` segundos. Bucket por IP, limpieza perezosa.
-
-        El GC del dict descarta buckets OBSOLETOS (vacíos, o cuyo registro
-        más nuevo ya venció la ventana), no sólo los vacíos: si sólo borrara
-        los vacíos, un atacante rotando >10k IPs con un goteo las mantiene
-        no-vacías y el dict crecería sin control. Un bucket obsoleto es
-        equivalente a uno ausente."""
-        ahora = time.monotonic()
-        corte = ahora - ventana
-        bucket = buckets.setdefault(ip, [])
-        bucket[:] = [t for t in bucket if t > corte]
-        if len(bucket) >= tope:
-            return False
-        bucket.append(ahora)
-        if len(buckets) > 10_000:
-            for k in [
-                k for k, v in buckets.items() if not v or v[-1] <= corte
-            ]:
-                buckets.pop(k, None)
-        return True
+        eventos en `ventana` segundos. El algoritmo (bucket + GC perezoso)
+        vive en `orux/_rate.py` — antes había una copia byte-idéntica acá
+        y otra en `adapters/inbound/http/app.py`."""
+        return _permitir_evento_rate(buckets, ip, tope, ventana)
 
     def _throttle_registro(self, ip: str) -> bool:
         """Anti-abuso del registro: tope de registros por IP en ventana
@@ -345,17 +331,26 @@ class SyncServer:
         Limpia también `_ids`/`_conns` del runtime (BACKEND-AUDIT-0240): si
         no, el mapping queda apuntando a un socket muerto y los siguientes
         envíos al client_id silenciosamente intentan escribir a un cadáver.
+
+        Logs: el `client_id` se resuelve ANTES de borrar el mapping para
+        poder dejarlo en el log (sin él, "se descartó alguien del equipo X"
+        es ciego cuando un usuario reporta "no recibí mi propuesta"). Cae a
+        "?" si la conexión nunca llegó a tener client_id asignado (envío
+        durante el handshake antes de entrar al equipo).
         """
+        cid = rt._ids.get(client, "?")
         rt.clients.discard(client)
-        cid = rt._ids.pop(client, None)
-        if cid is not None and rt._conns.get(cid) is client:
-            rt._conns.pop(cid, None)
+        viejo_cid = rt._ids.pop(client, None)
+        if viejo_cid is not None and rt._conns.get(viejo_cid) is client:
+            rt._conns.pop(viejo_cid, None)
         if isinstance(exc, ConnectionClosed):
-            logger.debug("cliente caído en equipo %s (envío)", rt.team_id)
+            logger.debug(
+                "cliente %s caído en equipo %s (envío)", cid, rt.team_id,
+            )
         else:
             logger.warning(
-                "envío falló en equipo %s, se descarta el cliente: %r",
-                rt.team_id, exc,
+                "envío a %s falló en equipo %s, se descarta el cliente: %r",
+                cid, rt.team_id, exc,
             )
 
     async def _enviar_a(self, rt: TeamRuntime, client_id: str, payload: str) -> None:
@@ -804,7 +799,9 @@ class SyncServer:
             tiene_proposals_store=self._proposals_store is not None,
         )
 
-    async def run(self, host: str = "localhost", port: int = 8765) -> None:
+    async def run(
+        self, host: str = "localhost", port: int = DEFAULT_WS_PORT,
+    ) -> None:
         """Arranca el server WebSocket y lo deja escuchando para siempre.
 
         `max_size`/`max_queue` aplican el tope HARD del frame antes de

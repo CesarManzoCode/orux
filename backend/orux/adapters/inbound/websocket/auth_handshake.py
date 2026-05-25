@@ -191,22 +191,31 @@ async def autenticar(
             # revocar (cambio de pwd / logout-all) dejan de valer
             # quirúrgicamente sin tirar todas las sesiones del server
             # (BACKEND-AUDIT-0002).
+            #
+            # Decode en DOS pasadas:
+            # 1) Una verificación SÍNCRONA con epoch fijo en 0 — solo
+            #    sirve para extraer el `username` del token sin emitir IO,
+            #    así sabemos a qué usuario consultarle el epoch.
+            # 2) Si la pasada 1 devuelve un usuario decodificable, hacemos
+            #    UN solo `await` para leer su epoch real y re-decodificamos
+            #    pasando ese epoch. Si el token revocó (su epoch viejo no
+            #    coincide), la pasada 2 devuelve None y rechazamos.
             user = None
             try:
-                _ud = usuario_de_token(
+                usuario_provisional = usuario_de_token(
                     msg.token, server._secret,
-                    epoch_de=lambda u: 0,  # placeholder síncrono
+                    epoch_de=lambda u: 0,  # placeholder síncrono, ver arriba
                 )
-                if _ud is not None:
-                    # Re-verifica el epoch contra el store async real.
-                    epoch_actual = await server.users.epoch(_ud)
-                    # Re-decodifica con un callable que devuelve el epoch
-                    # ya consultado (un solo await; barato).
+                if usuario_provisional is not None:
+                    epoch_actual = await server.users.epoch(usuario_provisional)
+                    # Re-decodifica con el epoch real ya consultado: un
+                    # callable que lo devuelve cerrado por defecto evita
+                    # un segundo await dentro de `usuario_de_token`.
                     user = usuario_de_token(
                         msg.token, server._secret,
                         epoch_de=lambda u, _e=epoch_actual: _e,
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — se loguea y se rechaza
                 logger.warning("error verificando sesión: %s", e)
             if user is not None and await server.users.existe(user):
                 return user
