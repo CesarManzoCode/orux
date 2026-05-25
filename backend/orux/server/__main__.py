@@ -28,10 +28,12 @@ import signal
 from pathlib import Path
 from secrets import token_hex
 
-from ..git import GitRepo
-from ..identity import UserStore
-from ..state import DiskStorage, Ownership
-from .sync import SyncServer, TeamRuntime
+from ..composition import AppConfig, build_server
+from .sync import TeamRuntime  # re-export para compat con callers externos
+
+# Compat: __main__ históricamente re-exportaba `SyncServer` para callers
+# externos. Lo mantenemos por ahora.
+from .sync import SyncServer  # noqa: F401
 
 # Todo el estado de ejecución vive bajo ~/.orux, FUERA del árbol del
 # proyecto a propósito (ver más abajo). El workspace en un subdir; usuarios,
@@ -132,65 +134,13 @@ async def _amain() -> None:
     base = Path(env) if env else BASE_POR_DEFECTO
     base.mkdir(parents=True, exist_ok=True)
     secret = _secreto(base)
-    host = os.environ.get("ORUX_HOST", "localhost")
-    port = int(os.environ.get("ORUX_PORT", "8765"))
-    dsn = os.environ.get("ORUX_DB_DSN", "").strip()
-
-    if dsn:
-        # Capa 15 (sistema real): metadatos en Postgres; el workspace de
-        # CADA equipo es su propio repo git en disco, en /data/ws/<team_id>.
-        # Así un equipo no ve al otro ni en la DB ni en el filesystem, y
-        # sigue valiendo "git clone basta" (cada carpeta es un repo de
-        # verdad). Los equipos/usuarios sobreviven a reiniciar (Postgres).
-        from ..db import Database
-        from ..db.stores import (
-            PgOwnershipStore,
-            PgProposalsStore,
-            PgUserStore,
-        )
-        from ..teams import PgTeamStore
-
-        db = await Database.conectar(dsn)
-        log.info("Postgres conectado; esquema aplicado")
-        ws_root = base / "ws"
-        ws_root.mkdir(parents=True, exist_ok=True)
-
-        def _runtime(team_id: str) -> TeamRuntime:
-            d = ws_root / team_id
-            return TeamRuntime(
-                team_id=team_id,
-                storage=DiskStorage(d),
-                git=GitRepo(d),
-            )
-
-        server = SyncServer(
-            users=PgUserStore(db),
-            teams=PgTeamStore(db),
-            ownership_store=PgOwnershipStore(db),
-            proposals_store=PgProposalsStore(db),
-            runtime_factory=_runtime,
-            secret=secret,
-        )
-        log.info(
-            "estado: Postgres (users/teams/ownership/proposals) + "
-            "ws por equipo en %s", ws_root,
-        )
-    else:
-        # Sin DSN: modo en memoria/JSON de un solo equipo implícito (dev /
-        # arranque sin DB). Los equipos NO sobreviven a reiniciar — por eso
-        # producción DEBE setear ORUX_DB_DSN (docker-compose ya lo hace).
-        ws = base / "workspace"
-        server = SyncServer(
-            storage=DiskStorage(ws),
-            users=UserStore(base / "users.json"),
-            ownership=Ownership(base / "ownership.json"),
-            secret=secret,
-            git=GitRepo(ws),
-        )
-        log.warning(
-            "sin ORUX_DB_DSN: equipos EFÍMEROS (memoria). Sólo dev. "
-            "estado en %s", base,
-        )
+    config = AppConfig.desde_env(base_dir=base, secret=secret)
+    # Composition root: arma el grafo cableado completo (Ports + adapters).
+    # El __main__ solo gestiona señales y arranca el server.
+    server = await build_server(config)
+    host = config.host
+    port = config.port
+    del log  # mantener el binding para legibilidad de los logs siguientes
 
     # SIGTERM/SIGINT: el server WS atiende ConnectionClosed por conexión,
     # pero el loop principal de `server.run` se cancelaría como traceback

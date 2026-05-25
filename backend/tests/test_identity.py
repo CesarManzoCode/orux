@@ -9,6 +9,7 @@ Lo crítico a fijar como contrato de seguridad:
 
 import pytest
 
+from orux.adapters.json import JsonUserStore
 from orux.identity import (
     UserStore,
     crear_token,
@@ -94,16 +95,16 @@ def test_token_manipulado_no_vale() -> None:
 # --- store ---
 
 
-def test_registrar_y_verificar(tmp_path) -> None:
-    s = UserStore(tmp_path / "users.json")
+def test_registrar_y_verificar() -> None:
+    s = UserStore()
     s.registrar("Joaquin", "clave123")
     assert s.verificar("joaquin", "clave123") is True
     assert s.verificar("joaquin", "mala") is False
     assert s.verificar("nadie", "x") is False
 
 
-def test_usuario_se_normaliza(tmp_path) -> None:
-    s = UserStore(tmp_path / "users.json")
+def test_usuario_se_normaliza() -> None:
+    s = UserStore()
     s.registrar("  Joaquin  ", "clave123")
     # Mismo dueño aunque cambien espacios/mayúsculas.
     assert s.existe("JOAQUIN")
@@ -111,8 +112,8 @@ def test_usuario_se_normaliza(tmp_path) -> None:
     assert normalizar("  AnA ") == "ana"
 
 
-def test_no_se_puede_registrar_dos_veces(tmp_path) -> None:
-    s = UserStore(tmp_path / "users.json")
+def test_no_se_puede_registrar_dos_veces() -> None:
+    s = UserStore()
     s.registrar("ana", "passw0rd")
     with pytest.raises(ValueError):
         s.registrar("ana", "passw0rd2")
@@ -120,21 +121,23 @@ def test_no_se_puede_registrar_dos_veces(tmp_path) -> None:
         s.registrar("ANA", "passw0rd3")  # misma forma canónica
 
 
-def test_persiste_entre_instancias(tmp_path) -> None:
+async def test_persiste_entre_instancias(tmp_path) -> None:
     # "Reinicia el server": otra instancia sobre el mismo archivo conserva
     # usuarios. Es lo que hace que la identidad sea de verdad estable.
+    # Tras hex: el dominio (UserStore) es memoria pura; la persistencia
+    # vive en JsonUserStore que cumple UserStorePort.
     ruta = tmp_path / "users.json"
-    UserStore(ruta).registrar("ana", "clave123")
-    assert UserStore(ruta).verificar("ana", "clave123") is True
+    await JsonUserStore(ruta).registrar("ana", "clave123")
+    assert await JsonUserStore(ruta).verificar("ana", "clave123") is True
 
 
-def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
+async def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
     ruta = tmp_path / "users.json"
     ruta.write_text("{no es json", encoding="utf-8")
-    s = UserStore(ruta)  # no explota
-    assert s.existe("quien") is False
-    s.registrar("nuevo", "passw0rd")  # y sigue usable
-    assert s.verificar("nuevo", "passw0rd")
+    s = JsonUserStore(ruta)  # no explota
+    assert await s.existe("quien") is False
+    await s.registrar("nuevo", "passw0rd")  # y sigue usable
+    assert await s.verificar("nuevo", "passw0rd")
 
 
 # Sprint de pulido pre-mercado: reglas de usuario al CREAR cuenta. No afecta
@@ -161,15 +164,15 @@ def test_archivo_corrupto_arranca_vacio(tmp_path) -> None:
         "gh:bar",
     ],
 )
-def test_registrar_rechaza_usuario_invalido(tmp_path, malo):
-    s = UserStore(tmp_path / "users.json")
+def test_registrar_rechaza_usuario_invalido(malo):
+    s = UserStore()
     with pytest.raises(ValueError):
         s.registrar(malo, "clave123")
 
 
-def test_registrar_acepta_usuario_normal(tmp_path) -> None:
+def test_registrar_acepta_usuario_normal() -> None:
     # Charset razonable y rango razonable.
-    s = UserStore(tmp_path / "users.json")
+    s = UserStore()
     assert s.registrar("ana", "passw0rd") == "ana"
     assert s.registrar("Ana.Lopez", "passw0rd") == "ana.lopez"  # normalizada
     assert s.registrar("dev_2", "passw0rd") == "dev_2"

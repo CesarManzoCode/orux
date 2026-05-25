@@ -209,7 +209,10 @@ async def test_barrer_runtimes_ociosos_sobrevive_a_fallo_general(
     """Si `runtime_evictable` explota mientras el loop construye la lista
     de candidatos (estado corrupto, bug en lógica), el loop reintenta en
     la próxima vuelta — no queda muerto en silencio."""
-    from orux.server import eviction
+    # Tras refactor hex (2026-05-24), eviction vive en
+    # orux.adapters.inbound.websocket.eviction; monkey-patch debe ser ahí
+    # para que el binding interno del módulo cambie.
+    from orux.adapters.inbound.websocket import eviction
 
     N_VUELTAS = 3
     contador = {"n": 0}
@@ -233,7 +236,9 @@ async def test_barrer_runtimes_ociosos_sobrevive_a_fallo_general(
     )
 
     runtimes = {"eq1": object()}
-    with caplog.at_level(logging.ERROR, logger="orux.server.eviction"):
+    with caplog.at_level(
+        logging.ERROR, logger="orux.adapters.inbound.websocket.eviction",
+    ):
         with pytest.raises(asyncio.CancelledError):
             await eviction.barrer_runtimes_ociosos(
                 ttl=60.0,

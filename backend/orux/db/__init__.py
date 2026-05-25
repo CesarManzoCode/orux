@@ -1,11 +1,8 @@
-"""Capa de acceso a Postgres (capa 15, paso 2).
+"""Re-export desde la nueva ubicación tras el refactor hex (2026-05-24).
 
-`asyncpg` se importa de forma PEREZOSA (dentro de `Database.conectar`): así
-`import orux` no exige tener asyncpg ni un Postgres corriendo. Sin
-`ORUX_DB_DSN` el server sigue en JSON/memoria y los tests jamás tocan
-esto — la suite corre igual en un sandbox sin internet ni DB.
+`Database` (pool asyncpg) vive ahora en `orux.adapters.outbound.postgres.pool`.
 """
 
-from .pool import Database
+from ..adapters.outbound.postgres.pool import Database  # noqa: F401
 
 __all__ = ["Database"]

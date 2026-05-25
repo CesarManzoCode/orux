@@ -152,7 +152,10 @@ async def test_lsp_sesion_arranque_ok_resetea_contador_de_fallos():
     rt._lsp["py"] = estado
 
     # Reemplazamos arrancar_lsp para simular un arranque exitoso.
-    import orux.server.runtime as rmod
+    # Tras el refactor hex (2026-05-24), runtime vive en
+    # orux.adapters.inbound.websocket.runtime (orux.server.runtime es solo
+    # re-export). El binding `arrancar_lsp` se resuelve en el módulo real.
+    import orux.adapters.inbound.websocket.runtime as rmod
     orig = rmod.arrancar_lsp
     rmod.arrancar_lsp = lambda lang, raiz: _SesionViva()
     try:

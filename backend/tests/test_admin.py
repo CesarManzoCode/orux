@@ -11,38 +11,38 @@ from __future__ import annotations
 
 import pytest
 
-from orux.identity.store import UserStore
+from orux.adapters.json import JsonOwnershipStore, JsonUserStore
 from orux.state.ownership import Ownership
 
 
-# --- UserStore.admin(): el primero registrado, sin tocar el schema ---
+# --- JsonUserStore.admin(): el primero registrado, sin tocar el schema ---
 
-def test_admin_es_el_primer_registrado(tmp_path):
-    s = UserStore(tmp_path / "users.json")
+async def test_admin_es_el_primer_registrado(tmp_path):
+    s = JsonUserStore(tmp_path / "users.json")
     assert s.admin() is None  # nadie todavía
-    s.registrar("Ana", "clave-ana")
-    s.registrar("Beto", "clave-beto")
-    s.registrar("Caro", "clave-caro")
+    await s.registrar("Ana", "clave-ana")
+    await s.registrar("Beto", "clave-beto")
+    await s.registrar("Caro", "clave-caro")
     # El primero gana, aunque después se registren más.
     assert s.admin() == "ana"
 
 
-def test_admin_sobrevive_a_reiniciar_sin_migracion(tmp_path):
+async def test_admin_sobrevive_a_reiniciar_sin_migracion(tmp_path):
     ruta = tmp_path / "users.json"
-    s1 = UserStore(ruta)
-    s1.registrar("Lider", "passw0rd")
-    s1.registrar("Otro", "passw0rd2")
+    s1 = JsonUserStore(ruta)
+    await s1.registrar("Lider", "passw0rd")
+    await s1.registrar("Otro", "passw0rd2")
     # Otro proceso/arranque lee el MISMO json (orden de inserción preservado
     # por json/dict): el admin es estable sin ningún campo nuevo en disco.
-    s2 = UserStore(ruta)
+    s2 = JsonUserStore(ruta)
     assert s2.admin() == "lider"
 
 
-def test_usuarios_lista_estable_sin_filtrar_password(tmp_path):
-    s = UserStore(tmp_path / "users.json")
-    s.registrar("Zoe", "passw0rd1")
-    s.registrar("Ana", "passw0rd2")
-    listado = s.usuarios()
+async def test_usuarios_lista_estable_sin_filtrar_password(tmp_path):
+    s = JsonUserStore(tmp_path / "users.json")
+    await s.registrar("Zoe", "passw0rd1")
+    await s.registrar("Ana", "passw0rd2")
+    listado = await s.usuarios()
     assert listado == ["ana", "zoe"]  # ordenado, normalizado
     # Es solo nombres: ningún registro de contraseña se filtra por aquí.
     assert all(isinstance(u, str) and ":" not in u for u in listado)
@@ -73,11 +73,15 @@ def test_asignar_reasigna_aunque_ya_tenga_dueno():
     assert o.owner("models.py") == "beto"
 
 
-def test_asignar_persiste(tmp_path):
+async def test_asignar_persiste(tmp_path):
     ruta = tmp_path / "ownership.json"
-    o1 = Ownership(ruta)
+    store = JsonOwnershipStore(ruta)
+    # Hidrato vacío (no había nada), muto, persisto.
+    o1 = Ownership(inicial=await store.cargar(""))
     o1.asignar("core/api.ts", "caro")
-    o2 = Ownership(ruta)
+    await store.guardar("", o1.snapshot())
+    # Otro proceso/arranque: re-hidrato desde disco vía el adapter.
+    o2 = Ownership(inicial=await store.cargar(""))
     assert o2.owner("core/api.ts") == "caro"
 
 

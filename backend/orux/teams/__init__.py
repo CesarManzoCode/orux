@@ -1,18 +1,21 @@
-"""Dominio de equipos (capa 15: sistema multi-equipo).
+"""Re-export desde la nueva ubicación tras el refactor hex (2026-05-24).
 
-Antes orux era mono-tenant: un workspace global, un admin global. El
-usuario pidió que sea un sistema de verdad: varios equipos que no se
-enteran del otro. Esta es la pieza pura de "quién es de qué equipo y quién
-manda ahí" — sin red, sin DB, sin Postgres importado.
-
-Mismo patrón de inyección que el resto del stack: `MemTeamStore` es la
-implementación en memoria (tests, y este sandbox sin internet). El
-adaptador Postgres (`PgTeamStore`, paso 2) implementará EXACTO esta misma
-superficie, así la lógica multi-tenant se prueba 100% acá y lo único no
-verificable localmente es el I/O real de Postgres.
+`teams.store` (MemTeamStore + validators puros) vive en `orux.domain.teams`.
+`teams.pg` (PgTeamStore) vive en `orux.adapters.outbound.postgres`.
 """
 
-from .pg import PgTeamStore
-from .store import MemTeamStore, TeamError
+from ..adapters.outbound.postgres.teams import PgTeamStore
+from ..domain.teams.store import (  # noqa: F401
+    INVITE_TTL_DAYS,
+    MemTeamStore,
+    TeamError,
+    validar_nombre_equipo,
+)
 
-__all__ = ["MemTeamStore", "PgTeamStore", "TeamError"]
+__all__ = [
+    "INVITE_TTL_DAYS",
+    "MemTeamStore",
+    "PgTeamStore",
+    "TeamError",
+    "validar_nombre_equipo",
+]

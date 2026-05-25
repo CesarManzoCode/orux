@@ -34,6 +34,58 @@ Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB
 - `state/` — `Document`, `Workspace`, `Roster` (presencia), `Ownership`, `Proposals`, `DiskStorage`. Todo vive por equipo, dentro del `TeamRuntime`.
 - `server/` — `SyncServer` (WebSocket, puerto 8765), `TeamRuntime`, el lobby y el handshake por equipo. Modularizado el 2026-05-21: `config.py` (topes de runtime), `runtime.py` (`TeamRuntime`), `sync.py` (servidor + handshake + lobby, sigue re-exportando `TeamRuntime`).
 - `teams/` + `db/` — el dominio de equipos y la persistencia Postgres (`asyncpg`, `db/schema.sql` idempotente, adaptadores `Pg*Store`; con un equivalente en memoria para los tests).
+## Layout hex 100% sólido (refactor 2026-05-24, completo en sesión 3)
+
+El backend está ahora organizado físicamente según hex puro:
+
+```
+backend/orux/
+├── domain/         puro: state, identity, plans, protocol, billing, analysis, teams
+├── application/    use_cases.py + http_use_cases.py + impacto.py (orquestación)
+├── ports/          11 Protocols formales (persistencia, git, identity, billing, analysis)
+├── adapters/
+│   ├── inbound/
+│   │   ├── websocket/  sync, dispatch, runtime, auth_handshake, etc. (transport WS)
+│   │   └── http/       app.py (transport HTTP / panel admin / OAuth / webhooks)
+│   └── outbound/
+│       ├── json/       JsonOwnershipStore, JsonUserStore
+│       ├── identity/   HmacSessionTokenAdapter, GithubOAuthAdapter
+│       ├── billing/    StripeBillingAdapter
+│       ├── analysis/   SemanticAnalysisAdapter, LspFactoryAdapter
+│       ├── postgres/   Database + Pg*Stores + PgTeamStore
+│       └── git/        binary.py (GitBinaryAdapter)
+├── composition.py  build_server(config) — única wiring del grafo
+└── [paths viejos como state/, identity/, server/, api/, db/, git/, analysis/, teams/, plans.py, billing.py: re-exports backward-compat]
+```
+
+### Tipos de re-export
+
+Los paths viejos (`orux.state`, `orux.server.runtime`, etc.) siguen funcionando vía stubs que re-exportan desde la nueva ubicación. Hay dos patrones:
+
+- **Re-export explícito** (preferido cuando hay export list claro): `from ..domain.state import Ownership`.
+- **Re-export por dir()** (cuando hay símbolos privados que tests inspeccionan): un loop `for nombre in dir(_real): globals()[nombre] = getattr(_real, nombre)`. Necesario para módulos como `analysis/python.py` (tests acceden `_deps_interfaz`), `analysis/lsp.py` (`_leer_mensaje`), `server/runtime.py` (monkey-patch de `arrancar_lsp`).
+
+### Trampa de monkey-patches y re-exports
+
+Los re-exports **copian atributos**, no los enlazan al módulo real. Si un test hace `monkeypatch.setattr(orux.server.runtime, "arrancar_lsp", fake)`, NO afecta al binding interno del módulo real (`orux.adapters.inbound.websocket.runtime`). Los tests que monkey-patchean deben apuntar al módulo nuevo. Casos arreglados en sesión 3: `test_lsp_retry.py:155` y `test_robustez_extras.py:212`.
+
+### Contracts
+
+- `tests/test_ports_contract.py` verifica con `isinstance(adapter, Port)` que cada adapter cumple su Protocol (16 tests). Guard rail estructural para regresiones futuras.
+- Suite total: **513 tests verdes**, sin regresión durante el refactor.
+
+### Imports preferidos en código nuevo
+
+Usar la nueva ubicación (los paths viejos son solo backward-compat):
+- `from orux.domain.state import Ownership` (no `from orux.state`).
+- `from orux.adapters.outbound.json import JsonUserStore`.
+- `from orux.adapters.inbound.websocket.sync import SyncServer`.
+- `from orux.ports import OwnershipStorePort, GitPort, ...`.
+- `from orux.application import update_use_case, ...`.
+
+### Composition root
+
+`orux/composition.py` con `AppConfig.desde_env(base_dir, secret)` + `build_server(config)`. `__main__.py` solo carga config y llama composition. Dos modos: Postgres (DSN) y JSON local (sin DSN).
 - `analysis/` — el análisis de impacto semántico. Lenguajes: Python, JS/TS, Go, Rust. Cuatro tiers; por archivo corre el más profundo disponible: Tier 0 LSP (pyright / typescript-language-server / gopls / rust-analyzer — sólo para el *fan-out*: quién usa de verdad un símbolo), Tier 1 `ast` (Python), Tier 2 tree-sitter (JS/TS/Go/Rust), Tier 3 regex. Tiene impacto transitivo (propaga por interfaz contaminada — premium), severidad alta/media/baja, y detección de rename coordinado (premium). El análisis se dispara en `Ctrl+S` (checkpoint), no por tecla.
 - `identity/` — autenticación: contraseñas con PBKDF2, tokens de sesión firmados con HMAC. OAuth con GitHub end-to-end (backend + botón en `Login.tsx`).
 - `git/` — `GitRepo` envuelve el binario `git`: estado, commit, clone, push, y push a la rama del equipo con link de PR. Las credenciales del usuario son efímeras, jamás se guardan.

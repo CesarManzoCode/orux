@@ -25,9 +25,13 @@ from __future__ import annotations
 
 import logging
 
-from .._env import _env_int
+from typing import TYPE_CHECKING
+
+from ..._env import _env_int
 from .document import Document
-from .storage import DiskStorage
+
+if TYPE_CHECKING:
+    from ...ports import WorkspaceStoragePort
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +54,7 @@ class WorkspaceLleno(ValueError):
 
 
 class Workspace:
-    def __init__(self, storage: DiskStorage | None = None) -> None:
+    def __init__(self, storage: "WorkspaceStoragePort | None" = None) -> None:
         # Diccionario interno: path (string) -> Document. Es la fuente de verdad
         # del servidor sobre qué archivos existen y qué contienen.
         self._documents: dict[str, Document] = {}

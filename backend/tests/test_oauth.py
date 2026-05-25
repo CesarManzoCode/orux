@@ -11,6 +11,7 @@ Contrato de seguridad a fijar:
 
 import pytest
 
+from orux.adapters.json import JsonUserStore
 from orux.identity import (
     UserStore,
     firmar_state,
@@ -93,8 +94,8 @@ def test_state_vencido_o_del_futuro_no_vale() -> None:
 
 # --- Cuenta externa: existe pero sin password ------------------------------
 
-def test_asegurar_externo_crea_idempotente_y_sin_password(tmp_path) -> None:
-    store = UserStore(tmp_path / "users.json")
+def test_asegurar_externo_crea_idempotente_y_sin_password() -> None:
+    store = UserStore()
     u = store.asegurar_externo("gh:octocat")
     assert u == "gh:octocat"
     assert store.existe("gh:octocat") is True
@@ -107,7 +108,7 @@ def test_asegurar_externo_crea_idempotente_y_sin_password(tmp_path) -> None:
     assert verificar_password(MARCADOR_EXTERNO, MARCADOR_EXTERNO) is False
 
 
-def test_asegurar_externo_persiste(tmp_path) -> None:
+async def test_asegurar_externo_persiste(tmp_path) -> None:
     p = tmp_path / "users.json"
-    UserStore(p).asegurar_externo("gh:ana")
-    assert UserStore(p).existe("gh:ana") is True
+    await JsonUserStore(p).asegurar_externo("gh:ana")
+    assert await JsonUserStore(p).existe("gh:ana") is True

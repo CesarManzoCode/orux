@@ -23,6 +23,7 @@ import pytest_asyncio
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
+from orux.adapters.json import JsonUserStore
 from orux.analysis.rename import aplicar_rename
 from orux.identity import crear_token, usuario_de_token
 from orux.identity.store import UserStore
@@ -259,13 +260,13 @@ def test_diskstorage_cargar_ignora_tmp_de_crash(tmp_path):
     assert cargado == {"real.py": "ok"}
 
 
-def test_userstore_guardar_es_atomico_y_relee(tmp_path):
+async def test_userstore_guardar_es_atomico_y_relee(tmp_path):
     ruta = tmp_path / "users.json"
-    s = UserStore(ruta)
-    s.registrar("Joaquin", "passw0rd")
+    s = JsonUserStore(ruta)
+    await s.registrar("Joaquin", "passw0rd")
     assert not list(tmp_path.glob("*.tmp"))
     # Reabrir desde disco => el usuario está (no se perdió, no truncado).
-    assert UserStore(ruta).verificar("joaquin", "passw0rd") is True
+    assert await JsonUserStore(ruta).verificar("joaquin", "passw0rd") is True
 
 
 def test_aplicar_rename_guard_argumento_vacio():
