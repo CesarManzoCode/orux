@@ -30,10 +30,13 @@ services:
         reservations:
           memory: 512M
     environment:
-      # Capa 15: DSN de Postgres. Mientras el server no esté cableado a la
-      # DB (eso es el paso 3), aunque esté seteado no cambia el runtime: el
-      # adaptador sólo se usa cuando el server lo adopte. Vacío = JSON/memoria.
-      - ORUX_DB_DSN=postgresql://orux:orux@postgres:5432/orux
+      # Capa 15: DSN de Postgres. La password viene del .env (POSTGRES_PASSWORD)
+      # — antes estaba hardcodeada como `orux` en este archivo (BACKEND-AUDIT
+      # H-02): privado, pero un secreto compartido en el repo no debería
+      # rotarse editando un archivo commiteable. La sintaxis `${...:?msg}`
+      # hace que `docker compose up` FALLE rápido si la var no está, en vez
+      # de arrancar con un default inseguro.
+      - "ORUX_DB_DSN=postgresql://orux:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env, generar con openssl rand -hex 24}@postgres:5432/orux"
       # MISMO secreto que el contenedor `api`: el server WS verifica los
       # tokens de sesión que el callback OAuth firma. Vacío = OAuth
       # deshabilitado y el server usa su archivo ~/.orux/secret (igual
@@ -76,7 +79,8 @@ services:
         reservations:
           memory: 128M
     environment:
-      - ORUX_DB_DSN=postgresql://orux:orux@postgres:5432/orux
+      # Misma password del .env que el contenedor `orux` (un único secreto).
+      - "ORUX_DB_DSN=postgresql://orux:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env}@postgres:5432/orux"
       - ORUX_ADMIN_USER=${ORUX_ADMIN_USER:-}
       - ORUX_ADMIN_TOKEN=${ORUX_ADMIN_TOKEN:-}
       # GitHub OAuth (cerrado por defecto: faltando cualquiera, /oauth/* da
@@ -128,7 +132,12 @@ services:
           memory: 384M
     environment:
       - POSTGRES_USER=orux
-      - POSTGRES_PASSWORD=orux
+      # BACKEND-AUDIT H-02 (fix): la password viene del .env, no del repo.
+      # `:?msg` corta el `docker compose up` con un error legible si la
+      # var no está, así no arranca Postgres con una password por defecto
+      # inadvertida (que después rotar significaría editar el compose y
+      # commitear el reemplazo).
+      - "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env, generar con openssl rand -hex 24}"
       - POSTGRES_DB=orux
     volumes:
       - orux-pg:/var/lib/postgresql/data

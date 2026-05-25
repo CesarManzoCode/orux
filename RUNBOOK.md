@@ -208,6 +208,35 @@ correspondiente en el dashboard de Stripe.
 GitHub → OAuth App → Generate a new client secret. El viejo sigue
 funcionando hasta que lo borres en GitHub. Actualizá `.env` y reiniciá.
 
+### 5.5 Password de Postgres (`POSTGRES_PASSWORD`) — BACKEND-AUDIT H-02
+
+Antes la password estaba hardcodeada como `orux` en `docker-compose.yml`.
+Postgres NO está expuesto al host (sólo a la red de compose), así que el
+riesgo era acotado — pero rotar requería editar y commitear el repo, que
+es lo contrario de cómo se rotan los secretos. Ahora se lee de `.env`.
+
+**Migración del VPS (una vez)** tras `git pull` de este cambio:
+
+```bash
+# 1. Setear la var en .env con el valor ACTUAL para no romper la DB
+#    existente (`orux` es el default histórico).
+echo "POSTGRES_PASSWORD=orux" >> .env
+
+# 2. Reiniciar — compose ahora lee la var en vez del hardcoded.
+make restart
+
+# 3. (Opcional, recomendado) Rotar a una password aleatoria:
+NUEVA=$(openssl rand -hex 24)
+docker compose exec postgres psql -U orux -c \
+  "ALTER USER orux WITH PASSWORD '$NUEVA';"
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NUEVA/" .env
+make restart
+```
+
+Si te olvidás del paso 1, `docker compose up` falla con un mensaje claro
+("POSTGRES_PASSWORD requerido en .env") en vez de arrancar con default
+inseguro — exactamente lo que queremos.
+
 ---
 
 ## 6. Troubleshooting común
