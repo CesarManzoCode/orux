@@ -122,3 +122,90 @@
     aspect-ratio: 16 / 11;
   }
 }
+
+/* ── Stack de dos iframes (perspectivas TU y ANA) ──────────────────────────
+ * El visitante ve el MISMO flujo desde dos lados: arriba el dueño que
+ * aprueba, abajo Ana que edita y propone. La expansión hacia el viewport
+ * (que el .hero-demo individual ya conocía) se mueve al .hero-demo-stack
+ * para que ambos iframes la hereden y el ancho efectivo sea coherente.
+ *
+ * Cada panel del stack tiene un label encima con un dot del color del
+ * actor (verde acero para TU, azul para Ana), porque sin label el visitante
+ * no sabe quién es cada uno. Aspect-ratio 16:9 (vs el 16:10 del solo
+ * iframe) para que los DOS juntos no exploten la altura del hero.
+ * ────────────────────────────────────────────────────────────────────── */
+.hero-demo-stack {
+  display: grid;
+  gap: clamp(22px, 2.4vw, 36px);
+  /* Heredamos la expansión del .hero-demo histórico. Ambos paneles se
+     extienden por igual hacia el borde derecho del viewport. */
+  --extra-right: clamp(0px, calc((100vw - 1240px) / 2), 120px);
+  --extra-left: clamp(0px, 1.5vw, 28px);
+  width: calc(100% + var(--extra-right) + var(--extra-left));
+  margin-left: calc(-1 * var(--extra-left));
+  margin-right: calc(-1 * var(--extra-right));
+}
+.hero-demo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hero-demo-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.hdl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+/* Dentro del stack, el .hero-demo NO repite la expansión (la heredó del
+   padre), y el aspect-ratio baja a 16:9 para acomodar dos iframes sin
+   reventar la altura del hero. Especificidad 0,2,0 > 0,1,0 (ganamos sin
+   !important). */
+.hero-demo-panel .hero-demo {
+  --extra-right: 0px;
+  --extra-left: 0px;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  aspect-ratio: 16 / 9;
+  min-height: 280px;
+}
+/* Skeleton de fallback para la vista ANA: caja sobria mientras carga el
+   iframe. Sin animación shimmer — el iframe carga en <1s y el shimmer
+   sería ruido. */
+.hero-demo-skel {
+  background:
+    linear-gradient(180deg, #0a0c10 0%, #0c0e13 100%),
+    radial-gradient(40% 40% at 50% 50%, rgba(98, 168, 240, 0.05), transparent 70%);
+}
+
+@media (max-width: 1080px) {
+  .hero-demo-stack {
+    --extra-right: 0px;
+    --extra-left: 0px;
+    width: 100%;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+@media (max-width: 600px) {
+  .hero-demo-panel .hero-demo {
+    aspect-ratio: 16 / 11;
+    min-height: 240px;
+  }
+  .hero-demo-label {
+    font-size: 10.5px;
+    letter-spacing: 0.10em;
+  }
+}

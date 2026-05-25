@@ -513,7 +513,13 @@ function Stage({ t }: { t: Traducciones }) {
 const DEMO_W = 1280;
 const DEMO_H = 800;
 
-function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
+function DemoFrame({
+  lang, t, persona,
+}: {
+  lang: Lang;
+  t: Traducciones;
+  persona: "tu" | "ana";
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
   const [iframeReady, setIframeReady] = useState(false);
@@ -558,9 +564,10 @@ function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
     return () => ro.disconnect();
   }, []);
 
-  // Si el iframe falla en cargar (sin red, sin /app/, etc.) el Stage de
-  // fallback se queda visible — el visitante igual ve algo del producto.
-  const src = `/app/?demo=1&lang=${lang}`;
+  // Si el iframe falla en cargar (sin red, sin /app/, etc.) el fallback se
+  // queda visible. La perspectiva va en el query `p`: tu (dueño, default)
+  // o ana (editora). El backend del IDE lee este param en main.tsx.
+  const src = `/app/?demo=1&p=${persona}&lang=${lang}`;
 
   return (
     <div className="hero-demo" ref={containerRef}>
@@ -576,17 +583,26 @@ function DemoFrame({ lang, t }: { lang: Lang; t: Traducciones }) {
           <iframe
             className={"hero-demo-iframe" + (iframeReady ? " is-ready" : "")}
             src={src}
-            title="Orux demo"
+            title={persona === "ana" ? "Orux demo — Ana's view" : "Orux demo — owner's view"}
             onLoad={() => setIframeReady(true)}
             loading="lazy"
           />
         </div>
       )}
-      {/* Stage de fallback: visible siempre hasta que el iframe esté listo.
-          También cubre el caso "iframe falla en cargar" sin código extra. */}
-      <div className={"hero-demo-fallback" + (iframeReady ? " is-hidden" : "")}>
-        <Stage t={t} />
-      </div>
+      {/* Fallback: el Stage animado solo encaja con la perspectiva TU (es el
+          frame que Stage simula). Para ANA no hay un Stage equivalente: un
+          skeleton sobrio funciona mejor que mostrar la animación incorrecta.
+          Ambos quedan invisibles cuando el iframe carga. */}
+      {persona === "tu" ? (
+        <div className={"hero-demo-fallback" + (iframeReady ? " is-hidden" : "")}>
+          <Stage t={t} />
+        </div>
+      ) : (
+        <div
+          className={"hero-demo-fallback hero-demo-skel" + (iframeReady ? " is-hidden" : "")}
+          aria-hidden
+        />
+      )}
     </div>
   );
 }
@@ -713,12 +729,29 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
           >
-            <DemoFrame lang={lang} t={t} />
-            <p className="stage-cap" aria-label={t.stage_cap_aria}>
-              <span className="dotg" aria-hidden /><b>{t.stage_cap_1}</b>{" "}
-              <span className="dotp" aria-hidden />{t.stage_cap_2}{" "}
-              <span className="dotr" aria-hidden />
-              <b>{t.stage_cap_3}</b>{" "}{t.stage_cap_4}
+            {/* Dos iframes apilados verticalmente: la MISMA narrativa contada
+                desde dos lados. Arriba el dueño que aprueba; abajo Ana que
+                edita y propone. Los IDs `?p=tu|ana` se leen en main.tsx del
+                IDE, los guiones se sincronizan por epoch absoluto en
+                DemoLoop.tsx — no hay postMessage. */}
+            <div className="hero-demo-stack" aria-label={t.stage_cap_aria}>
+              <div className="hero-demo-panel">
+                <div className="hero-demo-label">
+                  <span className="hdl-dot" style={{ background: "#43b98a" }} aria-hidden />
+                  <span>{t.demo_panel_tu}</span>
+                </div>
+                <DemoFrame persona="tu" lang={lang} t={t} />
+              </div>
+              <div className="hero-demo-panel">
+                <div className="hero-demo-label">
+                  <span className="hdl-dot" style={{ background: "#62a8f0" }} aria-hidden />
+                  <span>{t.demo_panel_ana}</span>
+                </div>
+                <DemoFrame persona="ana" lang={lang} t={t} />
+              </div>
+            </div>
+            <p className="stage-cap">
+              <span className="dotg" aria-hidden /> {t.demo_panel_caption}
             </p>
           </motion.div>
         </div>

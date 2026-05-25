@@ -51,6 +51,11 @@ export const T = {
     stage_cap_3: "claim() cambió de firma:",
     stage_cap_4: "Orux detectó 4 usos · propuesta de Ana lista para aprobar.",
 
+    // Etiquetas de los dos iframes apilados (perspectivas del demo)
+    demo_panel_tu: "Vista del dueño · Tomás aprueba",
+    demo_panel_ana: "Vista de Ana · edita y propone",
+    demo_panel_caption: "El mismo evento, dos pantallas. Sincronizadas en tiempo real.",
+
     // Stage interno (IDE mock — aria-hidden)
     stage_live: "4 en vivo",
     stage_mine: "tú",
@@ -374,6 +379,11 @@ export const T = {
     stage_cap_2: "Ana edits sync.py · you edit roster.py.",
     stage_cap_3: "claim() signature changed:",
     stage_cap_4: "Orux detected 4 usages · Ana's proposal ready to approve.",
+
+    // Labels for the two stacked iframes (demo perspectives)
+    demo_panel_tu: "Owner's view · Tomás approves",
+    demo_panel_ana: "Ana's view · edits and proposes",
+    demo_panel_caption: "Same event, two screens. Synchronized in real time.",
 
     // Stage interno
     stage_live: "4 live",

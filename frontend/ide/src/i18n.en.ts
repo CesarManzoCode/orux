@@ -661,4 +661,14 @@ export const en = {
     demo_step_resolved: "Resolved · no pending impacts",
     demo_step_calm: "All clear",
     demo_cursor_label: "you",
+    // ANA view (?p=ana) — script mirrored: Ana is the one editing and
+    // sending the proposal; Tomás (peer T) approves from the other side.
+    demo_step_tu_enters: "Tomás connects · he's on procesar_pago.py",
+    demo_step_ana_editing_mine: "You edit procesar_pago.py · it's Tomás's",
+    demo_step_ana_sending: "Proposal sent · waiting for Tomás",
+    demo_step_tu_approved: "Tomás approved your proposal",
+    demo_step_impact_mine: "Your change impacted 2 files",
+    demo_step_focus_impact_mine: "Opening api/cobros.py · it's yours, needs a fix",
+    demo_step_tu_in_tests: "Tomás is looking at tests/",
+    demo_cursor_label_ana: "Ana",
 } as const;

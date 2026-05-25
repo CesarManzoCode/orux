@@ -41,6 +41,15 @@ export const TUT = {
     client_id: "tutorial:premium-bot",
     name: "Orux Premium",
   },
+  // `tu` es el peer "Tomás" en la vista de Ana — espejo de `ana` cuando la
+  // perspectiva se invierte. client_id `demo:tu` para que coincida con el
+  // yo del iframe ?p=tu (mismo id en ambos lados del flujo). Inicial "T"
+  // en el avatar, coherente con el Stage del landing (T, A, K).
+  tu: {
+    client_id: "demo:tu",
+    name: "Tomás",
+    color: "#43b98a",
+  },
 } as const;
 
 // Paths del mini-proyecto fake. Distintos por idioma para que un dev EN no
@@ -183,15 +192,22 @@ export function mockReset(): void {
 
 export function mockSeedRepo(lang: Lang = "es"): void {
   const yoId = getState().yo?.client_id ?? "tutorial:yo";
+  const esAna = yoId === TUT.ana.client_id;
   const paths = pathsPorLang(lang);
   const files = lang === "en" ? FILES_EN : FILES_ES;
+  // La ownership es la MISMA realidad vista desde dos lados:
+  // - Vista TU (default): yo dueño de main/models/tests, Ana dueña de api.
+  // - Vista ANA: Tomás (peer T) dueño de main/models/tests, yo (Ana) dueña
+  //   de api. El mismo proyecto, el mismo reparto — solo cambia "quién soy".
+  const tId = esAna ? TUT.tu.client_id : yoId;
+  const anaId = esAna ? yoId : TUT.ana.client_id;
   __setForTutorial({
     files: { ...files },
     owners: {
-      [paths.main]:   yoId,
-      [paths.models]: yoId,
-      [paths.api]:    TUT.ana.client_id,
-      [paths.tests]:  yoId,
+      [paths.main]:   tId,
+      [paths.models]: tId,
+      [paths.api]:    anaId,
+      [paths.tests]:  tId,
     },
     currentPath: null,
   });
@@ -295,6 +311,50 @@ export function mockAutoFixPremium(lang: Lang = "es"): string {
 
 export function mockLimpiarImpactos(): void {
   __setForTutorial({ impacts: {} });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MOCKS PARA LA VISTA DE ANA (?p=ana)
+// El espejo del flujo de TU: en vez de "Ana entra como peer y manda
+// propuesta, yo apruebo", acá "yo (Ana) edito un archivo ajeno y mando la
+// propuesta, Tomás aprueba". El mismo evento contado desde el otro lado.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Tomás (peer T) entra como remoto. Espejo de mockAnaEntra.
+export function mockTuEntra(path: string, line = 4): void {
+  const peers = { ...getState().peers };
+  peers[TUT.tu.client_id] = { ...TUT.tu, path, line };
+  __setForTutorial({ peers });
+}
+
+export function mockTuSale(): void {
+  const peers = { ...getState().peers };
+  delete peers[TUT.tu.client_id];
+  __setForTutorial({ peers });
+}
+
+// Ana edita un archivo ajeno: el cambio va a drafts (no a files), porque
+// Ana NO es dueña — el producto real persiste esto local como propuesta
+// pendiente de enviar al dueño.
+export function mockEditarDraft(path: string, content: string): void {
+  const drafts = { ...getState().drafts, [path]: content };
+  __setForTutorial({ drafts });
+}
+
+// Simula que el dueño aprobó la propuesta de Ana: el draft se aplica al
+// archivo y se limpia. Es lo que vería Ana cuando Tomás clickea "Aprobar"
+// en el otro iframe — el archivo se actualiza, su draft desaparece.
+export function mockAplicarPropuestaDeAna(path: string, lang: Lang = "es"): void {
+  const target = lang === "en" ? PROPUESTA_ANA_EN.content : PROPUESTA_ANA_ES.content;
+  const st = getState();
+  const drafts: Record<string, string> = {};
+  for (const [p, c] of Object.entries(st.drafts)) {
+    if (p !== path) drafts[p] = c;
+  }
+  __setForTutorial({
+    files: { ...st.files, [path]: target },
+    drafts,
+  });
 }
 
 export function mockClearAll(): void {

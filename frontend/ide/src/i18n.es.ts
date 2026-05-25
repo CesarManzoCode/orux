@@ -687,4 +687,14 @@ export const es = {
     demo_step_resolved: "Resuelto · sin impactos pendientes",
     demo_step_calm: "Todo en orden",
     demo_cursor_label: "tú",
+    // Vista ANA (?p=ana) — el espejo del guión: Ana es la que edita y manda
+    // la propuesta; Tomás (peer T) es quien aprueba desde el otro lado.
+    demo_step_tu_enters: "Tomás se conecta · está en procesar_pago.py",
+    demo_step_ana_editing_mine: "Editas procesar_pago.py · es de Tomás",
+    demo_step_ana_sending: "Propuesta enviada · esperando a Tomás",
+    demo_step_tu_approved: "Tomás aprobó tu propuesta",
+    demo_step_impact_mine: "Tu cambio impactó 2 archivos",
+    demo_step_focus_impact_mine: "Abres api/cobros.py · es tuyo, hay que ajustar",
+    demo_step_tu_in_tests: "Tomás está mirando tests/",
+    demo_cursor_label_ana: "Ana",
 } as const;

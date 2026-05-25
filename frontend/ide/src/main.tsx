@@ -38,16 +38,46 @@ function aplicarLangDemo(): void {
   }
 }
 
+// Perspectiva del demo: ?p=tu (default — el dueño que recibe propuestas) o
+// ?p=ana (la peer que edita y propone). La landing del hero embebe ambos
+// iframes lado a lado para que el visitante vea las dos caras del flujo:
+// editar ajeno → mandar propuesta → aprobar. El mismo evento, dos pantallas.
+function leerPersona(): "tu" | "ana" {
+  try {
+    const p = new URLSearchParams(location.search).get("p");
+    return p === "ana" ? "ana" : "tu";
+  } catch {
+    return "tu";
+  }
+}
+
 if (esDemo()) {
   aplicarLangDemo();
-  __setForTutorial({
-    demoMode: true,
-    authed: true,
-    fase: "team",
-    yo: { client_id: "demo:tu", name: "tú", color: "#43b98a" },
-    equipo: { id: "demo", nombre: "demo", rol: "admin" },
-    esAdmin: false,
-  });
+  const persona = leerPersona();
+  if (persona === "ana") {
+    // Vista de Ana: ella es el "yo" del IDE. El color azul (#62a8f0) es el
+    // mismo que TUT.ana en mock.ts — coherencia visual cross-iframe (en el
+    // iframe del dueño, Ana aparece como peer con ese azul; acá, Ana se ve
+    // a sí misma con el mismo azul). rol=member porque Ana NO administra
+    // el workspace en este escenario.
+    __setForTutorial({
+      demoMode: true,
+      authed: true,
+      fase: "team",
+      yo: { client_id: "tutorial:ana", name: "Ana", color: "#62a8f0" },
+      equipo: { id: "demo", nombre: "demo", rol: "member" },
+      esAdmin: false,
+    });
+  } else {
+    __setForTutorial({
+      demoMode: true,
+      authed: true,
+      fase: "team",
+      yo: { client_id: "demo:tu", name: "tú", color: "#43b98a" },
+      equipo: { id: "demo", nombre: "demo", rol: "admin" },
+      esAdmin: false,
+    });
+  }
 } else {
   connect();
 }
