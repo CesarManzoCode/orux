@@ -963,3 +963,234 @@
    sutilmente mayor en el activo: el ojo confirma "este es el panel
    abierto" sin que el resto de las preguntas pierdan jerarquía. */
 /* Se aplica en landing/css/bloques.css — esta nota queda como ancla. */
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 37 · pulido UX integral (2026-05-25)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico. Refinamientos sistémicos tras auditoría UX/UI
+   integral. Cero features, cero tokens nuevos, cero cambios de marca.
+   Toca SOLO la apariencia y la afordancia visual.
+
+   1) FileTree sig-prop con TINTE de severidad: si una propuesta toca
+      algo riesgoso (impacto downstream alto/medio), el badge cambia
+      de neutro-info a warn/bad. Información que hoy vive sólo en el
+      Inspector ahora "salta a los ojos" al escanear el árbol — el
+      caso "abrir el Inspector para descubrir el problema" deja de
+      ser necesario para detectar prioridad.
+   2) Tabs — gap explícito entre los íconos del archivo activo. Sin
+      esto el chip/nombre/own/prop/dirty/x se aprietan; con esto el
+      ojo agrupa por respiración.
+   3) Inspector hero row — wrap controlado: los pills (modo, owner,
+      risk, draft) ahora respetan un row-gap propio cuando rompen
+      línea. Antes el wrap pegaba todo arriba sin aire.
+   4) Hub empty — tras eliminar el join secundario duplicado, el CTA
+      primario se asienta mejor: alineación, sombra y respiración
+      coherentes con el resto de primarios del producto.
+   5) StatusBar conn LED — pulso del estado OK ya estaba (pulido.css
+      Capa 26); refinamos la intensidad del foco visible del cluster
+      conn para que no se "trague" el LED al tabular.
+   6) Topbar peers `.conmigo` — anillo de acento más nítido: la señal
+      "este peer está EN tu archivo, contigo" gana 0.5px de halo sin
+      cambiar el lenguaje (sigue siendo info, no decoración).
+   7) Hub team card upgrade footer — pulido del estado hover: el
+      filo lateral acento ya respira; añadimos un retoque al hover
+      del CTA para mantener la cabina cohesionada.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) FileTree sig-prop con tinte de severidad ─────────────────────
+   El badge `sig-prop` arrancó en info (azul frío) — es el lenguaje de
+   "hay propuestas, mírá". Cuando esas propuestas tocan algo con riesgo
+   downstream (computed por severidadMax sobre impactosQueAfectan en
+   FileTree.tsx), el badge se tinta del color de aquel riesgo. La regla
+   es: el COLOR cuenta la urgencia; el NÚMERO cuenta la cantidad.
+   No se pinta `sig-prop.s-baja` (la severidad "baja" se equipara con
+   "sin tinte especial" — el badge azul info ya basta). */
+.sig-prop.s-media {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: color-mix(in srgb, var(--warn) 22%, transparent);
+}
+.sig-prop.s-alta {
+  color: var(--bad);
+  background: var(--bad-bg);
+  border-color: color-mix(in srgb, var(--bad) 24%, transparent);
+}
+/* En fila activa, el badge tintado se asienta para no competir con la
+   barra acento del .row.activo (la fila ya está "encendida"; el badge
+   sólo confirma su número). */
+.row.activo .sig-prop.s-media,
+.row.activo .sig-prop.s-alta {
+  background: var(--surface-3);
+}
+
+/* ── 2) Tabs — afordancia del close en reposo ────────────────────────
+   El base de `.tab` ya define gap 0.45rem (editor.css:14) — respiración
+   buena. El detalle: el botón `.tabx` arranca opaco 1 (heredando del
+   color faint), pero al primer vistazo se confunde con un ícono de la
+   propia tab. Forzamos opacity 0.55 en reposo + 1 al hover de la tab,
+   afín al patrón del FileTree `.delx` (descubrible, no invasivo). */
+.tab .tabx {
+  opacity: 0.55;
+  transition: opacity var(--tr), color var(--tr), background var(--tr);
+}
+.tab:hover .tabx,
+.tab .tabx:hover,
+.tab .tabx:focus-visible { opacity: 1; }
+
+/* ── 3) Inspector hero row — wrap controlado ────────────────────────
+   `.in-hero-row` ya tiene `flex-wrap: wrap` y `gap: 0.42rem`, pero al
+   romper línea (con archivo de otro + riesgo alto + draft) el bloque
+   se aprieta arriba. Subimos el row-gap para que la 2ª fila respire
+   sin afectar la densidad cuando todo entra en una fila. */
+.in-hero-row {
+  row-gap: 0.32rem;
+}
+/* El separador "·" entre modo y owner se pierde si se sale del FOV
+   tras wrap; cuando hay wrap, escondemos los separadores que quedan
+   solos al principio o final de una fila nueva. */
+.in-hero-row .in-hero-sep {
+  /* Mantiene su rol de "ritmo" en una fila densa; en wrap natural
+     puede acumularse — `align-self: center` evita que se vea como
+     punto colgado a media altura. */
+  align-self: center;
+}
+
+/* ── 4) Hub empty — alineación tras simplificación ──────────────────
+   Tras quitar el `hub-empty-join` (CTA secundario duplicado), el
+   `hub-empty-cta` queda con un solo botón primario. Centramos
+   verticalmente y damos respiración para que se vea decidido, no
+   "huérfano de su par". */
+.hub-empty-cta {
+  /* Sigue siendo column en mobile (override en hub.css:347 grid
+     respeta esto), pero en desktop ahora se asienta. */
+  align-items: center;
+  justify-content: flex-end;
+}
+.hub-empty-btn {
+  /* Subimos 1px de presencia y mantenemos el peso primario. La sombra
+     del primario base ya cubre — sólo confirmamos la alineación de
+     altura con el resto de elementos del empty (icon + text). */
+  align-self: center;
+}
+
+/* ── 5) StatusBar conn — foco visible no traga el LED ───────────────
+   El cluster `.sb.conn.ok` lleva un LED pulsando. Al tabular (algún
+   día — hoy no es focuseable, pero deja la afordancia preparada para
+   futuro), el ring del :focus-visible NO debe tapar el dot. Esta
+   regla es defensiva: si el LED gana foco, el ring se asienta debajo
+   del cluster, no sobre él. */
+.statusbar .sb.conn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+
+/* ── 6) Topbar peers `.conmigo` — halo más nítido ───────────────────
+   El anillo "este peer está EN tu archivo" sube de 1.5px a 2px de
+   spread. Sigue siendo información (no decoración), pero al escanear
+   el cluster de avatares el ojo lo distingue del resto en milisegundos.
+   El recorte interno (border de surface) se conserva: el avatar sigue
+   "recortado limpio" sobre el fondo del topbar. */
+.peers .av.conmigo {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ── 7) Hub team upgrade footer — hover CTA pulido ──────────────────
+   El CTA del upgrade (mailto) ya tiene su look acero. Al hover el
+   filter:brightness sube; añadimos micro-shadow para que el CTA se
+   "anuncie" al pasar el mouse, sin perder la sobriedad. Coherente con
+   el resto de hovers del Hub. */
+.htu-cta:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 24px -14px rgba(var(--steel-rgb), 0.8);
+}
+
+/* ── 8) FileTree row hover — feedback más rico cuando hay actividad ─
+   Si la fila tiene señales (presencia, propuestas, riesgo), el hover
+   gana un ligero matiz que sugiere "hay info que mirar acá". Sin
+   esto el hover era visualmente idéntico para una fila vacía y una
+   con 5 señales — el ojo agradece distinción. */
+.row.file:hover .sig-prop,
+.row.file:hover .sig-risk,
+.row.file:hover .sig-live {
+  filter: brightness(1.06);
+}
+
+/* ── 9) Inspector empty + explain — par cohesivo ───────────────────
+   El `in-empty` lleva fondo bg-deep + hairline; el `in-explain` que
+   suele venir debajo era texto plano. Cuando el explain sigue a un
+   empty, ganan ritmo si el explain absorbe un padding lateral mínimo
+   alineado con el empty — quedan como "par de líneas educativas". */
+.in-empty + .in-explain {
+  padding: 0 0.25rem;
+}
+
+/* ── 10) Login GitHub button — focus visible más sutil ────────────
+   El gh-btn:focus-visible ya tiene su ring blanco específico (más
+   contrastado por el fondo oscuro propio). Refinamos el "anillo
+   doble" para que se vea consistente con el resto del producto sin
+   perder el cuerpo del ring (que sigue siendo más blanco que acero
+   por la convención GitHub). */
+.gh-btn:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px rgba(255, 255, 255, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* ── 11) Inspector — botones aprobar/rechazar focus visible ────────
+   Los botones de propuesta (.inprop-a .ok / .no) ya tienen hover y
+   active. Al tabular con teclado se ve el ring del sistema, pero el
+   ring genérico es acento (verde) — para "rechazar" eso pierde la
+   señal de "destructivo". Foco específico de cada tono. */
+.inprop-a .ok:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--ok) 55%, transparent);
+}
+.inprop-a .no:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--bg-deep),
+    0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
+}
+
+/* ── 12) Hub picker cards — peso del hover ───────────────────────
+   `.hub-pick-card:hover` ya tiene un filo acento. Sumamos una shadow
+   muy sobria para que se sienta "elevable" pero el peso real del
+   estado vivo siga siendo el filo izquierdo. */
+.hub-pick-card:hover {
+  box-shadow:
+    inset 2px 0 0 var(--accent),
+    0 10px 24px -22px rgba(0, 0, 0, 0.6),
+    0 1px 0 var(--hl);
+}
+
+/* ── 13) Tab close — afordancia ya definida en regla #2 ───────────
+   Ver `.tab .tabx { opacity: 0.55; }` arriba. Esta entrada queda como
+   ancla por si en el futuro queremos diferenciar opacidad de hover-tab
+   vs hover-botón (hoy ambos van a 1, simple y limpio). */
+
+/* ── 14) Sidebar h2 — coherencia tipográfica ─────────────────────
+   El `h2` (eyebrow de sección del Sidebar) lleva el estilo de pulido.
+   En contexto Git Panel hay un `h2` cuyo padding-bottom se queda corto
+   cuando el panel está denso (commits + commitbox). Microajuste para
+   que respire. */
+.sidebar > .h2 {
+  padding-bottom: 0.15rem;
+}
+
+/* ── 15) Spinner del Hub — alineación vertical ───────────────────
+   El `.spin` global tiene `vertical-align: -2px`. En el botón
+   `.hub-row .primario` (que es más alto que el .btn estándar por su
+   padding 0.62rem 1.2rem), el spinner queda un poco alto. Microajuste
+   scoped al hub para que se centre bien en su contexto. */
+.hub-row button .spin {
+  vertical-align: -1px;
+  margin-right: 1px;
+}

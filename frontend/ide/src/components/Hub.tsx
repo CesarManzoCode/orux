@@ -349,11 +349,13 @@ export function Hub() {
                 <b>{t.hub_empty_title}</b>
                 <span>{t.hub_empty_desc}</span>
               </div>
-              {/* CTA explícito (no decoración): el usuario nuevo no exploraba
-                  la columna derecha del Hub — sobre todo en mobile donde se
-                  apila debajo. Estos botones activan el picker Y enfocan el
-                  input correspondiente, así llegás directo al teclado en
-                  lugar de "ver el formulario y buscar dónde clickear". */}
+              {/* CTA único en el empty state: el card "Nuevo workspace" a la
+                  derecha YA ofrece ambas opciones (Crear / Unirme con código)
+                  con sus dos pickers — duplicarlas acá creaba 4 botones para
+                  2 acciones y dispersaba la atención. Mantenemos sólo el
+                  primario ("Crear primer equipo"); quien recibió un código
+                  llega al picker derecho por inercia (lo ve en su FOV con el
+                  empty state apuntando hacia allí). */}
               <div className="hub-empty-cta">
                 <button
                   className="primario hub-empty-btn"
@@ -363,15 +365,6 @@ export function Hub() {
                   }}
                 >
                   <Plus size={14} aria-hidden /> {t.hub_empty_cta_create}
-                </button>
-                <button
-                  className="hub-empty-join"
-                  onClick={() => {
-                    setPickerMode("unirme");
-                    setTimeout(() => refCode.current?.focus(), 30);
-                  }}
-                >
-                  {t.hub_empty_cta_join}
                 </button>
               </div>
             </div>

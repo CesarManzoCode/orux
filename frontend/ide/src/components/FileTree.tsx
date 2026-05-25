@@ -109,8 +109,19 @@ export function FileTree() {
       const aqui = presPorPath[f.path] || [];
       const due = s.owners[f.path];
       const esMio = !!(yoId && due === yoId);
-      const props = propuestasDe(f.path).length;
+      const propsList = propuestasDe(f.path);
+      const props = propsList.length;
       const riesgo = severidadMax(impactosQueAfectan(f.path));
+      // Severidad agregada de las propuestas que afectan este archivo: si
+      // una propuesta cambia algo riesgoso (por su impacto downstream), el
+      // badge `sig-prop` se tinta del color de aquel riesgo. Es la única
+      // manera de que un admin vea, escaneando el árbol, "hay 3 propuestas
+      // y una pisa algo grande" sin tener que abrir el Inspector. La
+      // severidad se computa SOLO sobre archivos que YA tienen propuestas
+      // — si no hay, el badge no se pinta y no consumimos cómputo.
+      const propsRiesgo = props > 0
+        ? severidadMax(propsList.flatMap((p) => impactosQueAfectan(p.path)))
+        : null;
       const sinMarcar = !!s.dirty[f.path];
       filas.push(
         <li key={"f:" + f.path}
@@ -131,7 +142,10 @@ export function FileTree() {
           <span className="sig">
             {sinMarcar && <span className="sig-dirty" title={t.ft_dirty} />}
             {props > 0 && (
-              <span className="sig-prop" title={t.ft_proposals(props)}>
+              <span
+                className={"sig-prop" + (propsRiesgo ? " s-" + propsRiesgo : "")}
+                title={t.ft_proposals(props)}
+              >
                 {props}
               </span>
             )}
