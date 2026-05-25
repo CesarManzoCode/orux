@@ -21,9 +21,11 @@ El contenido de los archivos vive como repositorios git reales —uno por equipo
 
 ```bash
 cp .env.example .env          # configurá tu dominio y credenciales
-make up                       # build + levanta los 4 contenedores
+make rebuild                  # build + levanta los 4 contenedores (primera vez)
 make logs                     # seguir logs   |   make down para apagar
 ```
+
+Después, en el día a día: `make up` levanta sin reconstruir (rápido), `make rebuild` reconstruye + levanta todo, y `make rebuild-orux` / `make rebuild-api` / `make rebuild-caddy` rehacen sólo ese servicio.
 
 Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local: `make dev` (server desde `backend/`) + `cd frontend/ide && npm run dev` (el cliente detecta dev y usa `ws://localhost:8765`).
 

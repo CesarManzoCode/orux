@@ -222,7 +222,7 @@ ps aux | grep python | grep -v grep
 lsof -i:8765
 ```
 
-Matá el zombi (`kill <PID>`) o `make down && make up`.
+Matá el zombi (`kill <PID>`) o `make rebuild`.
 
 ### 6.2 "El análisis de impacto no se ve / sale aproximado"
 
@@ -236,7 +236,7 @@ docker compose logs orux | grep -i "pyright\|lsp"
 ```
 
 Si pyright se queja de `libatomic.so.1`, el `Dockerfile` ya la instala —
-forzá `make build && make up`. Si el cache de pyright es read-only,
+forzá `make rebuild-orux`. Si el cache de pyright es read-only,
 chequeá permisos de `/opt/pyright` en la imagen.
 
 ### 6.3 "El healthcheck del orux container falla"
@@ -247,7 +247,7 @@ crudo, ver `Dockerfile:105`). Si está fallando:
 - Si los logs del server gritan `EOFError: stream ends after 0 bytes`
   cada 30s, ese ruido es **histórico** — el fix está en main hace
   tiempo. Si lo ves ahora, posiblemente tenés una imagen vieja sin
-  rebuildear: `make build && make up`.
+  rebuildear: `make rebuild-orux`.
 - Si el server WS realmente está caído, los logs del container `orux`
   van a tener el traceback antes de la caída.
 
@@ -278,7 +278,9 @@ Verificá:
 
 ```bash
 make help                                # lista todos los make targets
-make up                                  # build + up de todo
+make build                               # construye TODAS las imágenes (no levanta)
+make up                                  # levanta TODO (sin buildear)
+make rebuild                             # down + build + up (lo más usado tras cambios)
 make down                                # baja todo (los datos quedan)
 make restart                             # reload del .env y restart
 make logs                                # logs combinados
@@ -288,9 +290,17 @@ make test                                # tests del backend en local
 make db-backup                           # backup Postgres
 make db-restore FILE=... CONFIRM=yes     # restore Postgres
 
-docker compose pull                      # baja imágenes externas nuevas
-docker compose build --no-cache orux     # rebuild forzado (cuando un
-                                         # cambio en Dockerfile no se ve)
+# Por servicio (svc ∈ orux, api, postgres, caddy):
+make build-<svc>                         # rebuild de UN servicio (postgres NO; usar `make pull`)
+make up-<svc>                            # levantar UN servicio (sube sus deps)
+make stop-<svc>                          # parar UN servicio (sin borrarlo)
+make restart-<svc>                       # reiniciar UN servicio
+make rebuild-<svc>                       # build + recreate de UN servicio (no toca los demás)
+make logs-<svc>                          # logs en vivo de UN servicio
+make sh-<svc>                            # shell del contenedor (sh-postgres = psql)
+
+make pull                                # baja imágenes públicas nuevas (postgres)
+make build-nocache                       # rebuild forzado ignorando cache (emergencia)
 docker system df                         # cuánto espacio está usando docker
 docker system prune -af                  # limpieza agresiva (ojo: borra
                                          # imágenes/cache; no toca volúmenes)
