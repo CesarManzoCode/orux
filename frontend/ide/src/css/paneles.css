@@ -40,7 +40,7 @@
   width: 4px; height: 4px; border-radius: 50%; background: var(--border);
 }
 .gitp .commitbox { display: flex; gap: 0.4rem; }
-.gitp .commitbox input { padding: 0.45rem 0.55rem; font-size: var(--t-sm); }
+.gitp .commitbox input { padding: 0.5rem 0.65rem; font-size: var(--t-sm); }
 .gitp .commitbox button {
   border: none; border-radius: var(--r-sm); padding: 0.45rem 0.7rem;
   background: var(--grad); color: var(--accent-ink); font-size: var(--t-sm);
@@ -66,7 +66,7 @@
   flex-direction: column; gap: 0.4rem;
 }
 .gitp .remtit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--faint); padding: 0 0.35rem; }
-.gitp .remoto input { padding: 0.45rem 0.55rem; font-size: var(--t-sm); }
+.gitp .remoto input { padding: 0.5rem 0.65rem; font-size: var(--t-sm); }
 .gitp .remacc { display: flex; gap: 0.4rem; }
 .gitp .remacc button { flex: 1; padding: 0.42rem; justify-content: center; }
 .gitp .remacc button:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
@@ -226,8 +226,11 @@
 .rail .rail-b { width: 34px; height: 34px; border: none; border-radius: 9px;
   background: transparent; color: var(--faint); cursor: pointer;
   display: grid; place-items: center; position: relative;
-  transition: background var(--tr), color var(--tr); }
-.rail .rail-b:hover { background: var(--surface-2); color: var(--text-2); }
+  transition: background var(--tr), color var(--tr), transform var(--tr); }
+.rail .rail-b:hover {
+  background: var(--surface-2); color: var(--text-2);
+  transform: translateY(-1px);
+}
 .rail .rail-b.activo { background: var(--accent-weak); color: var(--accent); }
 /* Punto de aviso: hay algo que mirar en esa vista (no obliga, señala). */
 .rail-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;

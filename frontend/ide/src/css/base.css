@@ -264,7 +264,7 @@ button:active { transform: translateY(1px); }
 .field:focus, .login-card input:focus,
 .gitp input:focus, .ambar select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-weak);
+  box-shadow: 0 0 0 3px var(--accent-soft);
   background: var(--surface);
 }
 
@@ -449,8 +449,12 @@ button:active { transform: translateY(1px); }
   width: 34px; height: 34px; border: none; border-radius: 9px;
   background: transparent; color: var(--faint); cursor: pointer;
   display: grid; place-items: center; position: relative;
+  transition: background var(--tr), color var(--tr), transform var(--tr);
 }
-.rail button:hover { background: var(--surface-2); color: var(--text-2); }
+.rail button:hover {
+  background: var(--surface-2); color: var(--text-2);
+  transform: translateY(-1px);
+}
 .rail button.activo { background: var(--accent-weak); color: var(--accent); }
 /* La barra de "activo" cuelga al borde del rail. Plana, sin glow: el
    color YA es la señal; el glow era ruido. */

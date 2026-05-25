@@ -320,6 +320,7 @@ export const en = {
     sb_new_file_prompt: "file name (e.g.: src/main.py)",
     sb_empty_title: "Empty workspace",
     sb_empty_sub: "No files yet. Create the first one with \"new file\".",
+    sb_tree_aria: "workspace file tree",
 
     // Sidebar — Git
     sg_title: "version control",
@@ -366,6 +367,7 @@ export const en = {
     ft_impact_inside: "impact inside",
     ft_delete_title: (path: string) => "delete " + path,
     ft_delete_confirm: (path: string) => "Delete " + path + "? This cannot be undone.",
+    ft_folder_aria: "folder",
 
     // ContextBar
     ctx_prop_title: "what you type stays local — Ctrl+S sends the proposal to the owner",

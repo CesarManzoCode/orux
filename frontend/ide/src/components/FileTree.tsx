@@ -82,6 +82,9 @@ export function FileTree() {
       filas.push(
         <li key={"d:" + rd}
             className={"row dir" + (cerrada ? "" : " abierta")}
+            role="treeitem"
+            aria-expanded={!cerrada}
+            aria-label={`${nombre} (${t.ft_folder_aria})`}
             onClick={() => toggle(rd)}>
           <span className="row-indent">
             <Guides depth={depth} />
@@ -113,6 +116,8 @@ export function FileTree() {
         <li key={"f:" + f.path}
             data-tour-id={"file-" + f.path}
             className={"row file" + (f.path === s.currentPath ? " activo" : "")}
+            role="treeitem"
+            aria-selected={f.path === s.currentPath}
             onClick={() => seleccionar(f.path)}>
           <span className="row-indent">
             <Guides depth={depth} />
@@ -165,7 +170,7 @@ export function FileTree() {
   pintar(arbol(paths), "", 0);
   return (
     <>
-      <ul className="tree" data-tour-id="files-tree">{filas}</ul>
+      <ul className="tree" role="tree" data-tour-id="files-tree" aria-label={t.sb_tree_aria}>{filas}</ul>
       {confirmDel && (
         <ConfirmDialog
           title={t.confirm_delete_title}

@@ -278,8 +278,12 @@
 
 @media (max-width: 900px) {
   .sticky-cta { display: flex; }
-  /* Padding al final para no tapar el footer en móvil */
-  footer { padding-bottom: 88px; }
+  /* Padding al final para no tapar el footer en móvil. En notch devices
+     el sticky-cta crece con env(safe-area-inset-bottom) (su propio padding
+     inferior), así que el footer tiene que crecer igual o el sticky lo
+     ocluye en la última pulgada del scroll. max() garantiza 88px como
+     mínimo en cualquier device, y suma el safe-area cuando aplica. */
+  footer { padding-bottom: max(88px, calc(88px + env(safe-area-inset-bottom))); }
 }
 @media (prefers-reduced-motion: reduce) {
   .sticky-cta { transition: opacity 200ms; transform: none; }
@@ -500,7 +504,20 @@
   font-weight: 700;
 }
 
-/* 2) FAQ keyboard — chev preanunciado en focus */
+/* 2) FAQ keyboard — afordancia completa para teclado.
+   El chev preanunciado del focus le dice al usuario "voy a abrir esto",
+   pero el botón ENTERO necesita una señal de foco: la fila es grande
+   (padding 22px), y solo iluminar el chev a la derecha deja al ojo sin
+   saber dónde está su selección. Añadimos un anillo discreto al borde
+   izquierdo (mismo idioma que la fila activa del rail/sidebar del IDE),
+   que respeta el `padding 22px 4px` del botón sin agregar layout-shift.
+   El anillo lateral es menos invasivo que un box-shadow envolvente —
+   marca columna sin "encajonar" la pregunta. */
+.faq-q:focus-visible {
+  outline: none;
+  box-shadow: inset 3px 0 0 var(--steel);
+  border-radius: var(--r-xs);
+}
 .faq-q:focus-visible .chev {
   border-color: var(--steel-line);
   background: var(--steel-weak);

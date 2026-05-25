@@ -335,6 +335,7 @@ export const es = {
     sb_new_file_prompt: "nombre del archivo (ej: src/main.py)",
     sb_empty_title: "Workspace vacío",
     sb_empty_sub: "Aún no hay archivos. Crea el primero con \"nuevo archivo\".",
+    sb_tree_aria: "árbol de archivos del workspace",
 
     // Sidebar — Git
     sg_title: "control de versiones",
@@ -383,6 +384,7 @@ export const es = {
     ft_impact_inside: "impacto adentro",
     ft_delete_title: (path: string) => "eliminar " + path,
     ft_delete_confirm: (path: string) => "¿Eliminar " + path + "? No se puede deshacer.",
+    ft_folder_aria: "carpeta",
 
     // ContextBar
     ctx_prop_title: "lo que escribas queda local — Ctrl+S envía la propuesta al dueño",
