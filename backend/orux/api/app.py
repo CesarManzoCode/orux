@@ -40,6 +40,7 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
 from .. import billing, stripe_client
+from .._net import ip_proxy_confiable
 from ..db.pool import Database
 from ..db.stores import PgUserStore, PgWebhooksStore
 from ..identity import (
@@ -92,14 +93,23 @@ _INICIO_MONO = time.monotonic()
 
 
 def _ip_de(req: Request) -> str:
-    """IP del cliente. Confiamos en X-Forwarded-For si Caddy lo setea (lo
-    hace en el deploy). En tests/dev viene del transporte directo."""
+    """IP del cliente. Confiamos en X-Forwarded-For SOLO cuando la conexión
+    TCP viene de un proxy de confianza (red privada / loopback de Docker
+    compose). Si alguien llega directo al contenedor (mal config, otro pod
+    comprometido en la red, port forward olvidado), su XFF se ignora y la
+    IP de bucketing es la del socket — sin esto, rotar XFF evadía el
+    rate-limit de login del operador (BACKEND-AUDIT M-04).
+
+    Caddy en el deploy concatena al XFF existente; tomamos el PRIMERO de
+    la cadena (la IP más cercana al cliente original) PERO solo cuando el
+    salto inmediato (transporte) es confiable. Sin Caddy / sin proxy:
+    `req.client.host` siempre.
+    """
+    transport_ip = req.client.host if req.client is not None else ""
     xff = req.headers.get("x-forwarded-for", "")
-    if xff:
+    if xff and ip_proxy_confiable(transport_ip):
         return xff.split(",")[0].strip()
-    if req.client is not None:
-        return req.client.host
-    return "unknown"
+    return transport_ip or "unknown"
 
 
 def _rate_limit_login(ip: str) -> bool:

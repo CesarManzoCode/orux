@@ -19,6 +19,7 @@ import logging
 
 from websockets.asyncio.server import ServerConnection
 
+from .._net import ip_proxy_confiable
 from ..identity import UserStore
 
 logger = logging.getLogger(__name__)
@@ -84,23 +85,34 @@ def wrap_users(users):
 
 
 def ip_cliente(websocket: ServerConnection) -> str:
-    """IP del cliente. En el deploy la conexión TCP llega desde Caddy (mismo
-    host), así que la IP real del usuario va en el header `X-Forwarded-For`
-    que Caddy agrega al hacer de proxy. En dev/tests sin proxy se cae a la
-    dirección del socket. Defensivo: ante cualquier fallo devuelve un
-    placeholder — nunca rompe el flujo de autenticación."""
+    """IP del cliente para rate-limit / logging. En el deploy la conexión
+    TCP llega desde Caddy y la IP real del usuario va en `X-Forwarded-For`
+    que Caddy agrega. En dev/tests sin proxy: dirección del socket.
+
+    BACKEND-AUDIT M-04: confiamos en XFF SOLO cuando el peer TCP es un
+    proxy de confianza (red privada / loopback de Docker compose). Antes
+    cualquier conexión que mandara XFF podía pisar la IP usada para los
+    buckets — un atacante con acceso directo al contenedor (mal config,
+    pod vecino comprometido, port forward olvidado) rotaba el XFF y
+    evadía el rate-limit de login/registro. Ahora ese atacante queda
+    fijado a la IP del socket (su propia IP).
+
+    Defensivo: ante cualquier fallo devuelve "desconocida" — nunca rompe
+    el flujo de auth.
+    """
+    socket_ip = ""
+    try:
+        addr = websocket.remote_address
+        if addr:
+            socket_ip = str(addr[0])
+    except Exception as e:  # noqa: BLE001
+        logger.debug("remote_address ilegible: %r", e)
     try:
         req = getattr(websocket, "request", None)
-        if req is not None:
+        if req is not None and ip_proxy_confiable(socket_ip):
             xff = req.headers.get("X-Forwarded-For", "")
             if xff:
                 return xff.split(",")[0].strip()
     except Exception as e:  # noqa: BLE001 - diagnóstico opcional
         logger.debug("X-Forwarded-For ilegible: %r", e)
-    try:
-        addr = websocket.remote_address
-        if addr:
-            return str(addr[0])
-    except Exception as e:  # noqa: BLE001
-        logger.debug("remote_address ilegible: %r", e)
-    return "desconocida"
+    return socket_ip or "desconocida"

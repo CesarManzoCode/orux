@@ -119,6 +119,48 @@ def test_ip_cliente_prefiere_x_forwarded_for():
     assert _ip_cliente(_SinProxy()) == "127.0.0.1"
 
 
+def test_ip_cliente_ignora_xff_de_origen_no_confiable():
+    """BACKEND-AUDIT M-04: si la conexión TCP viene de una IP pública
+    (atacante directo al contenedor saltando a Caddy), su XFF NO se
+    honra — vuelve la IP del socket. Sin esta defensa, el rate-limit
+    de login era trivial de evadir rotando XFF."""
+    from orux.server.sync import _ip_cliente
+
+    class _Req:
+        headers = {"X-Forwarded-For": "1.2.3.4"}
+
+    class _Atacante:
+        request = _Req()
+        # IP pública (ej. otro pod expuesto, port-forward olvidado).
+        remote_address = ("203.0.113.99", 40000)
+
+    # Debe ignorar el XFF y reportar la IP real del socket.
+    assert _ip_cliente(_Atacante()) == "203.0.113.99"
+
+
+def test_ip_proxy_confiable_basico():
+    """Helper compartido: privada/loopback = True; pública/basura = False."""
+    from orux._net import ip_proxy_confiable
+
+    # Privadas (Docker bridge, k8s, LAN).
+    assert ip_proxy_confiable("172.18.0.5") is True
+    assert ip_proxy_confiable("10.244.0.7") is True
+    assert ip_proxy_confiable("192.168.1.10") is True
+    # Loopback.
+    assert ip_proxy_confiable("127.0.0.1") is True
+    assert ip_proxy_confiable("::1") is True
+    # IPv6 ULA.
+    assert ip_proxy_confiable("fd00::1") is True
+    # Públicas — NO confiar.
+    assert ip_proxy_confiable("8.8.8.8") is False
+    assert ip_proxy_confiable("203.0.113.5") is False
+    # Basura — NO confiar y NO explotar.
+    assert ip_proxy_confiable("") is False
+    assert ip_proxy_confiable("unknown") is False
+    assert ip_proxy_confiable(None) is False
+    assert ip_proxy_confiable("not-an-ip") is False
+
+
 def test_throttle_login_corta_la_fuerza_bruta(monkeypatch):
     """Una IP puede intentar login hasta el tope; el siguiente se rechaza.
     El backoff por-conexión se reinicia al reconectar — este tope no."""
