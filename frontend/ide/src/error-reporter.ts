@@ -106,6 +106,43 @@ function describir(err: unknown): { message: string; stack: string } {
   return { message: String(err ?? "?"), stack: "" };
 }
 
+// BACKEND-AUDIT M-06: el callback de OAuth devuelve al SPA con
+// `#session=<token>` y los links de invitación pueden incluir
+// `?invite=<code>`. `connect()` y `absorberInviteDeURL` los limpian al
+// arrancar, pero hay una ventana de milisegundos antes; si JS truena en
+// esa ventana, `location.href` con el token termina en los logs del
+// container `api` (que loguea client_error con url=%r) y queda accesible
+// a cualquiera con `docker compose logs`. Lo strippeamos.
+//
+// Lista de keys: las del flujo OAuth/invite + un par de bonus seguros
+// (`token`, `key`, `password`) por si alguna feature futura las usa en
+// la URL. Lo que NO eliminamos es path/hostname/query restante: ESE es
+// el dato útil del bug ("¿en qué pantalla rompió?").
+const URL_KEYS_SENSIBLES = new Set([
+  "session", "token", "code", "invite", "key", "password", "auth", "oauth",
+]);
+
+function sanitizarUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    for (const k of Array.from(url.searchParams.keys())) {
+      if (URL_KEYS_SENSIBLES.has(k.toLowerCase())) url.searchParams.delete(k);
+    }
+    // El hash es free-form (URL params, fragment id, lo que sea). Si trae
+    // `session=…` viene del callback OAuth recién aterrizado: nos lo
+    // comemos entero — un bug que dependa de la posición del fragmento
+    // es raro y prefiero perder esa señal a leakear el token.
+    if (url.hash && /(?:^|[#&])(session|token|code|invite)=/i.test(url.hash)) {
+      url.hash = "";
+    }
+    return url.toString();
+  } catch {
+    // URL inválida (no debería con `location.href`, pero defensivo): no
+    // mandamos nada antes que mandar algo con secretos.
+    return "";
+  }
+}
+
 export function instalar(): void {
   if (esDev()) return;
 
@@ -116,7 +153,7 @@ export function instalar(): void {
       kind: "error",
       message: message || String(e.message || "?"),
       stack,
-      url: location.href,
+      url: sanitizarUrl(location.href),
     });
   });
 
@@ -126,7 +163,7 @@ export function instalar(): void {
       kind: "unhandledrejection",
       message,
       stack,
-      url: location.href,
+      url: sanitizarUrl(location.href),
     });
   });
 }
