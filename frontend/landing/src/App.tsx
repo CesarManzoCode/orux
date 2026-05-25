@@ -514,11 +514,18 @@ const DEMO_W = 1280;
 const DEMO_H = 800;
 
 function DemoFrame({
-  lang, t, persona,
+  lang, t, persona, pip,
 }: {
   lang: Lang;
   t: Traducciones;
   persona: "tu" | "ana";
+  // pip=true cuando este iframe es el PIP del hero (self-view del otro
+  // user). Agrega &pip=1 a la URL; el IDE lee ese flag y suprime el
+  // Stepper y el cursor del demo dentro de este iframe (a la escala del
+  // PIP serían ruido visual). El resto del demo (peer cursors, halos,
+  // toasts) sigue corriendo — esa es la prueba visual de "es otro IDE
+  // real, sincronizado".
+  pip?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -567,7 +574,7 @@ function DemoFrame({
   // Si el iframe falla en cargar (sin red, sin /app/, etc.) el fallback se
   // queda visible. La perspectiva va en el query `p`: tu (dueño, default)
   // o ana (editora). El backend del IDE lee este param en main.tsx.
-  const src = `/app/?demo=1&p=${persona}&lang=${lang}`;
+  const src = `/app/?demo=1&p=${persona}&lang=${lang}` + (pip ? "&pip=1" : "");
 
   return (
     <div className="hero-demo" ref={containerRef}>
@@ -729,14 +736,24 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
           >
-            {/* Un solo iframe del IDE real (vista del dueño). El guión que
-                corre adentro está en DemoLoop.tsx: 35s/ciclo, 6 beats
-                narrados con stepper visible. Antes había DOS iframes
-                apilados (TU + ANA) — el visitante no alcanzaba a seguir dos
-                narrativas en paralelo y el scale por panel quedaba a 0.4×
-                (texto ilegible). Una sola escena, grande y legible, vende
-                más. */}
-            <DemoFrame persona="tu" lang={lang} t={t} />
+            {/* Iframe TU principal (grande, expandido al viewport, vista del
+                dueño que aprueba) + PIP de ANA bottom-right (self-view del
+                otro user editando en paralelo). Los dos cargan el IDE real
+                con guiones sincronizados por epoch absoluto en DemoLoop.tsx.
+                El PIP es prueba visual de "son dos clientes corriendo,
+                no un mockup": ves el cursor de Ana moverse en su propio
+                iframe y al mismo tiempo aparecer en tu inspector como peer.
+                En mobile el PIP se oculta (a esa escala no comunica). */}
+            <div className="hero-demo-wrap">
+              <DemoFrame persona="tu" lang={lang} t={t} />
+              <div className="hero-demo-pip" aria-hidden>
+                <div className="hero-demo-pip-label">
+                  <span className="hdl-dot" aria-hidden />
+                  <span>{t.demo_panel_ana_short}</span>
+                </div>
+                <DemoFrame persona="ana" lang={lang} t={t} pip />
+              </div>
+            </div>
             <p className="stage-cap">
               <span className="dotg" aria-hidden /> {t.demo_panel_caption}
             </p>

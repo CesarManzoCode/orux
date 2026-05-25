@@ -103,6 +103,10 @@ export function DemoLoop() {
   // si no, vista TU (default). La identidad la fija main.tsx según ?p=…
   // al inicializar el demoMode — acá solo la leemos del store ya cargado.
   const esAna = getState().yo?.client_id === TUT.ana.client_id;
+  // Modo PIP: el iframe está embebido chico en el hero como self-view del
+  // otro user. A esa escala (~0.25), el Stepper y el cursor del visitante
+  // son ruido visual ilegible. main.tsx setea este flag al leer ?pip=1.
+  const esPip = getState().demoPip;
 
   const [paso, setPaso] = useState<PasoState>({
     i: 0, total: PASOS_TOTAL, texto: t.demo_step_setup, tono: "info",
@@ -422,6 +426,11 @@ export function DemoLoop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang, esAna]);
 
+  // En PIP no mostramos ni cursor ni stepper (ruido a baja escala). El
+  // peer cursor, halos y toasts SÍ se renderizan — siguen comunicando
+  // "hay actividad acá" incluso a 0.25× de scale, y son la prueba visual
+  // de que el PIP es un segundo cliente real corriendo en paralelo.
+  if (esPip) return null;
   return (
     <>
       <DemoCursor

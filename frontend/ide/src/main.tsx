@@ -39,9 +39,10 @@ function aplicarLangDemo(): void {
 }
 
 // Perspectiva del demo: ?p=tu (default — el dueño que recibe propuestas) o
-// ?p=ana (la peer que edita y propone). La landing del hero embebe ambos
-// iframes lado a lado para que el visitante vea las dos caras del flujo:
-// editar ajeno → mandar propuesta → aprobar. El mismo evento, dos pantallas.
+// ?p=ana (la peer que edita y propone). El hero de la landing embebe el
+// iframe TU como principal (grande, expandido al viewport) y el iframe ANA
+// como PIP — el "self-view" del otro user, prueba visual de que son dos
+// clientes corriendo en paralelo y sincronizados.
 function leerPersona(): "tu" | "ana" {
   try {
     const p = new URLSearchParams(location.search).get("p");
@@ -51,9 +52,23 @@ function leerPersona(): "tu" | "ana" {
   }
 }
 
+// ?pip=1 indica que el iframe está montado como PIP en el hero (no como
+// iframe principal). El DemoLoop usa este flag para suprimir el Stepper y
+// el cursor del visitante — a la escala del PIP (~0.25) ese chrome se
+// vuelve ruido. Sólo el iframe principal lleva el stepper que cuenta la
+// narrativa; el PIP demuestra "es otro IDE real corriendo".
+function esPip(): boolean {
+  try {
+    return new URLSearchParams(location.search).get("pip") === "1";
+  } catch {
+    return false;
+  }
+}
+
 if (esDemo()) {
   aplicarLangDemo();
   const persona = leerPersona();
+  const pip = esPip();
   if (persona === "ana") {
     // Vista de Ana: ella es el "yo" del IDE. El color azul (#62a8f0) es el
     // mismo que TUT.ana en mock.ts — coherencia visual cross-iframe (en el
@@ -62,6 +77,7 @@ if (esDemo()) {
     // el workspace en este escenario.
     __setForTutorial({
       demoMode: true,
+      demoPip: pip,
       authed: true,
       fase: "team",
       yo: { client_id: "tutorial:ana", name: "Ana", color: "#62a8f0" },
@@ -71,6 +87,7 @@ if (esDemo()) {
   } else {
     __setForTutorial({
       demoMode: true,
+      demoPip: pip,
       authed: true,
       fase: "team",
       yo: { client_id: "demo:tu", name: "tú", color: "#43b98a" },

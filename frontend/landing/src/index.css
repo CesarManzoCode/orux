@@ -125,10 +125,108 @@
 
 /* Skeleton de fallback para vistas que no son TU (?p=ana o cualquier
    otra): caja sobria mientras carga el iframe, sin animación shimmer.
-   Hoy el hero monta una sola vista (TU) cuyo fallback es <Stage/>, así
-   que esto sólo aplica si DemoFrame se reusa con otra persona. */
+   El PIP de Ana usa esto mientras carga su bundle. */
 .hero-demo-skel {
   background:
     linear-gradient(180deg, #0a0c10 0%, #0c0e13 100%),
     radial-gradient(40% 40% at 50% 50%, rgba(98, 168, 240, 0.05), transparent 70%);
+}
+
+/* ── PIP de Ana (Picture-in-Picture) ──────────────────────────────────
+ * Iframe chico bottom-right del wrap principal, mostrando al otro
+ * cliente del demo (Ana) corriendo en paralelo. Es la prueba visual
+ * de que son dos clientes reales sincronizados — el peer cursor de Ana
+ * ya aparece en el iframe TU, pero el PIP demuestra que TIENE su propia
+ * ventana, no es un mockup.
+ *
+ * Tamaño: ~28% del ancho del wrap principal, aspect 16:10 (match con
+ * el iframe nativo del IDE → sin franjas). En mobile se oculta (a esa
+ * escala el PIP es invisible y solo añade altura inútil).
+ * ──────────────────────────────────────────────────────────────────── */
+.hero-demo-wrap {
+  /* Position relative para anclar el PIP absolute. El wrap NO tiene
+     tamaño propio: lo hereda del .hero-demo interno. */
+  position: relative;
+}
+.hero-demo-pip {
+  position: absolute;
+  bottom: 22px;
+  right: 22px;
+  z-index: 3;
+  width: 28%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  overflow: hidden;
+  /* Borde azul sutil + sombra dura para leerse como "ventana flotante"
+     sobre el iframe principal. Azul porque es el color de Ana
+     (#62a8f0 en mock.ts del IDE) — refuerza la identidad cross-iframe. */
+  box-shadow:
+    0 0 0 1px rgba(98, 168, 240, 0.45),
+    0 14px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(8, 9, 11, 0.6);
+  background: #08090b;
+}
+/* Label pill top-left dentro del PIP. Le da identidad ("estás viendo a
+   Ana") sin tapar el contenido central del IDE Ana (que está en el
+   editor, columna del medio). */
+.hero-demo-pip-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(8, 9, 11, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hero-demo-pip-label .hdl-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #62a8f0;
+  box-shadow: 0 0 6px #62a8f0;
+  flex: 0 0 auto;
+}
+/* Dentro del PIP, el .hero-demo interno NO repite la expansión al
+   viewport ni el aspect-ratio ni el min-height (el padre PIP define
+   esos). Llena 100% del PIP, sin border-radius propio (lo hace el
+   padre con overflow: hidden) ni sombra (la sombra es del padre). */
+.hero-demo-pip .hero-demo {
+  --extra-right: 0px;
+  --extra-left: 0px;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  aspect-ratio: auto;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (max-width: 1080px) {
+  /* Cuando el hero colapsa a una columna, el PIP relativo al wrap queda
+     ligeramente más grande para mantenerse legible. */
+  .hero-demo-pip {
+    bottom: 14px;
+    right: 14px;
+    width: 32%;
+  }
+}
+@media (max-width: 760px) {
+  /* En mobile el iframe principal es tan chico que el PIP a 32% queda
+     ininteligible. Mejor ocultarlo: el sell del multiplayer en mobile
+     pasa por los peer cursors dentro del iframe principal. */
+  .hero-demo-pip { display: none; }
 }

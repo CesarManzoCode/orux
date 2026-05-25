@@ -51,11 +51,12 @@ export const T = {
     stage_cap_3: "claim() cambió de firma:",
     stage_cap_4: "Orux detectó 4 usos · propuesta de Ana lista para aprobar.",
 
-    // Etiquetas de los dos iframes apilados (perspectivas del demo).
-    // Hoy el hero usa UN solo iframe (vista del dueño); demo_panel_tu/ana
-    // quedan sin uso pero las dejo por si el hero vuelve a doble vista.
+    // Etiquetas de los iframes del hero. demo_panel_ana_short se usa hoy
+    // como label del PIP (Picture-in-Picture) bottom-right. Las otras dos
+    // (tu/ana largas) las dejo por si el hero vuelve a doble-vista.
     demo_panel_tu: "Vista del dueño · Tomás aprueba",
     demo_panel_ana: "Vista de Ana · edita y propone",
+    demo_panel_ana_short: "Ana · en vivo",
     demo_panel_caption: "Lo que ves arriba es el IDE real. Sin gobernanza, sin merges rotos.",
 
     // Stage interno (IDE mock — aria-hidden)
@@ -382,11 +383,12 @@ export const T = {
     stage_cap_3: "claim() signature changed:",
     stage_cap_4: "Orux detected 4 usages · Ana's proposal ready to approve.",
 
-    // Labels for the two stacked iframes (demo perspectives). The hero
-    // now uses a SINGLE iframe (owner's view); demo_panel_tu/ana are kept
-    // unused in case the dual hero comes back.
+    // Hero iframe labels. demo_panel_ana_short is today's PIP (Picture-
+    // in-Picture) bottom-right label. The other two (tu/ana long) are
+    // kept unused in case the dual-stacked hero comes back.
     demo_panel_tu: "Owner's view · Tomás approves",
     demo_panel_ana: "Ana's view · edits and proposes",
+    demo_panel_ana_short: "Ana · live",
     demo_panel_caption: "What you see above is the real IDE. No governance, no broken merges.",
 
     // Stage interno

@@ -111,6 +111,13 @@ export interface State {
   // bloquea cualquier interacción del visitante. Se activa con `?demo=1` y
   // se inyecta desde main.tsx vía __setForTutorial.
   demoMode: boolean;
+  // Sub-modo del demo: si es true, el iframe está montado como PIP (picture-
+  // in-picture) en el hero del landing, embebido chico junto al iframe
+  // principal. A ese tamaño el DemoStepper y DemoCursor son ruido visual
+  // (texto a ~3px, cursor sobredimensionado), así que el DemoLoop los
+  // suprime. El resto del demo (peer cursors, halos, toasts) sigue
+  // mostrándose porque a baja escala todavía comunica "hay actividad".
+  demoPip: boolean;
 }
 
 const inicial: State = {
@@ -122,7 +129,7 @@ const inicial: State = {
     location.hostname && location.hostname !== "localhost"
       ? location.hostname : "local",
   fase: "auth", equipos: [], equipoError: "", equipo: null, inviteCode: "",
-  actividad: [], caret: { line: 1, col: 1 }, demoMode: false,
+  actividad: [], caret: { line: 1, col: 1 }, demoMode: false, demoPip: false,
 };
 
 let state: State = inicial;
