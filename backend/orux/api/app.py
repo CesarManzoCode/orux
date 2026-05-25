@@ -23,6 +23,7 @@ se prueba 100% en sandbox; acá solo HTTP. Los stores viven en `app.state`
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -935,6 +936,28 @@ def crear_app(users, teams, webhooks=None) -> Starlette:
 # handlers los lee de ahí).
 
 
+async def _purgar_webhooks_periodico(webhooks) -> None:
+    """BACKEND-AUDIT B-07: barre la tabla `processed_webhooks` cada 24h
+    para que no crezca monótonamente. Stripe ya no reentrega eventos
+    tras ~30d, así que purgar lo más viejo no rompe la idempotencia (un
+    evento que reapareciera tras un mes sería ruido independiente).
+
+    Robustez igual que `barrer_*_ociosos` del server WS: el loop nunca
+    muere por una excepción en una vuelta; CancelledError sí propaga al
+    shutdown del lifespan."""
+    DIA_SEG = 24 * 3600
+    while True:
+        try:
+            await asyncio.sleep(DIA_SEG)
+            n = await webhooks.purgar(antes_de_segundos=30 * DIA_SEG)
+            if n:
+                logger.info("webhooks purgados (>30d): %d", n)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — el loop sobrevive
+            logger.exception("purgar_webhooks_periodico: error en la vuelta")
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: Starlette):
     dsn = os.environ.get("ORUX_DB_DSN", "")
@@ -948,9 +971,17 @@ async def _lifespan(app: Starlette):
     # creada por `_aplicar_schema`. Cada webhook recibido se marca antes
     # de aplicarse — un evento ya procesado se ignora silenciosamente.
     app.state.webhooks = PgWebhooksStore(db)
+    # BACKEND-AUDIT B-07: tarea de fondo que purga webhooks viejos cada
+    # 24h. Sin esto la tabla crece sin techo (la función `purgar` existía
+    # pero nadie la llamaba).
+    purga = asyncio.create_task(_purgar_webhooks_periodico(app.state.webhooks))
+    app.state.tarea_purga = purga
     try:
         yield
     finally:
+        purga.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await purga
         await db.cerrar()
 
 
