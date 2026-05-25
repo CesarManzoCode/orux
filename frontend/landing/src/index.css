@@ -138,15 +138,13 @@
   display: grid;
   /* Gap chico: el visitante debe SENTIR que los dos iframes son la misma
      escena en dos vistas. Un gap grande los hace parecer "secciones
-     independientes". Antes 22-36px era demasiado espacio. */
+     independientes". */
   gap: clamp(8px, 1vw, 14px);
-  /* Heredamos la expansión del .hero-demo histórico. Ambos paneles se
-     extienden por igual hacia el borde derecho del viewport. */
-  --extra-right: clamp(0px, calc((100vw - 1240px) / 2), 120px);
-  --extra-left: clamp(0px, 1.5vw, 28px);
-  width: calc(100% + var(--extra-right) + var(--extra-left));
-  margin-left: calc(-1 * var(--extra-left));
-  margin-right: calc(-1 * var(--extra-right));
+  /* SIN expansión hacia el viewport: con dos iframes apilados, sangrarse
+     hacia el borde derecho recortaba visualmente la columna del Inspector
+     en monitores anchos. El stack respeta el ancho del wrap del hero — el
+     IDE se ve completo en su slot, sin desbordar. */
+  width: 100%;
 }
 .hero-demo-panel {
   display: flex;
