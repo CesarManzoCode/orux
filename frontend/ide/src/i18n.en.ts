@@ -166,13 +166,17 @@ export const en = {
     hub_plan_premium_seats: (n: number) => `Premium · ${n}`,
     hub_plan_free_title: "Free plan — the essentials of Orux, free forever (up to 5 devs)",
     hub_plan_premium_title: "Premium plan — billed per team member (one seat per person): uncapped team and deep analysis",
-    hub_upgrade_btn: "Upgrade to Premium",
+    // Early access: the CTA opens a mailto to cesarmanzocode@ (see Hub.tsx).
+    // hub_upgrade_busy and hub_upgrade_err remain in i18n for compat with
+    // the old Stripe flow (still intact in store.ts and backend); no
+    // call site references them today.
+    hub_upgrade_btn: "Request access",
     hub_upgrade_busy: "Opening Stripe…",
     hub_upgrade_what: "Premium · uncapped team, deep analysis and cascading rename",
-    hub_upgrade_seats: (n: number) =>
-      `billed per member · ${n} ${n === 1 ? "seat" : "seats"} today`,
-    hub_upgrade_title: (n: number) =>
-      `Premium is billed per team member — you would now pay for ${n} ${n === 1 ? "seat" : "seats"}`,
+    hub_upgrade_seats: (_n: number) =>
+      "Beta · $5 / seat / month · billed per member",
+    hub_upgrade_title: (_n: number) =>
+      "Premium is in early access — email me and I'll activate it",
     hub_upgrade_err: "Could not start payment: ",
     hub_pay_ok: "Payment received. Your team will become Premium in a few seconds.",
     hub_pay_cancel: "Payment canceled — no charge was made.",

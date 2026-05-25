@@ -171,17 +171,22 @@ export const es = {
     hub_plan_premium_seats: (n: number) => `Premium · ${n}`,
     hub_plan_free_title: "Plan free — lo esencial de Orux, gratis para siempre (hasta 5 devs)",
     hub_plan_premium_title: "Plan premium — se cobra por miembro del equipo (un asiento por persona): equipo sin tope y análisis a fondo",
-    hub_upgrade_btn: "Mejorar a Premium",
+    // Early access: el CTA abre un mailto a cesarmanzocode@ (ver Hub.tsx).
+    // hub_upgrade_busy y hub_upgrade_err quedan en el i18n por compat con
+    // el flow viejo de Stripe (que sigue intacto en store.ts y backend);
+    // hoy ningún call site los referencia.
+    hub_upgrade_btn: "Pedir acceso",
     hub_upgrade_busy: "Abriendo Stripe…",
-    hub_upgrade_title: (n: number) =>
-      `Premium se cobra por miembro del equipo — ahora pagarías ${n} ${n === 1 ? "asiento" : "asientos"}`,
+    hub_upgrade_title: (_n: number) =>
+      "Premium está en early access — escribime un mail y lo activamos",
     hub_upgrade_err: "No se pudo iniciar el pago: ",
     // Footer de upgrade integrado en la card del workspace (capa 33).
-    // Antes el botón era hermano de la tarjeta y se veía desligado — ahora
-    // vive dentro y explica qué se obtiene y cómo se cobra.
+    // En early access muestra el precio beta y la nota de "se activa por
+    // mail" — el visitante NO entra a un checkout: contacta y se
+    // configura a mano.
     hub_upgrade_what: "Premium · equipo sin tope, análisis a fondo y rename en cascada",
-    hub_upgrade_seats: (n: number) =>
-      `se cobra por miembro · ${n} ${n === 1 ? "asiento" : "asientos"} hoy`,
+    hub_upgrade_seats: (_n: number) =>
+      "Beta · $5 / asiento / mes · facturado por miembro",
     hub_pay_ok: "Pago recibido. Tu equipo pasará a Premium en unos segundos.",
     hub_pay_cancel: "Pago cancelado — no se hizo ningún cobro.",
     hub_empty_title: "Aún no estás en ningún equipo.",

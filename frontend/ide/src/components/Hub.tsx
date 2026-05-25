@@ -13,13 +13,13 @@
 // teclado: la tarjeta ya es `<button>`; Enter/Space abren.
 import { useEffect, useRef, useState } from "react";
 import {
-  Shield, Users, ChevronRight, ArrowLeft, ArrowUpCircle,
+  Shield, Users, ChevronRight, ArrowLeft, Mail,
   Plus, KeyRound, Sparkles,
 } from "lucide-react";
 import { useStore } from "../useStore";
 import {
   crearEquipo, redimirInvite, seleccionarEquipo, salir,
-  iniciarCheckout, refrescarEquipos, emitToast,
+  refrescarEquipos, emitToast,
 } from "../store";
 import { validarNombreEquipo, normalizarNombreEquipo } from "../validate";
 import { useI18n, LangToggle } from "../i18n";
@@ -47,9 +47,6 @@ export function Hub() {
   // Si el usuario llega con ?invite= en la URL (caso del invitado), el
   // store ya canjea solo, así que acá no hacemos nada especial.
   const [pickerMode, setPickerMode] = useState<"crear" | "unirme" | null>(null);
-  // Capa 30: id del equipo cuyo upgrade a Premium está en curso (esperando
-  // a que la API devuelva la URL de Stripe). Bloquea el doble-click.
-  const [upgrading, setUpgrading] = useState<string>("");
   // Error de validación CLIENT-side (HTML/control/exceso). Se muestra al
   // intentar submit con un nombre inválido. Distinto a equipoError, que es
   // el del server. Limpio en cada onChange.
@@ -130,19 +127,14 @@ export function Hub() {
     redimirInvite(c);
   }
 
-  // Capa 30: arranca el pago de Premium. `iniciarCheckout` pide a la API
-  // la URL de Stripe y, si todo va bien, redirige el navegador ahí mismo
-  // (devuelve null y dejamos el botón en "Abriendo…" hasta que la página
-  // cambie). Si devuelve un texto, es un error: lo mostramos y soltamos
-  // el busy.
-  async function onUpgrade(teamId: string) {
-    setUpgrading(teamId);
-    const err = await iniciarCheckout(teamId);
-    if (err) {
-      setUpgrading("");
-      emitToast(t.hub_upgrade_err + err, "bad");
-    }
-  }
+  // CAPA 31: el flow de Stripe (iniciarCheckout, hub_upgrade_busy, los
+  // toasts hub_pay_*) se conserva en store.ts y en el backend, listo para
+  // reactivarse cuando se valide Stripe en el VPS. Hoy el CTA del banner
+  // Premium es un mailto a cesarmanzocode@gmail.com: Orux está en early
+  // access, el plan se activa contactando, no por checkout automático.
+  // Cuando Stripe entre en producción, se vuelve a este componente y se
+  // re-inserta onUpgrade + spinner. El handler de ?stripe=success|cancel
+  // de abajo queda activo (no estorba si nadie viene de Stripe).
 
   // Si llega un equipoError tras `uniendo`, el código de error es
   // tipográfico — limpiamos el input para que el segundo intento parta de
@@ -319,20 +311,28 @@ export function Hub() {
                               <span>{t.hub_upgrade_seats(asientosCobro)}</span>
                             </div>
                           </div>
-                          <button
+                          {/* Early access: en lugar de un botón que abre
+                              Stripe, un mailto que abre el cliente de
+                              correo del usuario con asunto pre-llenado.
+                              El asunto incluye el id del equipo para que
+                              quien recibe (cesarmanzocode@) pueda
+                              identificarlo de inmediato sin pedir contexto
+                              extra. body queda vacío — el usuario decide
+                              qué escribir, no le imponemos texto. */}
+                          <a
                             className="htu-cta"
-                            onClick={() => onUpgrade(e.id)}
-                            disabled={upgrading === e.id}
-                            aria-busy={upgrading === e.id}
+                            href={
+                              "mailto:cesarmanzocode@gmail.com" +
+                              "?subject=" +
+                              encodeURIComponent(
+                                `Orux Premium — early access (${e.id})`,
+                              )
+                            }
                             title={t.hub_upgrade_title(asientosCobro)}
                           >
-                            {upgrading === e.id ? (
-                              <span className="spin" aria-hidden />
-                            ) : (
-                              <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
-                            )}
-                            {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}
-                          </button>
+                            <Mail size={13} strokeWidth={2.2} aria-hidden />
+                            {t.hub_upgrade_btn}
+                          </a>
                         </div>
                       )}
                     </div>

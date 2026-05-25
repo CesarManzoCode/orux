@@ -994,6 +994,10 @@ export function App() {
             <motion.div className="price" variants={fadeUp}>
               <div className="tier">{t.free_tier}</div>
               <h4>{t.free_h4}</h4>
+              <div className="price-num">
+                <span className="price-amount">{t.price_free_amount}</span>
+                <span className="price-period">{t.price_free_period}</span>
+              </div>
               <p className="price-sub">{t.free_sub}</p>
               <ul>{t.free.map((f) => <li key={f}>{f}</li>)}</ul>
               <a className="btn ghost full" href={APP}>{t.free_cta}</a>
@@ -1002,6 +1006,10 @@ export function App() {
               <span className="badge">{t.pro_badge}</span>
               <div className="tier">{t.pro_tier}</div>
               <h4>{t.pro_h4}</h4>
+              <div className="price-num">
+                <span className="price-amount">{t.price_pro_amount}</span>
+                <span className="price-period">{t.price_pro_period}</span>
+              </div>
               <p className="price-sub">{t.pro_sub}</p>
               <ul>{t.pro.map((f) => <li key={f}>{f}</li>)}</ul>
               <a className="btn primary full" href={APP}>{t.pro_cta} <span className="arr">→</span></a>

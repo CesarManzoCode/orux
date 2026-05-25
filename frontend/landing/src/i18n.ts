@@ -296,6 +296,15 @@ export const T = {
     s06_h_1: "Empezar es gratis.",
     s06_h_2: "Pagas cuando el equipo crece.",
     s06_sub: "Sin trial, sin tarjeta. El core completo de coordinación está en Free para siempre. Lo que se paga es escala y profundidad, no la funcionalidad básica.",
+    // Números grandes del card de pricing. Se renderizan arriba del párrafo
+    // (price-sub) para que el visitante escanee y vea el costo antes de
+    // leer el detalle. Premium hoy está en early access: el precio aparece
+    // pero el CTA del card lleva al app, donde el banner del Hub abre un
+    // mailto para activar el acceso (no hay checkout automático).
+    price_free_amount: "$0",
+    price_free_period: "para siempre · sin tarjeta",
+    price_pro_amount: "$5",
+    price_pro_period: "/ asiento / mes · beta",
     free_tier: "Free · para siempre",
     free_h4: "Para el equipo que arranca",
     free_sub: "El core completo de coordinación, no una versión recortada. Lo que se limita es escala — no la tesis.",
@@ -628,6 +637,15 @@ export const T = {
     s06_h_1: "Starting is free.",
     s06_h_2: "You pay when the team grows.",
     s06_sub: "No trial, no card. Full coordination core is in Free forever. What's paid is scale and depth, not basic functionality.",
+    // Big numbers for the pricing card. Rendered above the paragraph
+    // (price-sub) so the visitor scans the cost before reading the
+    // detail. Premium is in early access today: the price shows but
+    // the card CTA leads to the app, where the Hub banner opens a
+    // mailto to activate access (no automatic checkout).
+    price_free_amount: "$0",
+    price_free_period: "forever · no card",
+    price_pro_amount: "$5",
+    price_pro_period: "/ seat / month · beta",
     free_tier: "Free · forever",
     free_h4: "For the team starting out",
     free_sub: "The full coordination core, not a stripped version. What gets tiered is scale — not the thesis.",
