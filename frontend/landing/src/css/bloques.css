@@ -470,3 +470,99 @@
 .faq-item.open .faq-q .chev {
   box-shadow: inset 0 0 0 1px var(--steel-line);
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 36 · pulido final landing (2026-05-24)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico. Refina detalles que sólo se ven al usar la página
+   con calma. Sin cambios de marca, sin nuevos componentes.
+
+   1) FAQ open: el label gana un escalón de peso (650 → 700) — el ojo
+      confirma "este es el panel abierto" sin que el resto pierda nivel.
+   2) FAQ keyboard: al tabular hasta la pregunta, el chev se "preanuncia"
+      con el mismo tinte acero que se enciende al abrir. Afordancia
+      teclado-first.
+   3) Trust strip: las métricas se sienten más "instrumento" si el .tv
+      tiene una baseline alineada con el .tk. Padding micro-ajustado.
+   4) Pricing pro: el ::after que dibuja el contorno acero (sombra)
+      se aclara 1 punto en hover para que la card "respire" al pasar
+      por arriba (igual sensación de mod-card, sin transform — pricing
+      es un destino, no un descubrimiento).
+   5) Sticky CTA: al asomarse, el dot vivo arranca pulsando con un
+      pequeño delay para que el ojo lo capte después de la entrada.
+   6) Hero copy: el .signals border-top se siente "duro" en mobile
+      pequeño (≤480px) cuando la lista se apila — lo suavizamos con un
+      gradient horizontal sutil (mismo idioma que .sec-line).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 1) FAQ open — peso del label */
+.faq-item.open .faq-q {
+  font-weight: 700;
+}
+
+/* 2) FAQ keyboard — chev preanunciado en focus */
+.faq-q:focus-visible .chev {
+  border-color: var(--steel-line);
+  background: var(--steel-weak);
+  color: var(--ink);
+}
+
+/* 3) Trust strip — baseline más limpia */
+.trust .ti .tk {
+  /* Sube 1px para alinear con la "X" tipográfica del .tv. Cambio
+     imperceptible aislado, pero acumulado en 4 columnas se siente
+     "rejilla cuidada". */
+  padding-bottom: 2px;
+}
+
+/* 4) Pricing pro hover — respiración sin elevarse */
+.price.pro:hover {
+  /* Sin transform (no es card de descubrimiento, es destino). Solo
+     refuerzo del contorno acero. */
+  box-shadow:
+    inset 0 1px 0 var(--hair),
+    0 0 0 1px var(--steel),
+    0 22px 56px -38px rgba(0, 0, 0, 0.85);
+}
+
+/* 5) Sticky CTA — el dot arranca pulsando con leve delay */
+.sticky-cta.visible .sticky-dot {
+  animation-delay: 180ms;
+}
+
+/* 6) Hero signals — separador suave en mobile pequeño */
+@media (max-width: 480px) {
+  .signals {
+    border-top: none;
+    background-image: linear-gradient(90deg,
+      transparent, var(--line-soft) 18%, var(--line-soft) 82%, transparent);
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    background-size: 100% 1px;
+  }
+}
+
+/* 7) Nav scrolled — la sombra inferior gana presencia muy sutil cuando
+   el visitante hace scroll. Antes el `border-bottom-color: var(--line)`
+   cambiaba solo de color: poco visible sobre fondo translúcido. Sumamos
+   una sombra-hairline para que el nav se sienta "anclado". */
+.nav.scrolled {
+  box-shadow: 0 1px 0 var(--line-soft), 0 6px 18px -18px rgba(0, 0, 0, 0.55);
+}
+
+/* 8) Compare table — la fila de hover gana un realce muy sutil que
+   facilita el escaneo de filas largas. La "fila" en grid no es un
+   <tr> pero igual le hacemos un hover por toda la franja. */
+.cmp-row:hover .cmp-topic { color: var(--ink); }
+.cmp-row:hover .cmp-left { opacity: 0.92; }
+
+/* 9) Aud-card list — el dash "-" cabal a la izquierda de cada bullet
+   gana 1px de longitud al hover de la card. Detalle de "ítem listo
+   a ser leído" sin sumar peso visual. */
+.aud-card:hover li::before { width: 12px; background: var(--steel); }
+@media (prefers-reduced-motion: reduce) {
+  .aud-card li::before { transition: none; }
+}
+.aud-card li::before {
+  transition: width var(--tr), background var(--tr);
+}

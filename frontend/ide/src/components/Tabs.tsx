@@ -62,9 +62,8 @@ export function Tabs() {
             className="dot-sinmarcar"
             title={tooltipDot}
             aria-label={tooltipDot}
-          >
-            ●
-          </span>
+            role="img"
+          />
         )}
         <button
           className="tabx"

@@ -30,14 +30,15 @@
   height: 1px; background: var(--surface);
 }
 .tab .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
-/* Capa 19: dot de "sin marcar". Aviso suave, no alarma. */
-/* El componente pasa un glyph "●" como texto; lo ocultamos (font-size 0)
-   y dibujamos un punto limpio por CSS — el círculo no depende del render
-   del glyph en cada fuente. */
+/* Capa 19: dot de "sin marcar". Aviso suave, no alarma.
+   El componente renderiza un <span/> vacío (sin glyph) que el CSS pinta
+   como dot ámbar — el círculo es geometría pura, no depende del render
+   del carácter en cada fuente. role="img" + aria-label en el JSX llevan
+   el significado a lectores de pantalla. */
 .tab .dot-sinmarcar {
+  display: inline-block;
   width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
-  flex-shrink: 0; cursor: default; font-size: 0; overflow: hidden;
-  align-self: center;
+  flex-shrink: 0; cursor: default; align-self: center;
 }
 .tab .tabx {
   border: none; background: transparent; color: var(--faint);

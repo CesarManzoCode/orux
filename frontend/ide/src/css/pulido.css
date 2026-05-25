@@ -787,3 +787,179 @@
     animation: none !important;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 36 · pulido final sistémico (2026-05-24)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo, quirúrgico, sin features. Atiende cinco puntos de refinamiento
+   que sólo se notan cuando el producto se usa de verdad:
+
+   1) TopBar — dividers como GUÍAS, no como reja (misma filosofía que ya
+      aplica al ContextBar/StatusBar). En pantallas medianas, los
+      divisores no críticos (.tb-div-low) se esconden para que el ojo
+      agrupe por gap, no por hairlines.
+   2) Spinner reusable — `.spin` vivía scoped a `.login-card`; lo hacemos
+      sistémico para reusarse en hub, inspector y cualquier botón busy
+      sin re-declarar. Tinta = currentColor → toma el color del padre,
+      cae bien sobre cualquier botón.
+   3) Login segmented — el `lg-tab.activo` se distinguía sólo por
+      background; el focus visible (anillo del sistema) lo cubría con su
+      box-shadow y se "tragaba" la pestaña activa al tabular. Sumamos
+      una luz acento sobre el activo que sobrevive al ring.
+   4) Tabs close (.tabx) — el focus visible quedaba un poco tímido; al
+      tabular el ojo no veía claro qué iba a accionar. Refuerzo del
+      contraste sin cambiar el lenguaje (sigue siendo "destructivo en
+      foco" — color bad + bg bad).
+   5) Hub head — en breakpoints intermedios el `hub-me` se aprieta. Ajuste
+      del gap interno y del wrap para que el avatar/identidad/lang/salir
+      no choquen entre 700-900px (antes saltaban a la siguiente línea
+      con espacios raros).
+
+   Regla: no tocar el bloque sagrado del editor, ni tokens raíz. Solo
+   refinar la apariencia y el comportamiento.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) TopBar — dividers guía, no reja ──────────────────────────────
+   Misma opacidad que `.ctx-div` y `.statusbar .sb-div` (ambos 0.5).
+   La regla `.tb-div-low` reproduce el patrón de StatusBar: a ≤1080px
+   los divisores menores se ocultan y el ojo lee los grupos por su
+   gap natural. Los críticos (los que separan zonas funcionales:
+   peers ↔ repo ↔ identidad) se conservan. */
+.topbar .tb-div {
+  opacity: 0.55;
+}
+@media (max-width: 1080px) {
+  .topbar .tb-div-low { display: none; }
+  /* En este tramo el LangToggle y el botón del inspector quedan pegados
+     al cluster de identidad — el gap los separa visualmente sin que se
+     sienta un cambio brusco. */
+  .topbar { gap: 0.62rem; }
+}
+
+/* ── 2) Spinner reusable ────────────────────────────────────────────
+   `.spin` toma el color del padre (currentColor) para encajar en
+   cualquier botón (primario steel-ink, secundario text, etc.). El
+   tamaño base es 13px; la regla scoped vieja de `.login-card .spin`
+   sigue funcionando (tiene mayor especificidad por el padre). */
+.spin {
+  display: inline-block;
+  width: 13px; height: 13px; border-radius: 50%;
+  flex: none; vertical-align: -2px;
+  border: 2px solid color-mix(in srgb, currentColor 32%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    /* Sin spin: el círculo sólido con borde simboliza "ocupado" sin
+       movimiento — preserva la afordancia para quien apaga animaciones. */
+    animation: none;
+    border-color: color-mix(in srgb, currentColor 50%, transparent);
+  }
+}
+
+/* ── 3) Login segmented — activo sobrevive al focus ring ────────────
+   La tab activa lleva un filo accent SUPERIOR (ya definido en acceso.css
+   con ::before). Sumamos un anillo interno sutil que persiste con o sin
+   focus — el ojo ubica "estoy aquí" sin depender del color de fondo. */
+.landing .lg-tab.activo {
+  /* Mantiene la regla existente; añade el anillo interno acero. */
+  box-shadow:
+    inset 0 1px 0 var(--hl),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.landing .lg-tab:focus-visible {
+  /* El ring del sistema sale del padding propio; lo dejamos sobrevivir
+     y reforzamos con el inset del activo cuando coincide. */
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 var(--hl),
+    inset 0 0 0 1px var(--accent),
+    var(--ring);
+}
+
+/* ── 4) Tabs close — focus más nítido ───────────────────────────────
+   Al tabular hasta el close, el ícono X debe pop sin gritar — el ring
+   del sistema ya pinta el halo; añadimos color "bad" + bg "bad" para
+   que el reflejo sea inmediato: "esto va a cerrar". */
+.tab .tabx:focus-visible {
+  color: var(--bad);
+  background: var(--bad-bg);
+  opacity: 1;
+}
+
+/* ── 5) Hub head — breakpoints intermedios ──────────────────────────
+   En 700-900px (tablet vertical y phones grandes) el header de 3
+   columnas se aprieta. Subimos el gap interno del cluster .hub-me y
+   permitimos que el botón salir caiga a una segunda línea sin
+   chocar con el avatar+nombre+lang. El header sigue siendo 1 fila en
+   desktop ≥900px. */
+@media (max-width: 900px) {
+  .hub-me {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 5px 8px 5px 6px;
+  }
+  .hub-me-meta {
+    /* Limita el ancho del cluster nombre+code para que el lang toggle
+       y el salir tengan sitio sin caerse a otra línea. */
+    max-width: 14ch;
+  }
+}
+
+/* ── 6) Salir/invitar — coherencia táctil ───────────────────────────
+   El hover sube 1px y suma shadow-sm (ya pulido CAPA 34). Refinamos
+   el press para que el "down" se sienta — antes el botón quedaba
+   suspendido sin retorno. */
+.salir:active, .invitar:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+/* ── 7) Field placeholders — coherencia ────────────────────────────
+   Los inputs del Hub usan .hub-row input con sus propios estilos. La
+   regla global `.field::placeholder` no aplica ahí. Unificamos:
+   placeholders del Hub siguen el mismo tono --faint y peso 500 (no
+   600, el placeholder no es "etiqueta", es "ayuda"). */
+.hub-row input::placeholder {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+/* ── 8) Buttons disabled cursor ─────────────────────────────────────
+   .btn:disabled usa cursor:default (regla base). En contextos de
+   "esperando respuesta" (.in-act primario aria-busy, .htu-cta busy)
+   el cursor "progress" comunica mejor que el "default" inerte. */
+.in-act[aria-busy="true"],
+.htu-cta:disabled {
+  cursor: progress;
+}
+
+/* ── 9) Scrollbar del file-tree y del scroll del Inspector ─────────
+   La regla global ya cubre todas las áreas con un thumb fino. Aquí
+   sólo refinamos el HOVER del thumb dentro del sidebar (que es el
+   área con scroll más frecuente y se ve sobre superficies más
+   oscuras): un punto más de contraste para que el "agarrarlo con el
+   mouse" sea más afordante. */
+.sidebar::-webkit-scrollbar-thumb:hover,
+.in-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-2);
+}
+
+/* ── 10) Inspector hero owner — peso del nombre ────────────────────
+   El owner del archivo (in-hero-owner) lleva fontweight 600. Cuando el
+   nombre es largo y el badge de riesgo aparece a la derecha, el ojo se
+   pierde entre "owner" y "riesgo". Refuerzo: el NOMBRE del owner gana
+   un escalón de tinta para ser el ancla — la palabra "de" o "tuyo"
+   se queda en tinta secundaria. */
+.in-hero-owner b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ── 11) Landing FAQ — estado activo del label ─────────────────────
+   La pregunta abierta vira a color --ink (ya pulido). Añadimos un peso
+   sutilmente mayor en el activo: el ojo confirma "este es el panel
+   abierto" sin que el resto de las preguntas pierdan jerarquía. */
+/* Se aplica en landing/css/bloques.css — esta nota queda como ancla. */

@@ -117,8 +117,13 @@ export function TopBar({
 
       {visibles.length > 0 && (
         <>
-          <span className="tb-div" />
-          <span className="peers" title={otros.map((p) => p.name).join(", ")}>
+          <span className="tb-div" aria-hidden />
+          <span
+            className="peers"
+            role="group"
+            aria-label={otros.map((p) => p.name).join(", ")}
+            title={otros.map((p) => p.name).join(", ")}
+          >
             {visibles.map((p) => {
               // "Aquí conmigo" marca al peer que está EN el archivo abierto:
               // un anillo de acento alrededor del avatar. Cero datos
@@ -165,7 +170,7 @@ export function TopBar({
               {g.changes === 0 ? t.tb_clean : g.changes + "Δ"}
             </span>
           </div>
-          <span className="tb-div" />
+          <span className="tb-div" aria-hidden />
         </>
       )}
 
@@ -192,7 +197,7 @@ export function TopBar({
         >{ETIQUETA[s.conn] ?? ETIQUETA.conectando}</span>
       </div>
 
-      <span className="tb-div" />
+      <span className="tb-div" aria-hidden />
 
       <div className="tb-grp">
         {s.yo && (
@@ -206,12 +211,16 @@ export function TopBar({
         )}
       </div>
 
-      <span className="tb-div" />
+      {/* Divisor menor: separa identidad del chrome (idioma + inspector).
+          Marcado .tb-div-low → CSS lo esconde <=1080px (mismo patrón que
+          .sb-div-low en StatusBar): el ojo agrupa por gap a partir de ahí,
+          el divisor sólo aparece cuando hay sitio real para respetarlo. */}
+      <span className="tb-div tb-div-low" aria-hidden />
       <div className="tb-grp">
         <LangToggle />
       </div>
 
-      <span className="tb-div" />
+      <span className="tb-div tb-div-low" aria-hidden />
       <div className="tb-grp">
         <button
           className={"tb-insp" + (inspOpen ? " activo" : "")}

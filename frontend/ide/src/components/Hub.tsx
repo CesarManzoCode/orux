@@ -323,9 +323,14 @@ export function Hub() {
                             className="htu-cta"
                             onClick={() => onUpgrade(e.id)}
                             disabled={upgrading === e.id}
+                            aria-busy={upgrading === e.id}
                             title={t.hub_upgrade_title(asientosCobro)}
                           >
-                            <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
+                            {upgrading === e.id ? (
+                              <span className="spin" aria-hidden />
+                            ) : (
+                              <ArrowUpCircle size={13} strokeWidth={2.2} aria-hidden />
+                            )}
                             {upgrading === e.id ? t.hub_upgrade_busy : t.hub_upgrade_btn}
                           </button>
                         </div>
@@ -476,8 +481,10 @@ export function Hub() {
                   <button
                     className="primario"
                     disabled={!nombre.trim() || creando}
+                    aria-busy={creando}
                     onClick={onCrear}
                   >
+                    {creando && <span className="spin" aria-hidden />}
                     {creando ? t.hub_create_busy : t.hub_create_btn}
                   </button>
                 </div>
@@ -524,8 +531,10 @@ export function Hub() {
                   <button
                     className="secundario"
                     disabled={!code.trim() || uniendo}
+                    aria-busy={uniendo}
                     onClick={onUnirse}
                   >
+                    {uniendo && <span className="spin" aria-hidden />}
                     {uniendo ? t.hub_join_busy : t.hub_join_btn}
                   </button>
                 </div>
