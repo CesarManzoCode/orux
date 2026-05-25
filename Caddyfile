@@ -10,9 +10,16 @@
 	# suyas. nosniff corta el MIME-sniffing, SAMEORIGIN permite que la
 	# landing embeba el demo del IDE (orux.space → orux.space/app?demo=1)
 	# sin abrir a terceros (clickjacking sigue bloqueado), HSTS fuerza HTTPS,
-	# y se quita el banner Server. Sin CSP a propósito: una CSP mal puesta
-	# rompe el SPA y no se puede verificar desde acá — eso queda para una
-	# pasada con el navegador.
+	# y se quita el banner Server.
+	#
+	# CSP (BACKEND-AUDIT M-03 fix): por-ruta abajo en cada `handle`. Antes
+	# se omitía deliberadamente "porque rompía el SPA"; la encarnación
+	# acotada aprovecha que (a) la IDE no tiene `<script>` inline, (b)
+	# landing y admin sí (LD+JSON, vanilla), así que el IDE — la pieza más
+	# compleja y golosa para XSS — recibe `script-src 'self'` puro mientras
+	# que landing/admin se quedan con `'unsafe-inline'` en scripts. Styles
+	# inline son inevitables (framer-motion, el `<style>` chico de body bg)
+	# así que `style-src` lleva `'unsafe-inline'` en todos los casos.
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options SAMEORIGIN
@@ -45,6 +52,11 @@
 	# Dockerfile.web la copia a /srv/admin/index.html.
 	@admin path /admin /admin/*
 	handle @admin {
+		# CSP: admin.html es vanilla con `<script>` y `<style>` inline;
+		# permitimos 'unsafe-inline' para los dos. Aún así bloqueamos
+		# carga de scripts/CSS/iframes de orígenes externos (la defensa
+		# que importa contra una inyección que importe un script remoto).
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
 		root * /srv
 		rewrite * /admin/index.html
 		file_server
@@ -55,6 +67,16 @@
 	# Cualquier /app/* sin archivo -> el index del SPA.
 	@app path /app /app/*
 	handle @app {
+		# CSP estricta: el SPA NO tiene `<script>` inline (Vite emite
+		# scripts externos) — `script-src 'self'` puro. El `<style>`
+		# inline chico de body bg + los inline styles que inyecta
+		# framer-motion en runtime requieren `'unsafe-inline'` en styles.
+		# Google Fonts: la stylesheet viene de fonts.googleapis.com y los
+		# .woff2 de fonts.gstatic.com. `connect-src 'self'` permite el
+		# WebSocket en /ws (mismo origen, distinto scheme — los browsers
+		# lo aceptan bajo 'self'). `frame-ancestors 'self'` deja que la
+		# landing embeba el IDE en el demo (mismo origen).
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		root * /srv
 		try_files {path} /app/index.html
 		file_server
@@ -64,6 +86,11 @@
 	# estática en /srv/index.html. try_files -> /index.html: un path
 	# suelto muestra la landing en vez de un 404 feo (no hay routing acá).
 	handle {
+		# CSP: la landing tiene `<script type="application/ld+json">`
+		# (SEO estructurado) y un `<script>` de detección de idioma
+		# tempranero — ambos inline. `'unsafe-inline'` en scripts es el
+		# trade-off. Lo demás sigue cerrado contra carga remota.
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
 		root * /srv
 		try_files {path} /index.html
 		file_server
