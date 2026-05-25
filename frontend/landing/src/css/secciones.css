@@ -106,14 +106,39 @@
   box-shadow: inset 0 1px 0 var(--hair);
   overflow: hidden;
 }
-.fn { padding: 34px 32px; position: relative; }
+.fn { padding: 34px 32px; position: relative;
+  /* Hover táctil unificado con .mod/.aud-card/.price.free: las tres "fases"
+     del flujo son visualmente lecturas, pero el visitante recorre con el
+     mouse y el ojo espera respuesta. Sin hover el bloque se sentía
+     "imagen pegada en página", asimétrico con el resto de cards-instrumento.
+     El acero del filo lateral encarna la dirección de arte (la fase está
+     "encendida" cuando la mirás); la línea decorativa del .fn-n se asienta
+     a steel en hover (refuerzo sin transform → respeta la grilla del flow). */
+  transition: background var(--tr), box-shadow var(--tr);
+}
+.fn::before {
+  /* Filo izquierdo acero — vive en reposo como hairline transparente, gana
+     presencia al hover. Posición ABSOLUTE sin layout-shift; misma fórmula
+     que .sec-card:hover. En la primera fase (.fn:first-child) la línea de
+     borde-izq del .fn + .fn no aplica, por lo que el filo se asienta solo. */
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: transparent;
+  transition: background var(--tr);
+}
+.fn:hover { background: rgba(255, 255, 255, 0.012); }
+.fn:hover::before { background: var(--steel-line); }
+.fn:hover .fn-n::after { background: var(--steel-line); }
 .fn + .fn { border-left: 1px solid var(--line-soft); }
 .fn-n {
   font-family: var(--font-mono); font-size: 10.5px; color: var(--steel);
   letter-spacing: 0.08em; margin-bottom: 18px;
   display: inline-flex; align-items: center; gap: 11px;
 }
-.fn-n::after { content: ""; width: 30px; height: 1px; background: var(--line); }
+.fn-n::after {
+  content: ""; width: 30px; height: 1px; background: var(--line);
+  transition: background var(--tr);
+}
 .fn h3 { font-size: 16.5px; color: var(--ink); letter-spacing: -0.012em; margin-bottom: 9px; }
 .fn p { font-size: 14px; color: var(--ink-2); line-height: 1.64; }
 .fn .chip {
@@ -403,22 +428,30 @@ footer .wrap { display: flex; justify-content: space-between; gap: 28px; flex-wr
   }
 }
 
-/* ── Selector de idioma (landing) ── */
+/* ── Selector de idioma (landing) ──
+   Segmented control de dos pasos. Refinado 2026-05-25: el inactivo pasaba
+   de rgba(255,255,255,.35) → blend ~3.4:1 sobre el bg de la nav (apenas
+   AA grande), ahora .48 → ~4.3:1 (AA cómodo). El container gana un hairline
+   `--line-soft` real (los tokens del producto, no rgba sueltos) para que
+   se sienta de la misma familia que `.nav` / `.eyebrow` y no como CSS
+   foráneo cargado del editor. */
 .lnd-lang {
   display: inline-flex; align-items: center; gap: 1px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
   border-radius: 100px; padding: 2px 4px;
+  box-shadow: inset 0 1px 0 var(--hair);
 }
 .lnd-lang button {
   font: 700 10px/1 ui-monospace, monospace;
   text-transform: uppercase; letter-spacing: .06em;
-  color: rgba(255,255,255,.35); padding: 3px 6px;
+  color: var(--mut); padding: 3px 7px;
+  border: 0;
   border-radius: 100px; cursor: pointer;
   background: transparent;
   transition: background var(--tr), color var(--tr);
 }
-.lnd-lang button:hover { color: rgba(255,255,255,.7); }
+.lnd-lang button:hover { color: var(--ink-2); }
 .lnd-lang button.ll-active {
   background: var(--steel-weak);
   color: var(--steel-ink);
