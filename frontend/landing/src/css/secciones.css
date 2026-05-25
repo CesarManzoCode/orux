@@ -128,7 +128,28 @@
  * padding interno también baja un poco la densidad: el ojo necesita
  * respirar cuando cada fila es una negación sobria.
  * ───────────────────────────────────────────────────────────────────── */
-.nots { margin-top: clamp(40px, 5vw, 52px); display: grid; gap: 12px; max-width: 800px; }
+/* 2 columnas auto-fit en desktop, 1 columna en mobile. Antes era max-
+   width 800px en 1 columna: la mitad derecha del wrap (1240px) quedaba
+   vacía y plana, sobre todo en monitores anchos donde el contraste
+   "título enorme · columna negra a la derecha" se notaba. Auto-fit con
+   minmax(min(100%, 320px), 1fr) colapsa solo a 1 col cuando cada ítem
+   se vuelve demasiado angosto (~640px de viewport). */
+.nots {
+  margin-top: clamp(40px, 5vw, 52px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+  max-width: 1100px;
+}
+/* Si la cuadrícula queda con un ítem solo en la última fila (caso de
+   listas impares, p.ej. los 5 límites honestos), lo expandimos a las 2
+   columnas. Sin esto el quinto quedaba huérfano en la columna izquierda
+   y el ojo lo leía como "items que sobraron", no como cierre de la
+   lista. La regla solo dispara cuando ese último también es :nth-child
+   odd (i.e. realmente queda solo); con 4 ítems no aplica. */
+.nots > .not:nth-last-child(1):nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .not {
   display: flex; gap: 16px; align-items: center;
   font-size: clamp(14.5px, 1.6vw, 16.5px); color: var(--ink-2);
