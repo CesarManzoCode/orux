@@ -690,6 +690,15 @@ export async function iniciarCheckout(teamId: string): Promise<string | null> {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) return data.error || "HTTP " + r.status;
     if (typeof data.url === "string" && data.url) {
+      // BACKEND-AUDIT M-05: la URL viene del server tras consultar a
+      // Stripe — pero cualquier bug intermedio (config de _PUBLIC_URL
+      // ya filtrado el callback, response manipulada por un proxy,
+      // futuro cambio que devuelva la URL del request en vez de la de
+      // Stripe) terminaría haciendo phishing. Validamos el dominio
+      // explícito antes de navegar; si no matchea, devolvemos error.
+      if (!/^https:\/\/(checkout|buy)\.stripe\.com\//.test(data.url)) {
+        return "URL de pago inesperada (no es Stripe)";
+      }
       window.location.href = data.url;  // a la página de pago de Stripe
       return null;
     }
