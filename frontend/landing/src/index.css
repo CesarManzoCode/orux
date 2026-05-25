@@ -136,7 +136,10 @@
  * ────────────────────────────────────────────────────────────────────── */
 .hero-demo-stack {
   display: grid;
-  gap: clamp(22px, 2.4vw, 36px);
+  /* Gap chico: el visitante debe SENTIR que los dos iframes son la misma
+     escena en dos vistas. Un gap grande los hace parecer "secciones
+     independientes". Antes 22-36px era demasiado espacio. */
+  gap: clamp(8px, 1vw, 14px);
   /* Heredamos la expansión del .hero-demo histórico. Ambos paneles se
      extienden por igual hacia el borde derecho del viewport. */
   --extra-right: clamp(0px, calc((100vw - 1240px) / 2), 120px);
@@ -148,37 +151,42 @@
 .hero-demo-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Gap chico entre label e iframe — el label es una etiqueta de la
+     escena, no una sección aparte. */
+  gap: 6px;
 }
 .hero-demo-label {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 4px;
+  gap: 9px;
+  padding: 0 2px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-2);
 }
 .hdl-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
 }
 /* Dentro del stack, el .hero-demo NO repite la expansión (la heredó del
-   padre), y el aspect-ratio baja a 16:9 para acomodar dos iframes sin
-   reventar la altura del hero. Especificidad 0,2,0 > 0,1,0 (ganamos sin
-   !important). */
+   padre). El aspect-ratio baja a 16:8 (2:1) — más cinematográfico — para
+   que los DOS iframes juntos quepan dentro del fold sin que el segundo
+   quede cortado por el borde inferior. El IDE escalado deja una franja
+   chica a los lados (el fondo de .hero-demo es negro coordinado, queda
+   invisible). Trade-off consciente: prefieren ver los DOS iframes que un
+   solo iframe gigante. */
 .hero-demo-panel .hero-demo {
   --extra-right: 0px;
   --extra-left: 0px;
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-  aspect-ratio: 16 / 9;
-  min-height: 280px;
+  aspect-ratio: 16 / 8;
+  min-height: 240px;
 }
 /* Skeleton de fallback para la vista ANA: caja sobria mientras carga el
    iframe. Sin animación shimmer — el iframe carga en <1s y el shimmer
@@ -201,11 +209,11 @@
 }
 @media (max-width: 600px) {
   .hero-demo-panel .hero-demo {
-    aspect-ratio: 16 / 11;
-    min-height: 240px;
+    aspect-ratio: 16 / 10;
+    min-height: 220px;
   }
   .hero-demo-label {
-    font-size: 10.5px;
+    font-size: 10px;
     letter-spacing: 0.10em;
   }
 }

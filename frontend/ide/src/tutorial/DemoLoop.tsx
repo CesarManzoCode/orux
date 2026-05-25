@@ -33,7 +33,16 @@ import {
   mockTuEntra, mockTuSale, mockEditarDraft, mockAplicarPropuestaDeAna,
 } from "./mock";
 
-const TOTAL_MS = 50000;
+// Factor global de velocidad del demo. > 1 = más lento, más legible.
+// Originalmente el demo corría a velocidad nativa (50s/ciclo) y un visitante
+// nuevo no alcanzaba a leer los toasts ni a registrar los hitos antes de
+// que el siguiente evento los reemplazara. Subimos a 1.4 (70s/ciclo) para
+// dar tiempo de lectura sin perder el ritmo cinematográfico. Todos los
+// `programar(ms, ...)`, `resaltarTarget(_, ms, ...)` y la duración del
+// click visual aplican este factor automáticamente.
+const SPEED_FACTOR = 1.4;
+const RAW_TOTAL_MS = 50000;
+const TOTAL_MS = Math.round(RAW_TOTAL_MS * SPEED_FACTOR);
 
 type Tono = "info" | "ok" | "warn";
 
@@ -78,7 +87,7 @@ function resaltarTarget(selector: string, ms: number, tono: Tono2 = "fuerte"): v
   clases.forEach((c) => el.classList.add(c));
   window.setTimeout(() => {
     clases.forEach((c) => el.classList.remove(c));
-  }, ms);
+  }, Math.round(ms * SPEED_FACTOR));
 }
 
 interface CursorPos { x: number; y: number; visible: boolean; }
@@ -139,7 +148,7 @@ export function DemoLoop() {
 
     function clickear(): void {
       setClicking(true);
-      window.setTimeout(() => setClicking(false), 700);
+      window.setTimeout(() => setClicking(false), Math.round(700 * SPEED_FACTOR));
     }
 
     function arrancarCiclo(): void {
@@ -167,7 +176,11 @@ export function DemoLoop() {
         fn: () => void,
         opts: { soloEstado?: boolean } = {},
       ): void {
-        const delay = (cicloStart + ms) - Date.now();
+        // Aplicar SPEED_FACTOR al timestamp del evento. Los guiones siguen
+        // usando los tiempos "lógicos" (0, 2500, 7800…) y el factor hace
+        // el resto — cambiar el ritmo del demo es modificar una constante.
+        const adjustedMs = Math.round(ms * SPEED_FACTOR);
+        const delay = (cicloStart + adjustedMs) - Date.now();
         if (delay < 0) {
           if (opts.soloEstado) {
             try { fn(); } catch { /* silenciar */ }
@@ -189,8 +202,10 @@ export function DemoLoop() {
       // Próximo ciclo: alineado al siguiente epoch absoluto. Aunque este
       // ciclo haya driftado por ms, el próximo se ancla al múltiplo de
       // TOTAL_MS — los dos iframes nunca se desfasan más allá del jitter
-      // de un solo setTimeout.
-      programar(TOTAL_MS, () => arrancarCiclo());
+      // de un solo setTimeout. Pasamos RAW_TOTAL_MS porque `programar` ya
+      // multiplica por SPEED_FACTOR internamente; pasar TOTAL_MS (que ya
+      // viene escalado) duplicaría el escalado.
+      programar(RAW_TOTAL_MS, () => arrancarCiclo());
     }
 
     // ──────────────────────────────────────────────────────────────────
