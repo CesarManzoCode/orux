@@ -729,27 +729,14 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
           >
-            {/* Dos iframes apilados verticalmente: la MISMA narrativa contada
-                desde dos lados. Arriba el dueño que aprueba; abajo Ana que
-                edita y propone. Los IDs `?p=tu|ana` se leen en main.tsx del
-                IDE, los guiones se sincronizan por epoch absoluto en
-                DemoLoop.tsx — no hay postMessage. */}
-            <div className="hero-demo-stack" aria-label={t.stage_cap_aria}>
-              <div className="hero-demo-panel">
-                <div className="hero-demo-label">
-                  <span className="hdl-dot" style={{ background: "#43b98a" }} aria-hidden />
-                  <span>{t.demo_panel_tu}</span>
-                </div>
-                <DemoFrame persona="tu" lang={lang} t={t} />
-              </div>
-              <div className="hero-demo-panel">
-                <div className="hero-demo-label">
-                  <span className="hdl-dot" style={{ background: "#62a8f0" }} aria-hidden />
-                  <span>{t.demo_panel_ana}</span>
-                </div>
-                <DemoFrame persona="ana" lang={lang} t={t} />
-              </div>
-            </div>
+            {/* Un solo iframe del IDE real (vista del dueño). El guión que
+                corre adentro está en DemoLoop.tsx: 35s/ciclo, 6 beats
+                narrados con stepper visible. Antes había DOS iframes
+                apilados (TU + ANA) — el visitante no alcanzaba a seguir dos
+                narrativas en paralelo y el scale por panel quedaba a 0.4×
+                (texto ilegible). Una sola escena, grande y legible, vende
+                más. */}
+            <DemoFrame persona="tu" lang={lang} t={t} />
             <p className="stage-cap">
               <span className="dotg" aria-hidden /> {t.demo_panel_caption}
             </p>

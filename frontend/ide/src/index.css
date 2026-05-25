@@ -135,23 +135,28 @@
   animation: demo-row-in 660ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Pildora "Demo · fase actual" — fija en bottom-center. Tres razones:
+/* Stepper "Paso N/6 — fase actual" — fijo en top-left. Reemplazó al
+   antiguo .demo-badge bottom-center. Tres razones para esta vuelta:
    1) Honestidad: comunica que esto es una demo automática, no usuarios
-      reales con vidas reales. Evita el "mockup engañoso".
-   2) Contexto: el visitante entiende qué está mirando sin descifrar
-      signals dispersos del IDE.
-   3) Pacing: el cross-fade del texto da feedback de avance del bucle. */
-.demo-badge {
+      reales con vidas reales.
+   2) Progreso visible: los dots (●●●○○○) le dicen al visitante "estás a
+      la mitad". Sin esa pista, el ciclo de 35s se siente eterno y
+      cualquiera scrollea antes de que cierre el flujo.
+   3) Contexto: el texto del beat le dice QUÉ está mirando.
+   Top-left (no bottom-center) porque el Inspector del IDE ya tiene
+   actividad en la derecha y los toasts caen abajo-centro — el stepper
+   en bottom competía con los toasts. Arriba-izquierda no pisa nada del
+   IDE real. */
+.demo-stepper {
   position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 18px;
+  left: 18px;
   z-index: 10000;
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 9px 18px;
-  max-width: calc(100vw - 32px);
+  padding: 9px 14px;
+  max-width: calc(100vw - 36px);
   background: rgba(8, 9, 11, 0.78);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   backdrop-filter: blur(14px) saturate(140%);
@@ -168,38 +173,90 @@
   user-select: none;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   animation: demo-row-in 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.demo-badge-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #43b98a;
-  box-shadow: 0 0 8px #43b98a;
-  animation: demo-dot-pulse 2.2s ease-in-out infinite;
-  flex: 0 0 auto;
-}
-@keyframes demo-dot-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px #43b98a; }
-  50%      { opacity: 0.55; box-shadow: 0 0 14px #43b98a; }
-}
-.demo-badge-l {
+.demo-stepper-label {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.5);
   text-transform: lowercase;
   letter-spacing: 0.04em;
 }
-.demo-badge-sep {
+.demo-stepper-sep {
   color: rgba(255, 255, 255, 0.22);
 }
-.demo-badge-r {
+.demo-stepper-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* Dot individual: vacío por default. .is-filled = relleno (pasado o
+   actual). .is-active = actual; pulsa según el tono. */
+.demo-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.32);
+  transition: background 240ms ease-out, box-shadow 240ms ease-out;
+}
+.demo-step-dot.is-filled {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.7);
+}
+.demo-step-dot.is-active.is-info {
+  background: #43b98a;
+  box-shadow: 0 0 8px #43b98a, inset 0 0 0 1.4px #43b98a;
+  animation: demo-dot-pulse 2.2s ease-in-out infinite;
+}
+.demo-step-dot.is-active.is-ok {
+  background: #6ec48a;
+  box-shadow: 0 0 8px #6ec48a, inset 0 0 0 1.4px #6ec48a;
+  animation: demo-dot-pulse 2.2s ease-in-out infinite;
+}
+.demo-step-dot.is-active.is-warn {
+  background: #f0b860;
+  box-shadow: 0 0 8px #f0b860, inset 0 0 0 1.4px #f0b860;
+  animation: demo-dot-pulse-warn 2.2s ease-in-out infinite;
+}
+@keyframes demo-dot-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px #43b98a, inset 0 0 0 1.4px #43b98a; }
+  50%      { opacity: 0.55; box-shadow: 0 0 14px #43b98a, inset 0 0 0 1.4px #43b98a; }
+}
+@keyframes demo-dot-pulse-warn {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px #f0b860, inset 0 0 0 1.4px #f0b860; }
+  50%      { opacity: 0.55; box-shadow: 0 0 14px #f0b860, inset 0 0 0 1.4px #f0b860; }
+}
+.demo-stepper-count {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.72);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.demo-stepper-text {
   color: rgba(255, 255, 255, 0.92);
   font-weight: 500;
+  /* key={paso.texto} en el JSX hace que React re-mount el span al
+     cambiar el texto → la animación se re-dispara como cross-fade. */
   animation: demo-row-in 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.demo-badge-r.tone-warn { color: #f0b860; }
-.demo-badge-r.tone-ok   { color: #6ec48a; }
+.demo-stepper-text.tone-warn { color: #f0b860; }
+.demo-stepper-text.tone-ok   { color: #6ec48a; }
+
+@media (max-width: 720px) {
+  .demo-stepper {
+    /* En mobile el stepper se va arriba-centro y pierde el contador para
+       caber sin scroll horizontal. */
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 7px 12px;
+    font-size: 11px;
+    gap: 7px;
+  }
+  .demo-stepper-count { display: none; }
+  .demo-stepper-sep:last-of-type { display: none; }
+}
 
 /* Cursor del visitante (demo). Distinto a los cursores de peers reales:
    los peers usan badge circular con inicial en el sidebar y rayas con

@@ -123,95 +123,12 @@
   }
 }
 
-/* ── Stack de dos iframes (perspectivas TU y ANA) ──────────────────────────
- * El visitante ve el MISMO flujo desde dos lados: arriba el dueño que
- * aprueba, abajo Ana que edita y propone. La expansión hacia el viewport
- * (que el .hero-demo individual ya conocía) se mueve al .hero-demo-stack
- * para que ambos iframes la hereden y el ancho efectivo sea coherente.
- *
- * Cada panel del stack tiene un label encima con un dot del color del
- * actor (verde acero para TU, azul para Ana), porque sin label el visitante
- * no sabe quién es cada uno. Aspect-ratio 16:9 (vs el 16:10 del solo
- * iframe) para que los DOS juntos no exploten la altura del hero.
- * ────────────────────────────────────────────────────────────────────── */
-.hero-demo-stack {
-  display: grid;
-  /* Gap chico: el visitante debe SENTIR que los dos iframes son la misma
-     escena en dos vistas. Un gap grande los hace parecer "secciones
-     independientes". */
-  gap: clamp(8px, 1vw, 14px);
-  /* SIN expansión hacia el viewport: con dos iframes apilados, sangrarse
-     hacia el borde derecho recortaba visualmente la columna del Inspector
-     en monitores anchos. El stack respeta el ancho del wrap del hero — el
-     IDE se ve completo en su slot, sin desbordar. */
-  width: 100%;
-}
-.hero-demo-panel {
-  display: flex;
-  flex-direction: column;
-  /* Gap chico entre label e iframe — el label es una etiqueta de la
-     escena, no una sección aparte. */
-  gap: 6px;
-}
-.hero-demo-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 2px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-.hdl-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
-}
-/* Dentro del stack, el .hero-demo NO repite la expansión (la heredó del
-   padre). El aspect-ratio baja a 16:8 (2:1) — más cinematográfico — para
-   que los DOS iframes juntos quepan dentro del fold sin que el segundo
-   quede cortado por el borde inferior. El IDE escalado deja una franja
-   chica a los lados (el fondo de .hero-demo es negro coordinado, queda
-   invisible). Trade-off consciente: prefieren ver los DOS iframes que un
-   solo iframe gigante. */
-.hero-demo-panel .hero-demo {
-  --extra-right: 0px;
-  --extra-left: 0px;
-  width: 100%;
-  margin-left: 0;
-  margin-right: 0;
-  aspect-ratio: 16 / 8;
-  min-height: 240px;
-}
-/* Skeleton de fallback para la vista ANA: caja sobria mientras carga el
-   iframe. Sin animación shimmer — el iframe carga en <1s y el shimmer
-   sería ruido. */
+/* Skeleton de fallback para vistas que no son TU (?p=ana o cualquier
+   otra): caja sobria mientras carga el iframe, sin animación shimmer.
+   Hoy el hero monta una sola vista (TU) cuyo fallback es <Stage/>, así
+   que esto sólo aplica si DemoFrame se reusa con otra persona. */
 .hero-demo-skel {
   background:
     linear-gradient(180deg, #0a0c10 0%, #0c0e13 100%),
     radial-gradient(40% 40% at 50% 50%, rgba(98, 168, 240, 0.05), transparent 70%);
-}
-
-@media (max-width: 1080px) {
-  .hero-demo-stack {
-    --extra-right: 0px;
-    --extra-left: 0px;
-    width: 100%;
-    max-width: 900px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
-@media (max-width: 600px) {
-  .hero-demo-panel .hero-demo {
-    aspect-ratio: 16 / 10;
-    min-height: 220px;
-  }
-  .hero-demo-label {
-    font-size: 10px;
-    letter-spacing: 0.10em;
-  }
 }

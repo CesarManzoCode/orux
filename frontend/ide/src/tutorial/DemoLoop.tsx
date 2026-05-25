@@ -1,28 +1,26 @@
 // Demo cinemático del IDE para la landing. Corre el flujo del tutorial en
 // bucle infinito mutando el store real con las funciones de mock. Encima
 // renderiza un cursor simulado, halos sobre los targets antes de cada click,
-// y un badge "Demo · fase actual" abajo del centro.
+// y un stepper "Paso N/6 — fase actual" arriba-izquierda.
 //
-// DOS PERSPECTIVAS:
+// ÚNICA PERSPECTIVA (TU = dueño):
+//   Tomás soy yo. Soy dueño de tests/ y models/. Ana se conecta a MI
+//   archivo (procesar_pago.py), lo edita y me manda una propuesta; yo
+//   apruebo. El rename causa impacto en 2 archivos; Orux Premium prepara
+//   el auto-fix y se aplica → verde otra vez.
 //
-//   - ?p=tu (default) — vista del DUEÑO: yo soy el reviewer. Ana entra
-//     como peer, edita y manda una propuesta; yo apruebo. Después un peer
-//     "Premium" prepara un auto-fix y yo lo apruebo también.
+//   El guión de Ana sigue en código por si en algún momento querés volver
+//   al hero con dos iframes, pero el visitante de la landing ve UNA sola
+//   pantalla — narrativas sincronizadas en doble pantalla saturaban el
+//   parser visual del visitante en los 5s que le dedica al hero.
 //
-//   - ?p=ana — vista de ANA: yo soy la editora. Tomás (peer "T") entra a
-//     observar; yo edito un archivo ajeno y mando la propuesta. Después
-//     veo el impacto que mi cambio causó en MI archivo (api/cobros.py) y
-//     apruebo el auto-fix de Premium que la repara.
+// SINCRONIZACIÓN: aunque el hero monte un solo iframe hoy, mantengo el
+// alineamiento al epoch absoluto (Math.floor(Date.now()/TOTAL_MS)*TOTAL_MS)
+// para que si dos pestañas/instancias coincidan, vean lo mismo. Si el
+// visitante llega a mitad de ciclo, los eventos pasados que mutan estado
+// se aplican inmediato; los visuales (cursor, click, toast) se omiten.
 //
-// SINCRONIZACIÓN: ambos iframes corren guiones distintos pero alineados al
-// MISMO epoch (Math.floor(Date.now() / TOTAL_MS) * TOTAL_MS). El visitante
-// ve los dos eventos del mismo flujo a la vez aunque cada iframe haya
-// cargado en un instante levemente distinto. Si el visitante llega a mitad
-// de ciclo, los eventos pasados que mutan estado se aplican inmediato; los
-// puramente visuales (cursor, click, toast) se omiten.
-//
-// Pensado para servirse en /app/?demo=1&p=tu|ana&lang=es|en y embebirse
-// como dos iframes verticales en el hero de la landing.
+// Pensado para servirse en /app/?demo=1&p=tu|ana&lang=es|en.
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { emitToast, __setForTutorial, getState } from "../store";
@@ -33,18 +31,25 @@ import {
   mockTuEntra, mockTuSale, mockEditarDraft, mockAplicarPropuestaDeAna,
 } from "./mock";
 
-// Factor global de velocidad del demo. > 1 = más lento, más legible.
-// Originalmente el demo corría a velocidad nativa (50s/ciclo) y un visitante
-// nuevo no alcanzaba a leer los toasts ni a registrar los hitos antes de
-// que el siguiente evento los reemplazara. Subimos a 1.4 (70s/ciclo) para
-// dar tiempo de lectura sin perder el ritmo cinematográfico. Todos los
-// `programar(ms, ...)`, `resaltarTarget(_, ms, ...)` y la duración del
-// click visual aplican este factor automáticamente.
-const SPEED_FACTOR = 1.4;
-const RAW_TOTAL_MS = 50000;
-const TOTAL_MS = Math.round(RAW_TOTAL_MS * SPEED_FACTOR);
+// Duración total del ciclo. 35s = la mitad del demo viejo (70s). El demo
+// viejo era "cinematográfico" pero ESO: cinematográfico. El visitante de
+// landing no se queda 70s mirando un hero — registra 5-8s y decide si
+// scrollea. Con 35s cada beat queda en 4-6s, suficiente para leer un toast
+// y registrar el halo, y el ciclo cierra antes de que se aburra.
+const TOTAL_MS = 35000;
 
 type Tono = "info" | "ok" | "warn";
+
+// El paso del guión: índice (0..total-1), total de pasos, texto narrativo
+// y tono. El stepper consume esto.
+interface PasoState {
+  i: number;
+  total: number;
+  texto: string;
+  tono: Tono;
+}
+
+const PASOS_TOTAL = 6;
 
 // "Orux Premium" entra como peer mientras prepara el auto-fix. Refuerza que
 // el premium es un actor más, no un botón mágico.
@@ -87,7 +92,7 @@ function resaltarTarget(selector: string, ms: number, tono: Tono2 = "fuerte"): v
   clases.forEach((c) => el.classList.add(c));
   window.setTimeout(() => {
     clases.forEach((c) => el.classList.remove(c));
-  }, Math.round(ms * SPEED_FACTOR));
+  }, ms);
 }
 
 interface CursorPos { x: number; y: number; visible: boolean; }
@@ -99,9 +104,8 @@ export function DemoLoop() {
   // al inicializar el demoMode — acá solo la leemos del store ya cargado.
   const esAna = getState().yo?.client_id === TUT.ana.client_id;
 
-  const [paso, setPaso] = useState<{ texto: string; tono: Tono }>({
-    texto: t.demo_step_setup,
-    tono: "info",
+  const [paso, setPaso] = useState<PasoState>({
+    i: 0, total: PASOS_TOTAL, texto: t.demo_step_setup, tono: "info",
   });
   const [cursor, setCursor] = useState<CursorPos>({ x: 0, y: 0, visible: false });
   const [clicking, setClicking] = useState(false);
@@ -113,8 +117,8 @@ export function DemoLoop() {
     let propAna = "";
     let propFix = "";
 
-    function decir(texto: string, tono: Tono = "info"): void {
-      setPaso({ texto, tono });
+    function decir(i: number, texto: string, tono: Tono = "info"): void {
+      setPaso({ i, total: PASOS_TOTAL, texto, tono });
     }
 
     // Mueve el cursor al centro del elemento que matchea `selector`. Si el
@@ -148,7 +152,7 @@ export function DemoLoop() {
 
     function clickear(): void {
       setClicking(true);
-      window.setTimeout(() => setClicking(false), Math.round(700 * SPEED_FACTOR));
+      window.setTimeout(() => setClicking(false), 700);
     }
 
     function arrancarCiclo(): void {
@@ -157,9 +161,10 @@ export function DemoLoop() {
       propFix = "";
 
       // EPOCH del ciclo: alineado al múltiplo de TOTAL_MS más cercano hacia
-      // atrás. Los dos iframes (TU y ANA) calculan el MISMO epoch porque
-      // ambos miran Date.now() y dividen por la misma constante. Eso los
-      // sincroniza sin postMessage ni BroadcastChannel.
+      // atrás. Aunque el hero hoy monte un solo iframe, mantengo el
+      // alineamiento por si dos pestañas/instancias del demo coinciden:
+      // ambas calculan el MISMO epoch porque miran Date.now() y dividen
+      // por la misma constante.
       const cicloStart = Math.floor(Date.now() / TOTAL_MS) * TOTAL_MS;
 
       // `programar` con dos modos:
@@ -176,11 +181,7 @@ export function DemoLoop() {
         fn: () => void,
         opts: { soloEstado?: boolean } = {},
       ): void {
-        // Aplicar SPEED_FACTOR al timestamp del evento. Los guiones siguen
-        // usando los tiempos "lógicos" (0, 2500, 7800…) y el factor hace
-        // el resto — cambiar el ritmo del demo es modificar una constante.
-        const adjustedMs = Math.round(ms * SPEED_FACTOR);
-        const delay = (cicloStart + adjustedMs) - Date.now();
+        const delay = (cicloStart + ms) - Date.now();
         if (delay < 0) {
           if (opts.soloEstado) {
             try { fn(); } catch { /* silenciar */ }
@@ -201,265 +202,206 @@ export function DemoLoop() {
 
       // Próximo ciclo: alineado al siguiente epoch absoluto. Aunque este
       // ciclo haya driftado por ms, el próximo se ancla al múltiplo de
-      // TOTAL_MS — los dos iframes nunca se desfasan más allá del jitter
-      // de un solo setTimeout. Pasamos RAW_TOTAL_MS porque `programar` ya
-      // multiplica por SPEED_FACTOR internamente; pasar TOTAL_MS (que ya
-      // viene escalado) duplicaría el escalado.
-      programar(RAW_TOTAL_MS, () => arrancarCiclo());
+      // TOTAL_MS — nunca derivamos más allá del jitter de un solo setTimeout.
+      programar(TOTAL_MS, () => arrancarCiclo());
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // GUIÓN TU — vista del DUEÑO (?p=tu, default).
+    // GUIÓN TU — vista del DUEÑO. 6 BEATS × ~5s = 30s + 5s de cierre.
     //
-    // Tomás soy yo. Soy dueño de tests/ y models/. Arranco viendo MI
-    // archivo (tests/test_pago.py) — no el de Ana, porque eso confundía:
-    // ambos iframes mostrando el MISMO archivo le quita sentido a la
-    // dualidad. Cuando Ana se conecta y abre procesar_pago.py, yo me
-    // muevo allá para revisar lo que está haciendo. Ana propone, yo
-    // apruebo. El impacto cae sobre mi tests/, y yo arreglo MI tests a
-    // mano (Premium solo arregla el lado de Ana, en api/).
+    //   0 ( 0.0–3.5s)  SETUP        Tu archivo abierto
+    //   1 ( 3.5–7.0s)  ANA_ENTERS   Ana se conecta
+    //   2 ( 7.0–13.0s) ANA_EDITS    Ana edita + cursor en la línea
+    //   3 (13.0–19.0s) APPROVE      Propuesta + aprobar (click)
+    //   4 (19.0–28.0s) IMPACT       Impacto detectado en 2 archivos
+    //   5 (28.0–35.0s) RESOLVED     Premium auto-fix + verde
+    //
+    // Halos en 4000ms (vs 2400ms del guión viejo): un halo que aparece y
+    // se va en menos de 3s no le da tiempo al ojo a registrar QUÉ pulsó.
     // ──────────────────────────────────────────────────────────────────
     function ejecutarGuionTu(
       programar: (ms: number, fn: () => void, opts?: { soloEstado?: boolean }) => void,
     ): void {
-      const selFileTests = `[data-tour-id="file-${paths.tests}"]`;
-
-      // ── 0-2s · Setup. Tomás abre SU archivo (tests/), no el de Ana.
+      // ── BEAT 0 · SETUP (0–3.5s). Tomás abre SU archivo (procesar_pago).
+      //    Mostramos el archivo de Ana desde el inicio: hace que la entrada
+      //    de Ana en el beat 1 se sienta como "ya estabas mirando ahí".
       programar(0, () => {
         mockClearAll();
         mockSeedRepo(lang);
-        mockOpenFile(paths.tests);
-        decir(t.demo_step_setup, "info");
+        mockOpenFile(paths.main);
+        decir(0, t.demo_step_setup, "info");
       }, { soloEstado: true });
-      programar(1000, () => cursorEnReposo());
+      programar(800, () => cursorEnReposo());
 
-      // ── 3.5-5.5s · Ana se conecta y abre procesar_pago.py.
+      // ── BEAT 1 · ANA_ENTERS (3.5–7s). Ana se conecta en línea 1.
       programar(3500, () => {
         mockAnaEntra(paths.main, 1);
-        decir(t.demo_step_ana_enters, "info");
+        decir(1, t.demo_step_ana_enters, "info");
         emitToast(t.demo_step_ana_enters, "ok");
-        resaltarTarget('[data-tour-id="inspector-presencia"]', 2400, "suave");
+        resaltarTarget('[data-tour-id="inspector-presencia"]', 4000, "suave");
       }, { soloEstado: true });
 
-      // ── 5.5-7.5s · Tomás (yo) cambia al archivo de Ana para revisar.
-      programar(5500, () => {
-        mockOpenFile(paths.main);
-      }, { soloEstado: true });
-
-      // ── 7.5-10s · Ana edita la línea 1 (rename). Peer cursor visible.
-      programar(7500, () => {
+      // ── BEAT 2 · ANA_EDITS (7–13s). Ana edita. El peer-cursor azul en
+      //    la línea 1 + halo suave en el editor narran "alguien está
+      //    tipeando ahí". 6 segundos de ventana — el más largo de todos
+      //    los beats porque acá vive el "live multiplayer".
+      programar(7000, () => {
         mockAnaEntra(paths.main, 1);
-        decir(t.demo_step_ana_editing, "info");
+        decir(2, t.demo_step_ana_editing, "info");
         emitToast(t.demo_step_ana_editing, "ok");
       }, { soloEstado: true });
 
-      // ── 10-13s · Propuesta llega. PropCard aparece en el Inspector.
-      programar(10000, () => {
-        propAna = mockPropuestaDeAna(lang);
-        decir(t.demo_step_ana_proposes, "info");
-        emitToast(t.demo_step_ana_proposes, "ok");
-        resaltarTarget('[data-tour-id="inspector-propuestas"]', 3000, "suave");
-      }, { soloEstado: true });
-
-      // ── 13-15.5s · Cursor va al Aprobar.
+      // ── BEAT 3 · APPROVE (13–19s). Propuesta llega + cursor va al
+      //    botón Aprobar + click + estado aprobado.
       programar(13000, () => {
-        resaltarTarget('[data-tour-id="prop-accept"]', 3000, "fuerte");
+        propAna = mockPropuestaDeAna(lang);
+        decir(3, t.demo_step_ana_proposes, "info");
+        emitToast(t.demo_step_ana_proposes, "ok");
+        resaltarTarget('[data-tour-id="inspector-propuestas"]', 4000, "suave");
+      }, { soloEstado: true });
+      programar(14500, () => {
+        resaltarTarget('[data-tour-id="prop-accept"]', 3500, "fuerte");
         moverCursorA('[data-tour-id="prop-accept"]');
       });
-
-      // ── 15.5-17s · Click + aprobación aplicada.
-      programar(15500, () => clickear());
-      programar(15800, () => {
+      programar(17000, () => clickear());
+      programar(17300, () => {
         if (propAna) mockAprobar(propAna);
-        decir(t.demo_step_approved, "ok");
+        decir(3, t.demo_step_approved, "ok");
         emitToast(t.demo_step_approved, "ok");
       }, { soloEstado: true });
-      programar(17000, () => cursorEnReposo());
+      programar(18500, () => cursorEnReposo());
 
-      // ── 18-22s · Impacto detectado en cascada (api + tests).
-      programar(18000, () => mockImpactoCascada(lang), { soloEstado: true });
-      programar(18300, () => {
-        decir(t.demo_step_impact, "warn");
+      // ── BEAT 4 · IMPACT (19–28s). El rename rompe 2 archivos. Halo
+      //    ámbar en el panel de impacto + el árbol de files (los rojos
+      //    aparecen ahí). 9 segundos de ventana para que el visitante
+      //    procese "AH, Orux atrapó el riesgo antes del merge". Este
+      //    beat es el ÚNICO con tono warn — distingue visualmente
+      //    "algo grave" del flujo verde.
+      programar(19500, () => mockImpactoCascada(lang), { soloEstado: true });
+      programar(19800, () => {
+        decir(4, t.demo_step_impact, "warn");
         emitToast(t.demo_step_impact, "warn");
-        resaltarTarget('[data-tour-id="inspector-impacto"]', 3200, "warn");
-        resaltarTarget('[data-tour-id="files-tree"]', 3000, "warn");
+        resaltarTarget('[data-tour-id="inspector-impacto"]', 6500, "warn");
+        resaltarTarget('[data-tour-id="files-tree"]', 5500, "warn");
       });
 
-      // ── 22-25s · Cursor → tests/test_pago.py (MI archivo afectado).
-      programar(22000, () => {
-        resaltarTarget(selFileTests, 2800, "fuerte");
-        moverCursorA(selFileTests);
-      });
-
-      // ── 25-27s · Click + abrir tests/. "Te toca arreglar a mano".
-      programar(24500, () => clickear());
-      programar(24800, () => {
-        mockOpenFile(paths.tests);
-        decir(t.demo_step_focus_impact, "info");
-        emitToast(t.demo_step_focus_impact, "ok");
-      }, { soloEstado: true });
-      programar(26000, () => cursorEnReposo());
-
-      // ── 28-37s · Tomás está ajustando tests/ por su lado. Mientras
-      //    tanto, en el otro iframe Premium auto-arregla api/. Para que
-      //    se SIENTA actividad, mostramos que Premium también está
-      //    presente (visible en el sidebar), pero NO disparamos su
-      //    propuesta acá — el autofix lo aprueba Ana en su iframe.
-      programar(28500, () => {
+      // ── BEAT 5 · RESOLVED (28–35s). Premium entra, prepara y aplica
+      //    el auto-fix. Impactos limpios → verde. El "resolved" es
+      //    explícito (no es solo silencio): el visitante necesita ver
+      //    que "alguien lo arregló", no que "se calló solo".
+      programar(28000, () => {
         premiumEntra(paths.api, 3);
-        decir(t.demo_step_premium_enters, "info");
+        decir(5, t.demo_step_premium_enters, "info");
         emitToast(t.demo_step_premium_enters, "ok");
-        resaltarTarget('[data-tour-id="inspector-presencia"]', 2400, "suave");
+        resaltarTarget('[data-tour-id="inspector-presencia"]', 3500, "suave");
       }, { soloEstado: true });
-
-      // ── 34-37s · Sincronización final. El autofix se aplicó en otro
-      //    lado, los impactos se limpian para todos (es el broadcast real
-      //    del producto), Premium se desconecta. Tomás ve "todo verde".
-      programar(34000, () => {
+      programar(30500, () => {
+        propFix = mockAutoFixPremium(lang);
+        decir(5, t.demo_step_autofix, "info");
+        emitToast(t.demo_step_autofix, "ok");
+        resaltarTarget('[data-tour-id="inspector-propuestas"]', 2800, "suave");
+      }, { soloEstado: true });
+      programar(33000, () => {
+        if (propFix) mockAprobar(propFix);
         mockLimpiarImpactos();
         premiumSale();
-        decir(t.demo_step_resolved, "ok");
+        decir(5, t.demo_step_resolved, "ok");
         emitToast(t.demo_step_resolved, "ok");
       }, { soloEstado: true });
-
-      // ── 38-42s · Reposo final.
-      programar(38000, () => decir(t.demo_step_calm, "ok"));
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // GUIÓN ANA — vista de la EDITORA (?p=ana).
-    //
-    // El mismo flujo, pero contado desde el otro lado. Ana no es peer:
-    // Ana ES el "yo". Tomás (peer T) es quien aparece de remoto. Ana
-    // edita un archivo que no es suyo, eso queda como draft local; manda
-    // la propuesta y espera. Cuando Tomás aprueba (simulado), el draft se
-    // aplica. Después Ana ve que su rename causó impacto en su propio
-    // api/cobros.py (ella sí es dueña), y aprueba el auto-fix de Premium.
-    //
-    // Tiempos sincronizados con el guión TU para que ambos iframes muestren
-    // el mismo "evento global" al mismo segundo del ciclo.
+    // GUIÓN ANA — vista de la EDITORA. CONSERVADO por compatibilidad
+    // (?p=ana sigue siendo válido) pero el hero de la landing solo monta
+    // TU. Si en algún futuro querés volver al hero dual, este guión está
+    // listo. Tiempos alineados con el de TU para mostrar el "mismo evento
+    // global" desde el otro lado.
     // ──────────────────────────────────────────────────────────────────
     function ejecutarGuionAna(
       programar: (ms: number, fn: () => void, opts?: { soloEstado?: boolean }) => void,
     ): void {
       const selFileApi = `[data-tour-id="file-${paths.api}"]`;
-
-      // Contenido del rename completo (mismo que PROPUESTA_ANA_* en mock.ts;
-      // lo armamos acá para no exponer constantes del mock).
       const renamed = lang === "en"
         ? "def charge_payment(amount, currency):\n    if amount <= 0:\n        return None\n    payment = Payment(amount, currency)\n    return payment.charge()\n"
         : "def cobrar_pago(monto, moneda):\n    if monto <= 0:\n        return None\n    pago = Pago(monto, moneda)\n    return pago.cobrar()\n";
 
-      // ── 0-2s · Setup. Ana abre EL archivo que va a editar.
       programar(0, () => {
         mockClearAll();
         mockSeedRepo(lang);
         mockOpenFile(paths.main);
-        decir(t.demo_step_setup, "info");
+        decir(0, t.demo_step_setup, "info");
       }, { soloEstado: true });
-      programar(1000, () => cursorEnReposo());
+      programar(800, () => cursorEnReposo());
 
-      // ── 3.5-5.5s · Tomás se conecta a tests/ (su archivo). No viene a
-      //    procesar_pago — está en lo suyo. Eso distingue las dos vistas:
-      //    el sidebar de Ana muestra Tomás en tests/, no acá.
       programar(3500, () => {
         mockTuEntra(paths.tests, 1);
-        decir(t.demo_step_tu_enters, "info");
+        decir(1, t.demo_step_tu_enters, "info");
         emitToast(t.demo_step_tu_enters, "ok");
-        resaltarTarget('[data-tour-id="inspector-presencia"]', 2400, "suave");
+        resaltarTarget('[data-tour-id="inspector-presencia"]', 4000, "suave");
       }, { soloEstado: true });
 
-      // ── 7.5-10s · Ana edita. El cambio va a DRAFT (no es dueña). El
-      //    editor refleja el contenido nuevo in-flight, y el badge cuenta
-      //    qué cambió en lenguaje humano ("renombras procesar_pago...").
-      programar(7500, () => {
+      programar(7000, () => {
         mockEditarDraft(paths.main, renamed);
-        decir(t.demo_step_ana_editing_mine, "info");
+        decir(2, t.demo_step_ana_editing_mine, "info");
         emitToast(t.demo_step_ana_editing_mine, "ok");
       }, { soloEstado: true });
 
-      // ── 10-13s · Ana manda la propuesta. Estado: draft sigue, marca de
-      //    "enviada · esperando" en el badge. En este iframe NO aparece
-      //    PropCard (las PropCard son propuestas que llegan, no que envías).
-      programar(10000, () => {
-        decir(t.demo_step_ana_sending, "info");
+      programar(13000, () => {
+        decir(3, t.demo_step_ana_sending, "info");
         emitToast(t.demo_step_ana_sending, "ok");
       });
-
-      // ── 15.5-17s · Click "fantasma" sincronizado con Tomás. Refuerza la
-      //    sensación de coordinación cross-iframe. El draft se aplica al
-      //    archivo, el badge confirma: "Tomás aprobó".
-      programar(15500, () => clickear());
-      programar(15800, () => {
+      programar(17000, () => clickear());
+      programar(17300, () => {
         mockAplicarPropuestaDeAna(paths.main, lang);
-        decir(t.demo_step_tu_approved, "ok");
+        decir(3, t.demo_step_tu_approved, "ok");
         emitToast(t.demo_step_tu_approved, "ok");
       }, { soloEstado: true });
-      programar(17000, () => cursorEnReposo());
+      programar(18500, () => cursorEnReposo());
 
-      // ── 18-22s · Impacto detectado. Ana causó el rename; api/cobros.py
-      //    (ella dueña) y tests/test_pago.py (Tomás dueño) salen afectados.
-      programar(18000, () => mockImpactoCascada(lang), { soloEstado: true });
-      programar(18300, () => {
-        decir(t.demo_step_impact_mine, "warn");
+      programar(19500, () => mockImpactoCascada(lang), { soloEstado: true });
+      programar(19800, () => {
+        decir(4, t.demo_step_impact_mine, "warn");
         emitToast(t.demo_step_impact_mine, "warn");
-        resaltarTarget('[data-tour-id="inspector-impacto"]', 3200, "warn");
-        resaltarTarget('[data-tour-id="files-tree"]', 3000, "warn");
+        resaltarTarget('[data-tour-id="inspector-impacto"]', 6500, "warn");
+        resaltarTarget('[data-tour-id="files-tree"]', 5500, "warn");
       });
-
-      // ── 22-25s · Cursor → api/cobros.py (SU archivo afectado).
-      programar(22000, () => {
+      programar(23500, () => {
         resaltarTarget(selFileApi, 2800, "fuerte");
         moverCursorA(selFileApi);
       });
-
-      // ── 25-27s · Click + abrir api/. "Hay que ajustar tu api".
-      programar(24500, () => clickear());
-      programar(24800, () => {
+      programar(25800, () => clickear());
+      programar(26100, () => {
         mockOpenFile(paths.api);
-        decir(t.demo_step_focus_impact_mine, "info");
+        decir(4, t.demo_step_focus_impact_mine, "info");
         emitToast(t.demo_step_focus_impact_mine, "ok");
       }, { soloEstado: true });
-      programar(26000, () => cursorEnReposo());
+      programar(27500, () => cursorEnReposo());
 
-      // ── 28.5-31s · Premium entra y prepara el auto-fix.
-      programar(28500, () => {
+      programar(28000, () => {
         premiumEntra(paths.api, 3);
-        decir(t.demo_step_premium_enters, "info");
+        decir(5, t.demo_step_premium_enters, "info");
         emitToast(t.demo_step_premium_enters, "ok");
-        resaltarTarget('[data-tour-id="inspector-presencia"]', 2400, "suave");
+        resaltarTarget('[data-tour-id="inspector-presencia"]', 3500, "suave");
       }, { soloEstado: true });
-
-      // ── 30.5-33s · Premium manda el auto-fix. Como Ana es dueña de api,
-      //    la PropCard SÍ le llega — y va a aprobarla. Halo suave en
-      //    propuestas para que el visitante vea DÓNDE apareció.
       programar(30500, () => {
         propFix = mockAutoFixPremium(lang);
-        decir(t.demo_step_autofix, "info");
+        decir(5, t.demo_step_autofix, "info");
         emitToast(t.demo_step_autofix, "ok");
-        resaltarTarget('[data-tour-id="inspector-propuestas"]', 3000, "suave");
+        resaltarTarget('[data-tour-id="inspector-propuestas"]', 2800, "suave");
       }, { soloEstado: true });
-
-      // ── 33-34s · Cursor → Aprobar el auto-fix.
       programar(32500, () => {
-        resaltarTarget('[data-tour-id="prop-accept"]', 2800, "fuerte");
+        resaltarTarget('[data-tour-id="prop-accept"]', 2500, "fuerte");
         moverCursorA('[data-tour-id="prop-accept"]');
       });
-
-      // ── 34-35s · Click + aprobado. Impactos limpios, Premium se va.
-      programar(34000, () => clickear());
-      programar(34300, () => {
+      programar(33500, () => clickear());
+      programar(33800, () => {
         if (propFix) mockAprobar(propFix);
         mockLimpiarImpactos();
         premiumSale();
         mockTuSale();
-        decir(t.demo_step_resolved, "ok");
+        decir(5, t.demo_step_resolved, "ok");
         emitToast(t.demo_step_resolved, "ok");
       }, { soloEstado: true });
-      programar(35500, () => cursorEnReposo());
-
-      // ── 38-42s · Reposo final.
-      programar(38000, () => decir(t.demo_step_calm, "ok"));
     }
 
     arrancarCiclo();
@@ -487,7 +429,7 @@ export function DemoLoop() {
         clicking={clicking}
         label={esAna ? t.demo_cursor_label_ana : t.demo_cursor_label}
       />
-      <DemoBadge paso={paso} label={t.demo_label} />
+      <DemoStepper paso={paso} label={t.demo_label} />
     </>
   );
 }
@@ -522,20 +464,51 @@ function DemoCursor({
   );
 }
 
-// Pildora "Demo · fase actual" fija bottom-center. Tres razones: honestidad
-// (esto es demo, no real), contexto (qué está pasando), pacing (cross-fade
-// del texto da feedback del bucle).
-function DemoBadge({
+// Stepper "Paso N/6 — texto del beat" fijo top-left. Tres razones:
+//   1) Honestidad: comunica que esto es demo automática.
+//   2) Progreso visible: ●●●○○○ le dice al visitante "estás a la mitad",
+//      así sabe que va a haber más antes de scrollear.
+//   3) Contexto: el texto del beat le dice QUÉ está mirando, no descifrar
+//      cambios sutiles del IDE.
+//
+// Reemplaza al DemoBadge bottom-center anterior: dos pills compitiendo
+// por la atención era ruido; una sola unidad arriba-izquierda enmarca la
+// escena sin pisarla.
+function DemoStepper({
   paso, label,
-}: { paso: { texto: string; tono: Tono }; label: string }) {
+}: { paso: PasoState; label: string }) {
+  // ● para pasados+actual, ○ para futuros. El actual también lleva el
+  // tono (.is-warn / .is-ok / .is-info) para que el dot pulse del color
+  // correcto. El array de dots se renderiza explícito para que cada uno
+  // sea un span — el ::before/::after no permite tantos elementos.
+  const dots = [];
+  for (let k = 0; k < paso.total; k++) {
+    const filled = k <= paso.i;
+    const isActive = k === paso.i;
+    dots.push(
+      <span
+        key={k}
+        className={
+          "demo-step-dot" +
+          (filled ? " is-filled" : "") +
+          (isActive ? " is-active is-" + paso.tono : "")
+        }
+        aria-hidden
+      />,
+    );
+  }
   return (
-    <div className="demo-badge" role="status" aria-live="polite">
-      <span className="demo-badge-dot" aria-hidden />
-      <span className="demo-badge-l">{label}</span>
-      <span className="demo-badge-sep" aria-hidden>·</span>
+    <div className="demo-stepper" role="status" aria-live="polite">
+      <span className="demo-stepper-label">{label}</span>
+      <span className="demo-stepper-sep" aria-hidden>·</span>
+      <span className="demo-stepper-dots" aria-hidden>{dots}</span>
+      <span className="demo-stepper-count" aria-hidden>
+        {paso.i + 1}/{paso.total}
+      </span>
+      <span className="demo-stepper-sep" aria-hidden>—</span>
       <span
         key={paso.texto}
-        className={"demo-badge-r tone-" + paso.tono}
+        className={"demo-stepper-text tone-" + paso.tono}
       >
         {paso.texto}
       </span>

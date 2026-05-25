@@ -648,19 +648,21 @@ export const en = {
     tut_accept_fix: "Approve this too.",
     tut_close: "Done. Same Git, no collisions. Live coordination over your real repo.",
 
-    // Live demo cinematic (landing route ?demo=1). Keys are intentionally
-    // short — the phase badge has limited room.
-    demo_label: "Live demo · automated",
-    demo_step_setup: "Loading example workspace",
-    demo_step_ana_enters: "Ana connects to procesar_pago.py",
-    demo_step_ana_editing: "Ana is editing procesar_pago.py",
-    demo_step_ana_proposes: "Ana proposes changes",
-    demo_step_approved: "Approved · committed to Git",
-    demo_step_impact: "Impact detected in 2 files",
-    demo_step_focus_impact: "Opening api/cobros.py (the affected one)",
-    demo_step_premium_enters: "Orux Premium prepares the auto-fix",
-    demo_step_autofix: "Orux Premium · auto-fix ready",
-    demo_step_resolved: "Resolved · no pending impacts",
+    // Live demo cinematic (landing route ?demo=1). Active, SHORT phrases
+    // (3-6 words): the stepper renders them as the beat's subtitle and the
+    // visitor reads it in under a second or doesn't read it at all. Present
+    // active verbs; avoid long gerunds ("Loading…", "Opening…").
+    demo_label: "Automated demo",
+    demo_step_setup: "Your file: process_payment.py",
+    demo_step_ana_enters: "Ana joins",
+    demo_step_ana_editing: "Ana renames the function",
+    demo_step_ana_proposes: "Ana proposes the change",
+    demo_step_approved: "Approved · applied",
+    demo_step_impact: "Impact: 2 files broken",
+    demo_step_focus_impact: "You open api/charges.py",
+    demo_step_premium_enters: "Premium prepares auto-fix",
+    demo_step_autofix: "Auto-fix ready",
+    demo_step_resolved: "Resolved · all green",
     demo_step_calm: "All clear",
     demo_cursor_label: "you",
     // ANA view (?p=ana) — script mirrored: Ana is the one editing and

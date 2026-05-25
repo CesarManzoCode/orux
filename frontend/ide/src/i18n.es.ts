@@ -674,19 +674,21 @@ export const es = {
     tut_accept_fix: "También la aceptas.",
     tut_close: "Listo. Mismo Git, sin colisiones. Coordinación viva sobre tu repo de verdad.",
 
-    // Demo cinematográfico de la landing (ruta ?demo=1). Las claves son
-    // intencionalmente cortas — el badge de fase tiene espacio limitado.
-    demo_label: "Demo · ejemplo automático",
-    demo_step_setup: "Cargando workspace de muestra",
-    demo_step_ana_enters: "Ana se conecta a procesar_pago.py",
-    demo_step_ana_editing: "Ana edita procesar_pago.py",
-    demo_step_ana_proposes: "Ana propone cambios",
-    demo_step_approved: "Aprobada · queda en Git",
-    demo_step_impact: "Impacto detectado en 2 archivos",
-    demo_step_focus_impact: "Abriendo api/cobros.py (el afectado)",
-    demo_step_premium_enters: "Orux Premium prepara el auto-fix",
-    demo_step_autofix: "Orux Premium · auto-fix listo",
-    demo_step_resolved: "Resuelto · sin impactos pendientes",
+    // Demo cinematográfico de la landing (ruta ?demo=1). Frases activas y
+    // CORTAS (3-6 palabras): el stepper las muestra como subtítulo del beat,
+    // el visitante las lee en menos de 1 segundo o no las lee. Verbos en
+    // presente activo; nada de gerundios largos ("Cargando…", "Abriendo…").
+    demo_label: "Demo automática",
+    demo_step_setup: "Tu archivo: procesar_pago.py",
+    demo_step_ana_enters: "Ana se conecta",
+    demo_step_ana_editing: "Ana renombra la función",
+    demo_step_ana_proposes: "Ana propone el cambio",
+    demo_step_approved: "Aprobado · aplicado",
+    demo_step_impact: "Impacto: 2 archivos rotos",
+    demo_step_focus_impact: "Abres api/cobros.py",
+    demo_step_premium_enters: "Premium prepara auto-fix",
+    demo_step_autofix: "Auto-fix listo",
+    demo_step_resolved: "Resuelto · todo verde",
     demo_step_calm: "Todo en orden",
     demo_cursor_label: "tú",
     // Vista ANA (?p=ana) — el espejo del guión: Ana es la que edita y manda
