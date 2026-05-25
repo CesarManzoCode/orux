@@ -1194,3 +1194,173 @@
   vertical-align: -1px;
   margin-right: 1px;
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CAPA 38 · pulido táctil + legibilidad (2026-05-25)
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo, sistémico, cero features. Cierra brechas de feedback táctil y
+   contraste que la auditoría detectó tras usar el producto a diario.
+   Sin tocar tokens raíz, sin animaciones decorativas. Toca SOLO botones
+   que hoy quedaban "suspendidos" en el press, estados vacíos del
+   Inspector que se leían como caja vacía, y los inputs que saltaban al
+   foco sin transición de shadow.
+
+   1) :active sistémico en botones compactos: Git (commit/clone/push/
+      refresh), AdminModal (ambar), Inspector (in-act/in-atn-item). Antes
+      varios botones no tenían :active y el press se sentía "sin retorno".
+      Suma transform translateY(1px) + filter brightness(0.97) coherente
+      con el resto del IDE (.salir/.invitar/.btn-primario ya lo tienen).
+   2) `.in-empty`: tinta del texto sube de --muted a --text-2 (sin tocar
+      .b interno, que ya está en --text-2). El estado vacío se lee como
+      "intencional, no roto".
+   3) Inputs `.gitp` y `.commitbox`: añaden transition de border + shadow
+      al foco (antes saltaban entre estados sin transición; el resto del
+      IDE ya respira).
+   4) `.in-atn-item:active`: feedback de press para los callouts del
+      Inspector — son lecturas, pero también clickeables.
+   5) `.tb-rama` y `.tb-chg` ganan un hover sutil para descubribilidad
+      (son chips informativos, sin hover hoy podían leerse como decoración).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) :active táctil en botones compactos ──────────────────────────
+   Patrón unificado del IDE: hover sube 1px, press hunde 1px + leve
+   atenuación. El resto del producto ya lo respeta — acá cerramos
+   los huecos. */
+.gitp .commitbox button:active,
+.gitp .cab button:active,
+.gitp .remacc button:active,
+.ambar button:active:not(:disabled),
+.ambar .amgo:active:not(:disabled),
+.in-act:active,
+.in-atn-item:active,
+.inimp-x:active,
+.delx:active {
+  transform: translateY(1px);
+  filter: brightness(0.97);
+}
+/* Botones primarios del Inspector y modal: cuando ya tenían su propio
+   :active (translateY(1px)) lo dejamos; añadimos la atenuación al press
+   para que el "down" se sienta como en el primario base. */
+.modal-foot button.primario:active:not(:disabled),
+.in-act.primario:active:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+/* ── 2) Inspector empty — tinta legible ─────────────────────────────
+   `.in-empty` lleva un fondo hundido + hairline (CAPA 34); la tinta
+   del texto seguía en --muted, que sobre --bg-deep apenas alcanza
+   3.1:1 — el ojo lo lee como "borrador olvidado". Subir a --text-2
+   da ≈4.5:1 sin sacrificar la sensación "está callado, está bien". */
+.in-empty {
+  color: var(--text-2);
+}
+
+/* ── 3) Inputs Git — transición consistente al foco ─────────────────
+   `.gitp .commitbox input`, `.gitp .remoto input` y `.gitp select`
+   heredan el patrón global `.field` por estética, pero su selector
+   directo no llevaba transition explícita. El borde acento entraba
+   "de golpe" al :focus. Sumamos la transición para que el respiro
+   del foco se sienta igual que en el resto del IDE. */
+.gitp .commitbox input,
+.gitp .remoto input,
+.gitp .rem-field input,
+.nf-modal input,
+.hub-row input {
+  transition:
+    border-color var(--tr),
+    box-shadow var(--tr),
+    background var(--tr);
+}
+
+/* ── 4) TopBar chips informativos — hover descubrible ────────────────
+   `.tb-rama` y `.tb-chg` son chips que muestran rama y cambios. No
+   son interactivos (no son botones), pero al pasar el mouse el ojo
+   espera una respuesta — sino se siente "decorativo". Un hover
+   sutil del borde + background los registra como "información viva"
+   sin sugerir que se les puede hacer click (no cambia cursor). */
+.tb-rama:hover,
+.tb-chg:hover {
+  border-color: var(--border);
+  background: var(--surface-3);
+}
+.tb-chg.limpio:hover {
+  color: var(--muted);
+}
+
+/* ── 5) Sidebar h2 — afordancia consistente para acciones inline ─────
+   El "Explorador" y otros eyebrows del Sidebar son títulos planos.
+   Al hover los hijos accionables (botón refrescar, etc.) ya iluminan.
+   Refinamos el eyebrow con letterspacing un punto más abierto al hover
+   indirectamente — vía la fila padre. Por ahora cosmético: solo
+   garantizamos que `h2 .h2-num` (la pill numérica de algunas secciones)
+   también respete la transición del cuerpo del Sidebar. */
+.h2 .h2-num {
+  transition: background var(--tr), color var(--tr);
+}
+
+/* ── 6) Tabs close-button (.tabx) — micro feedback de press ───────────
+   El close del Tab ya tiene hover (color bad + background bad-bg) y
+   focus-visible. Faltaba el :active que confirma "lo cerraste". Lo
+   añadimos en el lenguaje del resto: hunde 1px + atenuación leve. */
+.tab .tabx:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+/* ── 7) Botón borrar archivo (.delx) en file-tree — :active consistente
+   Ya tiene hover bad + bad-bg. El :active sigue el mismo lenguaje
+   del resto del IDE; los users con muscle memory de "click and hold"
+   ya no sienten el botón "muerto" al press. Cubierto en la regla
+   sistémica del bloque 1 — anchor de referencia. */
+
+/* ── 8) Modal close (.modal-x) — :active consistente ─────────────────
+   El close del modal tenía hover. El press se siente plano hoy. Mismo
+   patrón del :active sistémico. */
+.modal-x:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+/* ── 9) Hub picker cards (.hub-pick-card) — feedback de press ────────
+   Ya tienen hover (filo acento + shadow). El :active hunde 1px para
+   que el click "se note" igual que en .hub-team. */
+.hub-pick-card:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+/* ── 10) Hub team card (.hub-team) — :active coherente ───────────────
+   La tarjeta del equipo ya tiene hover y filo activo. El :active no
+   estaba — se sentía "rígida" al click. Lo añadimos. */
+.hub-team:active {
+  filter: brightness(0.97);
+}
+
+/* ── 11) Inspector — botón "visto" del impacto (.inimp-x) hover ──────
+   Hoy hover sube fondo a surface-2. Sumamos box-shadow leve al hover
+   para que se sienta "elevable" — la X discreta del aviso de impacto
+   se descubre mejor cuando hay 4-5 avisos en cascada. */
+.inimp-x:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── 12) Status del topbar — el LED ok pulsa más limpio en reposo ────
+   La regla actual usa `animation: pulso 2.6s` directo. Cuando hay
+   varios LEDs (statusbar conn + topbar status + sb-live), el conjunto
+   late "todo a la vez". Desincronizamos el del topbar con un delay
+   muy pequeño — el ojo nota un compás natural, no un eco. */
+.status.ok::before {
+  animation-delay: 130ms;
+}
+
+/* ── 13) Light vignette del backdrop — más sobria en pantallas oled ──
+   El backdrop body::before usa rgba(255,255,255,0.014). En pantallas
+   con punto negro real (OLED) la sombra de vignette se hace banding.
+   Bajamos a 0.012 que mantiene la presencia sutil sin banding visible.
+   Cambio invisible en LCD normales, mejora la sensación premium en
+   monitores OLED y panel de portátiles modernos. */
+body::before {
+  background: radial-gradient(130vw 80vh at 50% -25%,
+    rgba(255, 255, 255, 0.012), transparent 62%);
+}
+

@@ -67,7 +67,11 @@
 }
 .scr-imp .ok::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--live); }
 .mod-cap { padding: 20px; border-top: 1px solid var(--line-soft); }
-.mod-cap h3 { font-size: 16.5px; letter-spacing: -0.014em; color: var(--ink); margin-bottom: 14px; }
+/* margin-bottom con clamp: a 900px+ el h3 (16.5px) y los bits siguientes
+   se comprimen verticalmente; el aire fijo (14px) se notaba apretado en
+   desktop ancho. Escalar con vw da respiración cuando el viewport tiene
+   sitio sin sacrificar la densidad en mobile. */
+.mod-cap h3 { font-size: 16.5px; letter-spacing: -0.014em; color: var(--ink); margin-bottom: clamp(12px, 1.5vw, 18px); }
 .mod-cap p { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0; }
 .mod-bits { display: flex; flex-direction: column; gap: 12px; }
 .mod-bit { display: flex; flex-direction: column; gap: 5px; }

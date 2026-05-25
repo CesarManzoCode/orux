@@ -25,9 +25,24 @@ export function StatusBar() {
   // al server. Mostramos drafts con prioridad (pérdida potencial real) y
   // los "sin marcar" del dueño en segundo plano (no es pérdida, solo
   // análisis pendiente).
-  const nDrafts = Object.keys(s.drafts).length;
+  const draftPaths = Object.keys(s.drafts);
+  const nDrafts = draftPaths.length;
   const nDirty = Object.values(s.dirty).filter(Boolean).length;
   const nSinMarcarSinDraft = Math.max(0, nDirty - nDrafts);
+  // Tooltip enriquecido para el segmento drafts: el conteo solo no
+  // basta — al usuario le sirve recordar QUÉ archivos quedaron con
+  // propuesta local. Mostramos hasta 3 paths (los más representativos)
+  // + un "…" cuando hay más. Si hay solo uno, el listado lo sustituye
+  // por la explicación del título (más conciso). El tooltip nativo
+  // junta título + paths con saltos de línea, que la mayoría de
+  // navegadores respeta.
+  const draftsTitle = nDrafts > 0
+    ? (nDrafts <= 3
+        ? t.stb_drafts_title + "\n" + draftPaths.join("\n")
+        : t.stb_drafts_title + "\n" +
+          draftPaths.slice(0, 3).join("\n") +
+          "\n… +" + (nDrafts - 3))
+    : t.stb_drafts_title;
 
   const CONN: Record<string, string> = {
     conectando: t.stb_connecting,
@@ -68,7 +83,7 @@ export function StatusBar() {
       {nDrafts > 0 && (
         <>
           <span className="sb-div" />
-          <span className="sb acc-warn" title={t.stb_drafts_title}>
+          <span className="sb acc-warn" title={draftsTitle}>
             {nDrafts} {nDrafts === 1 ? t.stb_drafts : t.stb_drafts_pl}
           </span>
         </>

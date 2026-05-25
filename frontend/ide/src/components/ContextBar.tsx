@@ -56,8 +56,11 @@ export function ContextBar() {
           nota) de "quién más + acciones". Antes había un divider entre
           cada chip → la barra parecía un cuadrante de avión. Ahora el
           ojo agrupa por gap, y la línea solo aparece donde de verdad
-          hay un cambio de tipo de información. */}
-      <span className="ctx-div" />
+          hay un cambio de tipo de información.
+          aria-hidden: el divisor es pura jerarquía visual; el lector de
+          pantalla no lo necesita y, sin esta marca, lo anunciaba como
+          un nodo "blanco" suelto entre los segmentos. */}
+      <span className="ctx-div" aria-hidden />
 
       <span className="ctx-seg">
         <Radio size={12} className="ctx-i" />

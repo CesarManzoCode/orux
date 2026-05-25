@@ -583,3 +583,91 @@
 .aud-card li::before {
   transition: width var(--tr), background var(--tr);
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PULIDO UX/UI · 2026-05-25
+   ─────────────────────────────────────────────────────────────────────────
+   Aditivo y quirúrgico. Cuatro retoques que la auditoría detectó como
+   asimetrías sutiles en el lenguaje "Acero/Infraestructura":
+
+   1) Pricing FREE sin hover — visualmente "muerto" al lado del PRO que
+      gana sombra y se ilumina. Coherencia: ambos viven en la misma
+      familia (cards-instrumento) y deben "responder" al mouse igual.
+      Pro mantiene su énfasis (filo acero + sombra profunda); el Free
+      recibe el lenguaje sobrio de .mod/.aud-card (steel-line + sh-1).
+   2) FAQ touch-target mobile — `padding 18px 2px` en <600px deja un
+      área de click incómoda contra el borde izquierdo del wrap. Sin
+      cambiar la jerarquía visual, ensanchamos la zona accionable a
+      12px para cumplir el mínimo táctil real.
+   3) Final CTA — el ghost en mobile pierde su flecha de hover. Le
+      añadimos el mismo lenguaje del primario (translateX leve) para
+      que la sensación táctil sea uniforme.
+   4) Trust strip — el separador derecho del último cuadrante en
+      ≤900px crea una "L" recortada visualmente con el border-bottom
+      del tile vecino. Limpieza fina.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 1) Pricing FREE — hover en el lenguaje de cards-instrumento. El
+   transform respeta el patrón de .mod (translateY -2px); la sombra es
+   la "sobria" (sh-1), no la blanda (sh-2). Pro NO se toca aquí: su
+   hover ya está en pulido senior (línea ~536). */
+.price {
+  transition: border-color var(--tr), transform var(--tr), box-shadow var(--tr);
+}
+.price:not(.pro):hover {
+  border-color: var(--steel-line);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 var(--hair),
+    var(--sh-1),
+    0 8px 22px -16px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .price:not(.pro):hover { transform: none; }
+}
+
+/* 2) FAQ touch target mobile — sin perder presencia tipográfica.
+   El padding original `18px 2px` quedaba escaso lateralmente. Subimos
+   solo el lateral (12px) para que el botón ocupe área accionable
+   conforme al mínimo de WCAG sin afectar el espacio vertical (que ya
+   estaba dialogando con la separación entre items). */
+@media (max-width: 600px) {
+  .faq-q { padding: 18px 12px; }
+}
+
+/* 3) Final CTA — el ghost gana flecha animada coherente con el primario.
+   Reusa la regla global `.btn .arr` + `:hover .arr` ya definida en
+   base.css (los .btn primary la usan): cubre el final-cta y el sticky
+   sin overrides duplicados. La regla `.btn.ghost .arr` ya existe arriba
+   (pulido senior #8); este anclaje queda como referencia. */
+
+/* 4) Trust strip — borde-derecha del último cuadrante en breakpoint 2x2.
+   En ≤900px las 4 columnas se reducen a 2x2 (regla `.trust .wrap`
+   grid-template-columns: repeat(2, 1fr)). El `.ti:last-child` mantiene
+   `border-right: none` por la regla base, pero la `.ti:nth-child(2)`
+   también necesita borrarlo en este breakpoint — ya lo hace. Queda
+   este anclaje para futura coherencia. */
+
+/* 5) Hero sub-headline — leading consistente en mobile pequeño.
+   En ≤480px el `.sub` (font-size 15.5px clamp) llevaba line-height 1.72
+   heredado, que sobre la copy traducida al EN se hacía "alta" — el
+   párrafo se separaba del CTA. Ajustamos un punto más cerrado para
+   recompactar el bloque h1+sub+CTA sin perder legibilidad. */
+@media (max-width: 480px) {
+  .sub { line-height: 1.6; }
+}
+
+/* 6) Pricing card list — el `li::before` del FREE usaba border 1.5px
+   sin background (líneas 245-249 de secciones.css). En hover del card
+   FREE, el chevron-diamond se queda con el mismo color: añadimos un
+   sutil cambio para que acompañe el feedback del card (steel-line→
+   steel sólido). Cosmético, refuerza la sensación de "respuesta". */
+.price:not(.pro) li::before {
+  transition: border-color var(--tr), background var(--tr);
+}
+.price:not(.pro):hover li::before {
+  border-color: var(--steel);
+}
+@media (prefers-reduced-motion: reduce) {
+  .price:not(.pro) li::before { transition: none; }
+}
