@@ -74,13 +74,28 @@ CREATE TABLE IF NOT EXISTS invites (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     usado_por  TEXT REFERENCES users(username) ON DELETE SET NULL,
     usado_at   TIMESTAMPTZ,
-    -- BACKEND-AUDIT-0214: invitaciones caducan a los 7 días. Sin esto, un
-    -- código de hace 2 años seguía siendo redimible (defensa contra códigos
-    -- filtrados de logs/historial). El default cubre rows pre-fix: NULL
-    -- significa "creada antes del fix, sigue sin caducar"; los nuevos sí.
-    expires_at TIMESTAMPTZ
+    -- BACKEND-AUDIT-0214 (fix completo 2026-05-24): invitaciones caducan
+    -- a los 7 días. La encarnación anterior dejó la columna pero ni
+    -- `crear_invitacion` la seteaba ni `redimir` la verificaba: cualquier
+    -- código filtrado seguía vivo indefinidamente. Ahora:
+    --   - DEFAULT en la columna (defensa en profundidad: un INSERT que
+    --     olvide la columna sigue caducando).
+    --   - `crear_invitacion` la setea explícitamente (auto-documentado).
+    --   - `redimir` rechaza con TeamError("expirada") si ya pasó.
+    --   - Backfill de abajo (idempotente) cubre rows pre-fix con
+    --     `created_at + 7d` para que dejen de ser eternas en el upgrade.
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days')
 );
+-- Migración para DBs pre-fix donde la columna existía sin DEFAULT/NOT NULL:
+-- 1) asegurar la columna; 2) backfill NULLs (= invitaciones eternas pre-fix)
+-- con created_at+7d para que el ALTER SET NOT NULL no falle; 3) set DEFAULT;
+-- 4) set NOT NULL. Todo idempotente: si ya está como queremos, los ALTER
+-- no son destructivos y los UPDATE matchean 0 rows.
 ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+UPDATE invites SET expires_at = created_at + interval '7 days'
+    WHERE expires_at IS NULL;
+ALTER TABLE invites ALTER COLUMN expires_at SET DEFAULT (now() + interval '7 days');
+ALTER TABLE invites ALTER COLUMN expires_at SET NOT NULL;
 -- Recrear FKs si vinieron sin ON DELETE (DBs pre-fix). Idempotente:
 -- nombramos las constraints con un nombre estable que ALTER puede dropear.
 ALTER TABLE invites DROP CONSTRAINT IF EXISTS invites_creado_por_fkey;

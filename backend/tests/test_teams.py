@@ -8,6 +8,8 @@ que el adaptador Postgres). Lo crítico a fijar como contrato:
 - dos equipos están aislados (uno no aparece en lo del otro).
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from orux.teams import MemTeamStore, TeamError
@@ -173,6 +175,67 @@ async def test_contar_miembros() -> None:
     await s.redimir(code, "beto")
     assert await s.contar_miembros(tid) == 2
     assert await s.contar_miembros("no-existe") == 0
+
+
+# --- BACKEND-AUDIT-0214 (fix): caducidad real de invitaciones -----------
+#
+# El fix anterior dejó la columna `expires_at` pero ni `crear_invitacion`
+# la seteaba ni `redimir` la verificaba: un código filtrado seguía vivo
+# para siempre. Estos tests bloquean la regresión.
+
+
+async def test_invitacion_se_crea_con_expires_at_en_el_futuro() -> None:
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    code = await s.crear_invitacion(t["id"], "ana")
+    # No se expone API pública para leer expires_at (es detalle interno
+    # del store); inspeccionamos el dict para fijar el contrato del fix.
+    inv = s._invites[code]
+    assert "expires_at" in inv
+    assert inv["expires_at"] > datetime.now(timezone.utc)
+    # Y no más allá de ~7d (defensa contra "se nos fue al infinito").
+    assert inv["expires_at"] <= datetime.now(timezone.utc) + timedelta(days=8)
+
+
+async def test_invitacion_vigente_se_redime_normal() -> None:
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    code = await s.crear_invitacion(t["id"], "ana")
+    r = await s.redimir(code, "beto")
+    assert r == {"id": t["id"], "nombre": "A"}
+
+
+async def test_invitacion_expirada_levanta_team_error() -> None:
+    """Caducó: TeamError con mensaje accionable (no None silencioso, que
+    confundiría con 'código inexistente'). El lobby muestra el `str(e)`
+    al invitado."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    code = await s.crear_invitacion(t["id"], "ana")
+    # Forzamos expiración pisando el campo (el store es para tests/dev y
+    # exponer un `_for_test_caducar` sería peor que tocar el dict).
+    s._invites[code]["expires_at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=1)
+    )
+    with pytest.raises(TeamError, match="expir"):
+        await s.redimir(code, "beto")
+    # Y el code NO se consumió (sigue sin `usado_por`): si el admin emite
+    # uno nuevo el viejo no quedó "quemado" por el intento.
+    assert s._invites[code]["usado_por"] is None
+
+
+async def test_invitacion_expirada_no_suma_miembro() -> None:
+    """Defensa estructural: aunque alguien manipule el flujo, la cuenta
+    NO se vuelve miembro del equipo a partir de una invitación expirada."""
+    s = MemTeamStore()
+    t = await s.crear_equipo("A", "ana")
+    code = await s.crear_invitacion(t["id"], "ana")
+    s._invites[code]["expires_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=1)
+    )
+    with pytest.raises(TeamError):
+        await s.redimir(code, "beto")
+    assert await s.es_miembro(t["id"], "beto") is False
 
 
 async def test_suscripcion_se_guarda_y_se_limpia() -> None:

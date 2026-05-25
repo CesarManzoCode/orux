@@ -168,9 +168,13 @@ class PgTeamStore:
             code = _codigo()
             while await con.fetchval("SELECT 1 FROM invites WHERE code=$1", code):
                 code = _codigo()
+            # BACKEND-AUDIT-0214 (fix): TTL 7d explícito. La columna también
+            # tiene DEFAULT por defensa en profundidad, pero seteamos acá
+            # para que el código documente la regla y un cambio futuro de
+            # default no se nos cuele en silencio.
             await con.execute(
-                "INSERT INTO invites (code, team_id, creado_por) "
-                "VALUES ($1,$2,$3)",
+                "INSERT INTO invites (code, team_id, creado_por, expires_at) "
+                "VALUES ($1,$2,$3, now() + interval '7 days')",
                 code, team_id, normalizar(por_usuario),
             )
         return code
@@ -178,14 +182,25 @@ class PgTeamStore:
     async def redimir(self, code: str, usuario: str) -> dict | None:
         u = normalizar(usuario)
         async with self._db.tx() as con:
+            # BACKEND-AUDIT-0214 (fix): el chequeo de expiración va en SQL
+            # para que sea atómico con el FOR UPDATE. `expirada` es un bool
+            # derivado: NULL en `expires_at` significa "row pre-fix sin
+            # backfill" → tratamos como NO expirada (el backfill del
+            # esquema cubre eso al re-deployar). Distinguir expirada de
+            # "no existe" deja que la UX del lobby diga al invitado por
+            # qué falló (TeamError vs None).
             inv = await con.fetchrow(
-                # FOR UPDATE: dos personas no pueden quemar el mismo código
-                # a la vez (un código = una persona).
-                "SELECT team_id, usado_por FROM invites WHERE code=$1 FOR UPDATE",
+                "SELECT team_id, usado_por, "
+                "  (expires_at IS NOT NULL AND expires_at <= now()) AS expirada "
+                "FROM invites WHERE code=$1 FOR UPDATE",
                 code,
             )
             if inv is None or inv["usado_por"] is not None:
                 return None
+            if inv["expirada"]:
+                raise TeamError(
+                    "esta invitación expiró — pedile al admin una nueva"
+                )
             tid = inv["team_id"]
             t = await con.fetchrow(
                 "SELECT id, nombre, plan FROM teams WHERE id=$1", tid

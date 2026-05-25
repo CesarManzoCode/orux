@@ -18,9 +18,17 @@ para los tests y para este sandbox sin internet/DB.
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from ..identity.store import normalizar
 from ..plans import PLAN_DEFECTO, limites, permite_miembro
+
+# BACKEND-AUDIT-0214 (fix): TTL de invitaciones, único lugar de verdad
+# (pg.py usa el mismo número inline en SQL — si cambia, cambian los dos).
+# 7 días es el balance del usuario: largo para que un admin invite el lunes
+# y la persona se conecte el viernes; corto para que un código filtrado en
+# logs/screenshots no sea una llave permanente.
+INVITE_TTL_DAYS = 7
 
 
 class TeamError(ValueError):
@@ -253,6 +261,12 @@ class MemTeamStore:
             "team_id": team_id,
             "creado_por": normalizar(por_usuario),
             "usado_por": None,
+            # BACKEND-AUDIT-0214: caducidad real. Absoluta (datetime) para
+            # que tests/operadores puedan forzar expiración pisando el
+            # valor sin tocar el reloj del proceso.
+            "expires_at": (
+                datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)
+            ),
         }
         return code
 
@@ -270,6 +284,15 @@ class MemTeamStore:
             inv = self._invites.get(code)
             if inv is None or inv["usado_por"] is not None:
                 return None
+            # BACKEND-AUDIT-0214: caducidad. Distinguir "expirada" de "no
+            # existe" / "ya usada" para que la UX del lobby (`lobby.py`) le
+            # diga al invitado por qué — un código expirado es accionable
+            # (pedir uno nuevo), un código que no existe es un typo.
+            exp = inv.get("expires_at")
+            if exp is not None and exp <= datetime.now(timezone.utc):
+                raise TeamError(
+                    "esta invitación expiró — pedile al admin una nueva"
+                )
             u = normalizar(usuario)
             tid = inv["team_id"]
             if tid not in self._equipos:  # equipo borrado entre medio
