@@ -83,6 +83,17 @@ _TRACK_RPM = 120  # más permisivo: la landing puede generar varios eventos
                   # legítimos (pageview + cta_click + ...) en una sola
                   # visita. 120/min sigue siendo asfixiante para un bot.
 
+# Ventana deslizante (en segundos) sobre la que se cuentan los buckets.
+# El sufijo "_RPM" en las constantes de arriba mide "por minuto" — sin esta
+# constante con nombre, el `60.0` aparecía suelto en tres funciones y un
+# cambio de minuto a (por ejemplo) 30s habría requerido grep manual.
+_VENTANA_RPM_SEG = 60.0
+
+# Capacidad máxima de cada bucket-dict antes de gc perezoso. Cuando un
+# atacante rota IPs (>10k), purgar dicts vacíos no basta — el GC también
+# tira buckets cuya última muestra ya venció la ventana (ver _rate_limit_*).
+_TOPE_BUCKETS = 10_000
+
 _login_buckets: dict[str, list[float]] = {}
 _error_buckets: dict[str, list[float]] = {}
 _track_buckets: dict[str, list[float]] = {}
@@ -113,68 +124,54 @@ def _ip_de(req: Request) -> str:
     return transport_ip or "unknown"
 
 
-def _rate_limit_login(ip: str) -> bool:
-    """True = OK; False = está superando el tope. Bucket por IP con limpieza
-    perezosa para no crecer sin control."""
+def _purgar_buckets(buckets: dict[str, list[float]], corte: float) -> None:
+    """GC perezoso de un bucket-dict: solo se activa si el dict superó el
+    tope `_TOPE_BUCKETS`. Descarta buckets cuya última muestra venció la
+    ventana (no solo los vacíos): un atacante rotando >10k IPs con goteo
+    los mantendría no-vacíos y el dict crecería sin control."""
+    if len(buckets) <= _TOPE_BUCKETS:
+        return
+    muertas = [k for k, v in buckets.items() if not v or v[-1] <= corte]
+    for k in muertas:
+        buckets.pop(k, None)
+
+
+def _rate_limit(
+    buckets: dict[str, list[float]], ip: str, tope_rpm: int,
+) -> bool:
+    """Núcleo del rate limiter por IP. True = OK; False = superó el tope.
+    Bucket por IP con limpieza perezosa de muestras + gc del dict. Tres
+    consumidores (login, errors, track) que solo difieren en su tope.
+    Antes este bloque vivía duplicado en 3 funciones; consolidar evita
+    drift (e.g. cambiar la ventana en una y olvidar las otras)."""
     ahora = time.monotonic()
-    corte = ahora - 60.0
-    bucket = _login_buckets.setdefault(ip, [])
-    # Limpia entradas viejas (>1min).
+    corte = ahora - _VENTANA_RPM_SEG
+    bucket = buckets.setdefault(ip, [])
     bucket[:] = [t for t in bucket if t > corte]
-    if len(bucket) >= _LOGIN_RPM:
+    if len(bucket) >= tope_rpm:
         return False
     bucket.append(ahora)
-    # GC perezoso del dict. Descarta buckets OBSOLETOS (vacíos, o cuyo
-    # registro más nuevo ya venció la ventana), no sólo los vacíos: si sólo
-    # borrara los vacíos, un atacante rotando >10k IPs con un goteo las
-    # mantiene no-vacías y el dict crecería sin control.
-    if len(_login_buckets) > 10_000:
-        muertas = [
-            k for k, v in _login_buckets.items() if not v or v[-1] <= corte
-        ]
-        for k in muertas:
-            _login_buckets.pop(k, None)
+    _purgar_buckets(buckets, corte)
     return True
+
+
+def _rate_limit_login(ip: str) -> bool:
+    """True = OK; False = está superando el tope."""
+    return _rate_limit(_login_buckets, ip, _LOGIN_RPM)
 
 
 def _rate_limit_errors(ip: str) -> bool:
     """Mismo patrón que login, pero más permisivo. Los errores son señal
     útil para nosotros — preferimos perder algunos si una IP se vuelve
     abusiva, antes que floodear los logs."""
-    ahora = time.monotonic()
-    corte = ahora - 60.0
-    bucket = _error_buckets.setdefault(ip, [])
-    bucket[:] = [t for t in bucket if t > corte]
-    if len(bucket) >= _ERRORS_RPM:
-        return False
-    bucket.append(ahora)
-    if len(_error_buckets) > 10_000:
-        muertas = [
-            k for k, v in _error_buckets.items() if not v or v[-1] <= corte
-        ]
-        for k in muertas:
-            _error_buckets.pop(k, None)
-    return True
+    return _rate_limit(_error_buckets, ip, _ERRORS_RPM)
 
 
 def _rate_limit_track(ip: str) -> bool:
     """Tope para /api/v1/track. Más permisivo aún: una visita normal puede
     generar varios eventos legítimos. Si una IP se pasa, la silenciamos
     (el analytics local pierde algunas señales, no es crítico)."""
-    ahora = time.monotonic()
-    corte = ahora - 60.0
-    bucket = _track_buckets.setdefault(ip, [])
-    bucket[:] = [t for t in bucket if t > corte]
-    if len(bucket) >= _TRACK_RPM:
-        return False
-    bucket.append(ahora)
-    if len(_track_buckets) > 10_000:
-        muertas = [
-            k for k, v in _track_buckets.items() if not v or v[-1] <= corte
-        ]
-        for k in muertas:
-            _track_buckets.pop(k, None)
-    return True
+    return _rate_limit(_track_buckets, ip, _TRACK_RPM)
 
 
 class _SeguridadHeaders(BaseHTTPMiddleware):

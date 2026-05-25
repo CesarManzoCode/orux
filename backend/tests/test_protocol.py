@@ -233,3 +233,110 @@ def test_lobby_decode_rechaza_teams_no_lista() -> None:
     payload = '{"type":"lobby","teams":"no-soy-lista","error":""}'
     with pytest.raises(ProtocolError):
         decode(payload)
+
+
+# --- Capa 36 (G.1): `permitir_vacio=False` rechaza TANTO None como "" --------
+# Antes de Sprint G.1 el helper `_str(permitir_vacio=False)` solo rechazaba
+# `None`; un payload con `path=""` pasaba por campos marcados como
+# obligatorios. Estos tests fijan el contrato: una vez que un campo se
+# decodifica con `permitir_vacio=False`, "" se rechaza igual que None. Sin
+# ellos, un refactor que vuelva a separar None de "" pasaría todos los
+# roundtrips y la regresión quedaría invisible hasta producción.
+
+
+def test_str_helper_rechaza_string_vacio_cuando_permitir_vacio_false() -> None:
+    # `_str` es privado; el re-export `orux.protocol.validation` usa
+    # `import *` que NO trae símbolos con prefijo "_". Apuntamos al módulo
+    # real (memoria: re-exports no enlazan privados ni surten monkey-patch).
+    from orux.domain.protocol.validation import _str
+
+    with pytest.raises(ProtocolError):
+        _str("", campo="x", permitir_vacio=False)
+
+
+def test_str_helper_rechaza_none_cuando_permitir_vacio_false() -> None:
+    # `_str` es privado; el re-export `orux.protocol.validation` usa
+    # `import *` que NO trae símbolos con prefijo "_". Apuntamos al módulo
+    # real (memoria: re-exports no enlazan privados ni surten monkey-patch).
+    from orux.domain.protocol.validation import _str
+
+    with pytest.raises(ProtocolError):
+        _str(None, campo="x", permitir_vacio=False)
+
+
+def test_str_helper_acepta_vacio_por_default() -> None:
+    """Comportamiento por default (permitir_vacio=True): None y "" devuelven
+    "" sin levantar. Fijar el corolario garantiza que cualquier campo NO
+    obligatorio sigue permitiendo vacío tras el endurecimiento G.1."""
+    # `_str` es privado; el re-export `orux.protocol.validation` usa
+    # `import *` que NO trae símbolos con prefijo "_". Apuntamos al módulo
+    # real (memoria: re-exports no enlazan privados ni surten monkey-patch).
+    from orux.domain.protocol.validation import _str
+
+    assert _str(None, campo="x") == ""
+    assert _str("", campo="x") == ""
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '{"type":"update","path":"","content":"x"}',
+        '{"type":"delete","path":""}',
+        '{"type":"save","path":""}',
+        '{"type":"claim","path":""}',
+        '{"type":"presence","path":"","line":1}',
+        '{"type":"leave","client_id":""}',
+        '{"type":"resolve","proposal_id":"","accept":true}',
+        '{"type":"register","username":"","password":"x"}',
+        '{"type":"register","username":"x","password":""}',
+        '{"type":"login","username":"","password":"x"}',
+        '{"type":"login","username":"x","password":""}',
+        '{"type":"session","token":""}',
+        '{"type":"auth_ok","username":"","token":"abc"}',
+    ],
+    ids=[
+        "update_path", "delete_path", "save_path", "claim_path",
+        "presence_path", "leave_client_id", "resolve_proposal_id",
+        "register_username", "register_password",
+        "login_username", "login_password",
+        "session_token", "auth_ok_username",
+    ],
+)
+def test_decode_rechaza_campos_obligatorios_vacios(payload: str) -> None:
+    """Sprint G.1: cada campo marcado `permitir_vacio=False` en el codec
+    debe rechazar `""` con `ProtocolError`. Cubre el set entero para que
+    un olvido aislado quede expuesto por nombre."""
+    with pytest.raises(ProtocolError):
+        decode(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # path AUSENTE (None) — debe seguir rechazándose igual que "".
+        '{"type":"update","content":"x"}',
+        '{"type":"delete"}',
+        '{"type":"save"}',
+        '{"type":"claim"}',
+        # token ausente — campo obligatorio en SessionMessage.
+        '{"type":"session"}',
+        # credenciales ausentes — login/register exigen ambos.
+        '{"type":"login","password":"x"}',
+        '{"type":"login","username":"x"}',
+        '{"type":"register","password":"x"}',
+        '{"type":"register","username":"x"}',
+    ],
+    ids=[
+        "update_path_ausente", "delete_path_ausente", "save_path_ausente",
+        "claim_path_ausente", "session_token_ausente",
+        "login_username_ausente", "login_password_ausente",
+        "register_username_ausente", "register_password_ausente",
+    ],
+)
+def test_decode_rechaza_campos_obligatorios_ausentes(payload: str) -> None:
+    """Caso histórico (anterior a G.1): el helper YA rechazaba None. Este
+    test es el espejo del de arriba — garantiza que None y "" se rechazan
+    por la MISMA puerta (sin esto, un futuro split entre "missing" y
+    "empty" podría reintroducir un bypass para uno de los dos casos)."""
+    with pytest.raises(ProtocolError):
+        decode(payload)

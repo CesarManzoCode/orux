@@ -135,12 +135,26 @@ async def _amain() -> None:
     base.mkdir(parents=True, exist_ok=True)
     secret = _secreto(base)
     config = AppConfig.desde_env(base_dir=base, secret=secret)
+    # Marca de versión + modo al inicio: sin esto, en logs de varios deploys
+    # consecutivos es imposible saber qué binario emitió cada línea. La
+    # version sale del env `ORUX_VERSION` (same que `/api/v1/status`); en dev
+    # cae a "dev". `dsn` se anuncia presente/ausente, NUNCA el valor (trae
+    # credenciales).
+    log.info(
+        "orux-server v%s arrancando (mode=%s, base=%s, host=%s:%d)",
+        os.environ.get("ORUX_VERSION", "dev"),
+        "postgres" if config.dsn else "json-dev",
+        base, config.host, config.port,
+    )
     # Composition root: arma el grafo cableado completo (Ports + adapters).
     # El __main__ solo gestiona señales y arranca el server.
     server = await build_server(config)
     host = config.host
     port = config.port
-    del log  # mantener el binding para legibilidad de los logs siguientes
+    # (antes había un `del log` con comentario "mantener el binding" — la
+    # acción contradecía al comentario y el `log.info(...)` del except de
+    # más abajo levantaba NameError silencioso al recibir SIGTERM/SIGINT,
+    # así que el shutdown limpio NUNCA dejaba rastro en los logs.)
 
     # SIGTERM/SIGINT: el server WS atiende ConnectionClosed por conexión,
     # pero el loop principal de `server.run` se cancelaría como traceback

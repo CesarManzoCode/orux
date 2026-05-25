@@ -70,7 +70,10 @@ class TeamRuntime:
         git: GitPort | None = None,
     ) -> None:
         self.team_id = team_id
-        self.workspace = Workspace(storage=storage)
+        # Propagamos team_id al Workspace para que los logs de
+        # persistencia (`update`/`delete`) lo incluyan; sin esto, en un
+        # host multi-equipo es imposible saber QUÉ equipo tuvo el fallo.
+        self.workspace = Workspace(storage=storage, team_id=team_id)
         self.workspace.cargar_de_disco()
         # Capa 17: dir del workspace en disco = rootUri de pyright. Sólo el
         # adapter `DiskStorage` expone `.root`; otros adapters del
@@ -168,13 +171,15 @@ class TeamRuntime:
                 # Subprocess murió silenciosamente: limpiarlo y caer
                 # abajo a la lógica de re-arranque con cooldown.
                 logger.warning(
-                    "LSP %s murió (subprocess), reintentando", lang,
+                    "LSP %s murió (subprocess) en equipo %s, reintentando",
+                    lang, self.team_id,
                 )
                 try:
                     estado.sesion.cerrar()
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
-                        "error cerrando LSP %s muerto: %r", lang, e,
+                        "error cerrando LSP %s muerto en equipo %s: %r",
+                        lang, self.team_id, e,
                     )
                 estado.sesion = None
 
@@ -199,8 +204,8 @@ class TeamRuntime:
             if nueva is not None:
                 if estado.intentos_fallidos > 0:
                     logger.info(
-                        "LSP %s re-arrancado tras %d fallo(s)",
-                        lang, estado.intentos_fallidos,
+                        "LSP %s re-arrancado en equipo %s tras %d fallo(s)",
+                        lang, self.team_id, estado.intentos_fallidos,
                     )
                 estado.sesion = nueva
                 estado.intentos_fallidos = 0
@@ -212,8 +217,9 @@ class TeamRuntime:
             estado.intentos_fallidos += 1
             estado.ultimo_fallo = ahora
             logger.warning(
-                "LSP %s arranque #%d falló; próximo reintento en %ds",
-                lang, estado.intentos_fallidos,
+                "LSP %s arranque #%d falló en equipo %s; "
+                "próximo reintento en %ds",
+                lang, estado.intentos_fallidos, self.team_id,
                 int(estado.cooldown_seg()),
             )
             return None
@@ -245,7 +251,8 @@ class TeamRuntime:
                         estado.sesion.cerrar()
                     except Exception as e:  # noqa: BLE001
                         logger.warning(
-                            "error cerrando LSP %s ociosa: %r", lang, e,
+                            "error cerrando LSP %s ociosa en equipo %s: %r",
+                            lang, self.team_id, e,
                         )
                 del self._lsp[lang]
                 self._lsp_uso.pop(lang, None)
@@ -263,8 +270,8 @@ class TeamRuntime:
                         estado.sesion.cerrar()
                     except Exception as e:  # noqa: BLE001
                         logger.warning(
-                            "error cerrando LSP %s al reciclar: %r",
-                            lang, e,
+                            "error cerrando LSP %s al reciclar (equipo %s): %r",
+                            lang, self.team_id, e,
                         )
             self._lsp = {}
             self._lsp_uso = {}

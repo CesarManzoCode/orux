@@ -54,7 +54,12 @@ class WorkspaceLleno(ValueError):
 
 
 class Workspace:
-    def __init__(self, storage: "WorkspaceStoragePort | None" = None) -> None:
+    def __init__(
+        self,
+        storage: "WorkspaceStoragePort | None" = None,
+        *,
+        team_id: str = "",
+    ) -> None:
         # Diccionario interno: path (string) -> Document. Es la fuente de verdad
         # del servidor sobre qué archivos existen y qué contienen.
         self._documents: dict[str, Document] = {}
@@ -65,6 +70,10 @@ class Workspace:
         # La memoria sigue siendo la fuente de verdad en caliente; el disco es
         # su respaldo, no un intermediario en el hot path de retransmisión.
         self._storage = storage
+        # `team_id` se propaga al runtime para correlacionar logs en multi-equipo
+        # (capa 15). Opcional y backward-compatible: tests/dev sin team_id
+        # siguen funcionando; producción con Postgres pasa el id real.
+        self._team_id = team_id
 
     def snapshot(self) -> dict[str, str]:
         """Foto del workspace completo: path -> contenido.
@@ -144,7 +153,14 @@ class Workspace:
             try:
                 self._storage.guardar(path, content)
             except Exception:
-                logger.exception("no se pudo persistir %r (sigo en memoria)", path)
+                # Sigo en memoria (capa 0 sobrevive); el operador debe ver el
+                # equipo afectado para correlacionar el fallo (FS lleno,
+                # permisos, etc.) — sin team_id, en un host multi-equipo
+                # es imposible saber CUÁL está roto.
+                logger.exception(
+                    "no se pudo persistir %r en equipo %r (sigo en memoria)",
+                    path, self._team_id,
+                )
 
     def delete(self, path: str) -> bool:
         """Borra un archivo del workspace (memoria + disco). Devuelve si existía.
@@ -161,7 +177,10 @@ class Workspace:
             try:
                 self._storage.borrar(path)
             except Exception:
-                logger.exception("no se pudo borrar en disco %r", path)
+                logger.exception(
+                    "no se pudo borrar en disco %r en equipo %r",
+                    path, self._team_id,
+                )
         return True
 
     def recargar(self) -> None:
