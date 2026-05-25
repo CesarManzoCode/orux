@@ -885,6 +885,32 @@ export function App() {
         </div>
       </section>
 
+      {/* ── LÍMITES HONESTOS · anti-fluff signal antes del FAQ ──
+          Reusa la estructura visual de "No somos" (.nots/.not). El CSS de
+          .not ya está pensado como "límite intencional, no alerta" (icono
+          steel, no rojo), así que encaja exactamente con esta sección sin
+          inventar estilos nuevos. Solo cambiamos el carácter del span de
+          ✕ a ! para diferenciarlo a la vista. */}
+      <section id="limites">
+        <span className="sec-line" />
+        <div className="wrap">
+          <Head k={t.s_lim_k} sub={t.s_lim_sub}>
+            {t.s_lim_h_1}{" "}
+            <span className="soft">{t.s_lim_h_2}</span>
+          </Head>
+          <motion.div className="nots" variants={stagger}
+            initial={reduce ? "show" : "hidden"}
+            whileInView="show" viewport={{ once: true, amount: 0.3 }}>
+            {t.limits.map((n, i) => (
+              <motion.div className="not" key={i} variants={fadeUp}>
+                <span aria-hidden>!</span>
+                <div>{n}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
       {/* ── FAQ ── */}
       <section id="faq">
         <span className="sec-line" />

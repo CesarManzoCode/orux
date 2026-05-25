@@ -28,7 +28,7 @@ export const T = {
     nav_arr: "→",
 
     // Hero
-    hero_eyebrow: "Desplegado y listo · sé uno de los primeros equipos",
+    hero_eyebrow: "Desplegado · en producción hoy",
     hero_audience: "Para equipos de 2 a 50 devs · gratis hasta 5",
     hero_h1_1: "Quién toca qué. De quién es. Qué rompe.",
     hero_h1_2: "En tiempo real, sobre el Git que ya usas.",
@@ -159,6 +159,19 @@ export const T = {
       "No es un chatbot pegado a un editor.",
     ],
 
+    // Límites honestos (anti-fluff: lo que NO hace todavía)
+    s_lim_k: "Límites honestos",
+    s_lim_h_1: "Lo que todavía",
+    s_lim_h_2: "NO hace.",
+    s_lim_sub: "No queremos venderte humo. Esto es lo que aún no entrega Orux — y por qué.",
+    limits: [
+      "Es web app. No hay plugin de VSCode o JetBrains todavía. En el roadmap, no hoy.",
+      "El análisis de impacto cubre el 80% del flujo diario (4 lenguajes, AST + fan-out por LSP). NO es resolución de tipos cross-módulo grado-compilador — JetBrains lleva 20 años en eso. Entra cuando haya usuarios pagando que lo justifiquen.",
+      "Si dejás Orux, tu código entero queda en tu repo Git (un git clone basta). Pero el estado de coordinación — ownership, propuestas, presencia — vive en Orux y no se exporta. La capa es tuya mientras la uses.",
+      "Lo construye 1 persona. Bugs reportados durante el día tienen respuesta el día siguiente, no en 2 horas. Sin equipo de soporte 24/7 y sin pretender lo contrario.",
+      "No hay modo offline. La tesis (estado compartido en vivo) lo impide. Sin red, el editor te lo avisa y para cambios destructivos hasta reconectar.",
+    ],
+
     // FAQ
     s05_k: "05 · Preguntas frecuentes",
     s05_h_1: "Lo que el equipo pregunta",
@@ -188,6 +201,14 @@ export const T = {
       {
         q: "¿Qué lenguajes entiende el análisis de impacto?",
         a: "Hoy: Python, JavaScript/TypeScript, Go y Rust — todos con análisis real (AST o tree-sitter, fan-out por LSP), no coincidencia de texto. Java y Kotlin están en camino. En Free podés activar 2 lenguajes simultáneos; Premium quita ese tope.",
+      },
+      {
+        q: "¿No es lo mismo que VSCode Live Share o CODEOWNERS de GitHub?",
+        a: "No. Live Share es pair programming temporal: una persona abre su VSCode y otras se conectan a su sesión, sin Git compartido ni estado que sobreviva al cierre. Orux es el workspace permanente del equipo, asíncrono, con cada quien viendo el repo Git real y todo el estado de coordinación (ownership, propuestas, impacto) persistido entre sesiones. CODEOWNERS es un archivo estático que se desactualiza — Orux deriva el ownership del uso real y lo persiste. Otra forma de verlo: Live Share es 'junto a alguien por una hora', CODEOWNERS es 'una regla escrita hace meses', Orux es 'todo el equipo, todo el día, sin reuniones para coordinar'.",
+      },
+      {
+        q: "¿Y comparado con JetBrains? ¿Es análisis grado-compilador?",
+        a: "No. JetBrains lleva 20 años en resolución de tipos cross-módulo y eso no lo replicamos. Orux cubre el 80% del flujo diario: detectar quién usa un símbolo cuando cambia su firma, ownership y presencia. Análisis grado-compilador (tipos cross-módulo de verdad) está diferido — entra cuando haya usuarios pagando que lo justifiquen.",
       },
       {
         q: "¿Qué pasa con la privacidad del código?",
@@ -280,7 +301,7 @@ export const T = {
     pro_badge: "Recomendado al crecer",
     pro_tier: "Premium · cuando escala",
     pro_h4: "Cuando el equipo crece",
-    pro_sub: "Sin topes de equipo, lenguajes que se suman, impacto que cruza repos y análisis siempre tibio. Para cuando el líder ya no puede ser el cuello de botella. Premium en early access — escribinos a cesarmanzocode@gmail.com y lo activamos, ajustamos pricing con tu feedback.",
+    pro_sub: "Sin topes de equipo, lenguajes que se suman, impacto que cruza repos y análisis siempre tibio. Para cuando el líder ya no puede ser el cuello de botella. Precio beta: $5/asiento/mes — ajustable con tu feedback. Escribinos a cesarmanzocode@gmail.com y lo activamos.",
     pro: [
       "Equipo sin tope · workspaces ilimitados por equipo",
       "Los 4 lenguajes sin límite simultáneo · Java y Kotlin próximamente",
@@ -311,7 +332,7 @@ export const T = {
        new Date().getFullYear() — así el footer no envejece al pasar de
        año (era "© 2026 Orux" hardcoded, se sentiría stale en 2027). */
     foot_copy_suffix: "Orux · Todos los derechos reservados",
-    foot_built_by: "Construido por Cesar Manzo (16) ·",
+    foot_built_by: "Construido en solitario por Cesar Manzo (16) · sin equipo, sin VC ·",
 
     // Lang
     lang_es: "Español",
@@ -331,7 +352,7 @@ export const T = {
     nav_arr: "→",
 
     // Hero
-    hero_eyebrow: "Deployed and ready · be one of the first teams",
+    hero_eyebrow: "Deployed · in production today",
     hero_audience: "For teams of 2 to 50 devs · free up to 5",
     hero_h1_1: "Who touches what. Who owns it. What breaks.",
     hero_h1_2: "In real time, on the Git you already use.",
@@ -462,6 +483,19 @@ export const T = {
       "Not a chatbot glued to an editor.",
     ],
 
+    // Honest limits (anti-fluff: what it doesn't do yet)
+    s_lim_k: "Honest limits",
+    s_lim_h_1: "What it still",
+    s_lim_h_2: "does NOT do.",
+    s_lim_sub: "No smoke. Here's what Orux still doesn't deliver — and why.",
+    limits: [
+      "Web app only. No VSCode or JetBrains plugin yet. On the roadmap, not today.",
+      "Impact analysis covers 80% of the daily flow (4 languages, AST + LSP fan-out). NOT compiler-grade cross-module type resolution — JetBrains has 20 years on that. It lands when there are paying users that justify it.",
+      "If you leave Orux, your whole codebase stays in your Git repo (a git clone is enough). But coordination state — ownership, proposals, presence — lives in Orux and doesn't export. The layer is yours while you use it.",
+      "Built by 1 person. Bugs reported during the day get answered the next day, not in 2 hours. No 24/7 support team and not pretending otherwise.",
+      "No offline mode. The thesis (shared live state) prevents it. Without network, the editor tells you and stops destructive changes until you reconnect.",
+    ],
+
     // FAQ
     s05_k: "05 · Frequently asked",
     s05_h_1: "What teams ask",
@@ -491,6 +525,14 @@ export const T = {
       {
         q: "What languages does impact analysis understand?",
         a: "Today: Python, JavaScript/TypeScript, Go and Rust — all with real analysis (AST or tree-sitter, fan-out via LSP), not text matching. Java and Kotlin are on the way. On Free you can activate 2 languages at a time; Premium removes that cap.",
+      },
+      {
+        q: "Isn't this the same as VSCode Live Share or GitHub CODEOWNERS?",
+        a: "No. Live Share is temporary pair programming: one person opens their VSCode and others join their session — no shared Git, no state that survives close. Orux is the team's permanent workspace, async, each person sees the real Git repo and all coordination state (ownership, proposals, impact) persists across sessions. CODEOWNERS is a static file that goes stale — Orux derives ownership from real usage and persists it. Another way to see it: Live Share is 'next to someone for an hour', CODEOWNERS is 'a rule written months ago', Orux is 'the whole team, all day, no coordination meetings'.",
+      },
+      {
+        q: "And compared to JetBrains? Is it compiler-grade analysis?",
+        a: "No. JetBrains has 20 years on cross-module type resolution and we don't replicate that. Orux covers the 80% of the daily flow: detecting who uses a symbol when its signature changes, ownership and presence. Compiler-grade analysis (real cross-module types) is deferred — it lands when there are paying users that justify it.",
       },
       {
         q: "What about code privacy?",
@@ -583,7 +625,7 @@ export const T = {
     pro_badge: "Recommended as you grow",
     pro_tier: "Premium · when it scales",
     pro_h4: "When the team grows",
-    pro_sub: "No team caps, languages that compound, impact that crosses repos and always-warm analysis. For when the lead can no longer be the bottleneck. Premium in early access — email cesarmanzocode@gmail.com and we activate it, pricing adjusted with your feedback.",
+    pro_sub: "No team caps, languages that compound, impact that crosses repos and always-warm analysis. For when the lead can no longer be the bottleneck. Beta pricing: $5/seat/mo — adjustable with your feedback. Email cesarmanzocode@gmail.com and we activate it.",
     pro: [
       "No team cap · unlimited workspaces per team",
       "All 4 languages without simultaneous limit · Java and Kotlin coming soon",
@@ -611,7 +653,7 @@ export const T = {
     foot_faq: "FAQ",
     foot_price: "Pricing",
     foot_copy_suffix: "Orux · All rights reserved",
-    foot_built_by: "Built by Cesar Manzo (16) ·",
+    foot_built_by: "Built solo by Cesar Manzo (16) · no team, no VC ·",
 
     // Lang
     lang_es: "Español",
