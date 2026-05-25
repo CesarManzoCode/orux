@@ -1,7 +1,16 @@
 # Imagen del servidor orux. Solo el server Python: el cliente estático
 # (web/) lo sirve Caddy (ver docker-compose.yml). No agrega nada al producto,
 # solo lo empaqueta para correr en un VPS.
-FROM python:3.12-slim AS base
+#
+# BACKEND-AUDIT B-08: imágenes pinneadas por digest. Antes era `FROM
+# python:3.12-slim`, un tag mutable: un atacante que comprometiera Docker
+# Hub o un tag pisado inyectaba código en el siguiente `make rebuild`. Con
+# digest, el rebuild es bit-idéntico hasta que actualicemos el digest a
+# mano. Para refrescar:
+#   docker pull python:3.12-slim
+#   docker inspect --format='{{index .RepoDigests 0}}' python:3.12-slim
+# y reemplazar la línea de abajo con el sha256: nuevo.
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS base
 
 # `git` es REQUISITO de runtime: la capa 8 invoca el binario `git` para
 # reportar el estado del workspace (que es un repo git). Sin git, GitRepo

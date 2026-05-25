@@ -117,7 +117,10 @@ services:
     # Capa 15: la DB de metadatos (users/teams/members/invites/ownership).
     # No publica puertos: sólo alcanzable dentro de la red de compose, como
     # el server. El estado vive en su propio volumen (durabilidad real).
-    image: postgres:16-alpine
+    # BACKEND-AUDIT B-08: pin por digest. Refrescar con:
+    #   docker pull postgres:16-alpine
+    #   docker inspect --format='{{index .RepoDigests 0}}' postgres:16-alpine
+    image: postgres:16-alpine@sha256:16bc17c64a573ef34162af9298258d1aec548232985b33ed7b1eac33ba35c229
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
     # Postgres solo guarda metadatos (no archivos): tablas chicas, queries

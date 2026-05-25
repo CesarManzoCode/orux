@@ -1,9 +1,13 @@
 # Estáticos servidos por Caddy. Multi-stage: Node compila, la imagen final
 # solo lleva Caddy + lo compilado. El build corre en el VPS (hay internet);
 # fiel a "git clone basta": el adoptante hace `make up` y listo.
+#
+# BACKEND-AUDIT B-08: imágenes pinneadas por digest (node:20-alpine y
+# caddy:2). Refrescar con `docker pull <tag>` + `docker inspect --format=
+# '{{index .RepoDigests 0}}' <tag>` cuando se quiera tomar parches.
 
 # --- IDE: cliente React (vive en /app, Vite base=/app/) ------------------
-FROM node:20-alpine AS client
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS client
 WORKDIR /client
 COPY frontend/ide/package.json frontend/ide/package-lock.json* ./
 RUN npm install --no-audit --no-fund
@@ -14,7 +18,7 @@ RUN npm run build
 # Capa 23b (rehecha): la landing NO es estática minimal — es la cara del
 # producto (React + Framer Motion + gradientes). Build aparte: no infla el
 # bundle del IDE y se despliega independiente.
-FROM node:20-alpine AS landing
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS landing
 WORKDIR /landing
 COPY frontend/landing/package.json frontend/landing/package-lock.json* ./
 RUN npm install --no-audit --no-fund
@@ -25,7 +29,7 @@ RUN npm run build
 # El Caddyfile entra por bind-mount en docker-compose (edición + variable
 # de dominio); acá solo los estáticos. landing -> raíz; IDE -> /app;
 # panel de operador -> /admin (sin colisión: assets en rutas distintas).
-FROM caddy:2
+FROM caddy:2@sha256:ec18ee54aab3315c22e25f3b2babda73ff8007d39b13b3bd1bfffa2f0444c7d9
 COPY --from=landing /landing/dist /srv
 COPY --from=client /client/dist /srv/app
 COPY frontend/ops/admin.html /srv/admin/index.html
