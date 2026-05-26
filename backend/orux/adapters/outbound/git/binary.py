@@ -617,6 +617,15 @@ class GitRepo:
         )
         if rc == 0:
             return (True, "push hecho")
+        # Log diagnóstico: el mensaje devuelto al cliente es humano-readable
+        # ("usuario o token incorrectos", "el remoto cambió..."), pero el
+        # operador a las 3am necesita la salida cruda de git (ya scrubeada
+        # por `_git_cred`) para distinguir "rama protegida" de "branch
+        # restrictions" de "shallow update not allowed", etc.
+        logger.warning(
+            "git push falló: rc=%d destino=%s out=%r",
+            rc, destino, out[:500],
+        )
         bajo = out.lower()
         if "non-fast-forward" in bajo or "rejected" in bajo or "fetch first" in bajo:
             return (
@@ -667,6 +676,14 @@ class GitRepo:
         if rc == 0:
             return (True, f"rama «{rama}» actualizada en el remoto",
                     _url_pr(actual, rama))
+        # Mismo razonamiento que en `push()`: el mensaje a cliente está
+        # filtrado por _detalle_remoto; loguear la salida cruda (scrubeada)
+        # para diagnóstico del operador. Acortar a 500 chars: stack
+        # traces de hooks server-side son largos y aportan poca señal.
+        logger.warning(
+            "git push --force-with-lease falló: rc=%d rama=%s out=%r",
+            rc, rama, out[:500],
+        )
         bajo = out.lower()
         if "stale info" in bajo or "force-with-lease" in bajo or (
             "rejected" in bajo and "fetch first" in bajo

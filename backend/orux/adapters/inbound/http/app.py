@@ -120,6 +120,30 @@ def _ip_de(req: Request) -> str:
     return transport_ip or "unknown"
 
 
+# --- Helpers de respuesta JSON --------------------------------------------
+#
+# Los 27+ handlers HTTP repetían el patrón `JSONResponse({"error": ...},
+# status_code=N)` y `JSONResponse(d)` directamente. Estos helpers no
+# cambian el contrato (mismo JSON, mismo status) — solo unifican la
+# expresión y dejan un único punto si en el futuro queremos enriquecer
+# todos los errores (e.g. `request_id`).
+def _err(msg: str, status: int = 400, **extra) -> JSONResponse:
+    """Respuesta de error consistente. `extra` se mergea al body (e.g.
+    `_err("...", 429, retry_after=60)`). Mantiene el shape `{"error":
+    "<msg>", ...}` que todos los clientes ya esperan."""
+    body: dict = {"error": msg}
+    if extra:
+        body.update(extra)
+    return JSONResponse(body, status_code=status)
+
+
+def _ok(data: dict, status: int = 200) -> JSONResponse:
+    """Respuesta exitosa estándar. Existe para simetría con `_err` y
+    para que un futuro middleware (request_id, headers JSON específicos)
+    tenga un único punto de modificación."""
+    return JSONResponse(data, status_code=status)
+
+
 def _rate_limit(
     buckets: dict[str, list[float]], ip: str, tope_rpm: int,
 ) -> bool:
@@ -188,12 +212,17 @@ class _LimiteBody(BaseHTTPMiddleware):
         if cl is not None:
             try:
                 if int(cl) > _MAX_BODY_BYTES:
-                    return JSONResponse(
-                        {"error": "body demasiado grande"},
-                        status_code=413,
-                    )
+                    return _err("body demasiado grande", status=413)
             except ValueError:
-                pass
+                # Content-Length malformado (e.g. "abc", "1 MB"). El frame
+                # de Starlette / uvicorn lo rechaza después, así que dejar
+                # pasar es seguro; pero loguear ayuda detectar clientes
+                # rotos o probes maliciosos que de otra forma pasarían
+                # invisibles por este middleware.
+                logger.warning(
+                    "LimiteBody: content-length malformado %r (path=%s)",
+                    cl, request.url.path,
+                )
         return await call_next(request)
 
 # --- GitHub OAuth (capa nueva, superficie PÚBLICA, no la de operador) -----
@@ -416,9 +445,7 @@ async def _gh_login(_req: Request):
     """Arranca el flujo: 302 a GitHub con un `state` CSRF firmado (stateless,
     se valida en el callback). Sin configurar: 503, no a medias."""
     if not _oauth_ok():
-        return JSONResponse(
-            {"error": "GitHub OAuth no configurado"}, status_code=503
-        )
+        return _err("GitHub OAuth no configurado", status=503)
     state = firmar_state(_SESSION_SECRET)
     return RedirectResponse(
         url_autorizacion(_GH_CLIENT_ID, _GH_REDIRECT, state),
@@ -464,9 +491,7 @@ async def _gh_callback(req: Request):
     sesión de la capa 7. Cualquier fallo -> vuelve al SPA con un error
     legible, nunca un 500 crudo (esto lo ve un humano en el navegador)."""
     if not _oauth_ok():
-        return JSONResponse(
-            {"error": "GitHub OAuth no configurado"}, status_code=503
-        )
+        return _err("GitHub OAuth no configurado", status=503)
     if req.query_params.get("error"):
         # El usuario canceló el consentimiento en GitHub.
         return _volver(error="cancelado")
@@ -515,10 +540,10 @@ def _gate(req: Request) -> JSONResponse | None:
     agregan espacios; un cliente legítimo no debería caerse por eso.
     """
     if not _ADMIN_USER or not _SECRET:
-        return JSONResponse(
-            {"error": "API de operador no configurada (falta "
-                      "ORUX_ADMIN_USER / ORUX_ADMIN_TOKEN)"},
-            status_code=503,
+        return _err(
+            "API de operador no configurada (falta "
+            "ORUX_ADMIN_USER / ORUX_ADMIN_TOKEN)",
+            status=503,
         )
     cab = (req.headers.get("authorization", "") or "").strip()
     if cab[:7].lower() == "bearer ":
@@ -527,7 +552,7 @@ def _gate(req: Request) -> JSONResponse | None:
         tok = ""
     if service.operador_de_token(tok, _ADMIN_USER, _SECRET) is not None:
         return None
-    return JSONResponse({"error": "no autorizado"}, status_code=401)
+    return _err("no autorizado", status=401)
 
 
 async def _login(req: Request) -> JSONResponse:
@@ -537,12 +562,14 @@ async def _login(req: Request) -> JSONResponse:
     cuenta es el operador). 503 si no está configurado. 429 si supera el
     rate-limit por IP (BACKEND-AUDIT-0003 / -0163)."""
     if not _ADMIN_USER or not _SECRET:
-        return JSONResponse(
-            {"error": "API de operador no configurada"}, status_code=503
-        )
+        return _err("API de operador no configurada", status=503)
     ip = _ip_de(req)
     if not _rate_limit_login(ip):
         logger.warning("rate-limit login: IP %s", ip)
+        # `Retry-After: 60` viene de la ventana 1-min del rate-limiter.
+        # `_err` no maneja headers custom, así que armamos la respuesta a
+        # mano para no perder esa señal (clientes que la honran reintentan
+        # sin saturar el endpoint).
         return JSONResponse(
             {"error": "demasiados intentos, esperá un minuto"},
             status_code=429,
@@ -550,16 +577,18 @@ async def _login(req: Request) -> JSONResponse:
         )
     try:
         body = await req.json()
-    except Exception:  # noqa: BLE001 - body no-JSON
-        return JSONResponse({"error": "body JSON inválido"},
-                            status_code=400)
+    except (ValueError, UnicodeDecodeError):
+        # ValueError cubre json.JSONDecodeError; UnicodeDecodeError pasa
+        # cuando el body no es UTF-8 válido. Capturar `Exception` aquí
+        # esconde bugs no relacionados (e.g. RuntimeError de Starlette).
+        return _err("body JSON inválido", status=400)
     token = await service.login_operador(
         req.app.state.users, _ADMIN_USER, _SECRET,
         str(body.get("username", "")), str(body.get("password", "")),
     )
     if token is None:
-        return JSONResponse({"error": "no autorizado"}, status_code=401)
-    return JSONResponse({"token": token})
+        return _err("no autorizado", status=401)
+    return _ok({"token": token})
 
 
 async def _health(req: Request) -> JSONResponse:
@@ -571,24 +600,26 @@ async def _health(req: Request) -> JSONResponse:
     if db is not None:
         try:
             ok_db = await db.ping()
-        except Exception:
+        except Exception as e:  # noqa: BLE001 - cualquier fallo = DB no sana
+            # Loguear el motivo del ping fallido: sin esto, el orquestador
+            # reinicia el contenedor en bucle y el operador no ve la causa.
+            # `db.ping()` ya tira logger.exception adentro; acá `warning`
+            # con la excepción es suficiente para correlación en tiempo.
+            logger.warning("healthcheck: db.ping() falló: %r", e)
             ok_db = False
-    return JSONResponse(
-        {"ok": ok_db, "db": ok_db},
-        status_code=200 if ok_db else 503,
-    )
+    return _ok({"ok": ok_db, "db": ok_db}, status=200 if ok_db else 503)
 
 
 async def _usuarios(req: Request) -> JSONResponse:
     if (g := _gate(req)) is not None:
         return g
-    return JSONResponse(await service.listar_usuarios(req.app.state.users))
+    return _ok(await service.listar_usuarios(req.app.state.users))
 
 
 async def _teams(req: Request) -> JSONResponse:
     if (g := _gate(req)) is not None:
         return g
-    return JSONResponse(await service.listar_teams(req.app.state.teams))
+    return _ok(await service.listar_teams(req.app.state.teams))
 
 
 async def _detalle(req: Request) -> JSONResponse:
@@ -597,9 +628,8 @@ async def _detalle(req: Request) -> JSONResponse:
     d = await service.detalle_team(req.app.state.teams,
                                    req.path_params["tid"])
     if d is None:
-        return JSONResponse({"error": "equipo inexistente"},
-                            status_code=404)
-    return JSONResponse(d)
+        return _err("equipo inexistente", status=404)
+    return _ok(d)
 
 
 async def _borrar_team(req: Request) -> JSONResponse:
@@ -613,9 +643,9 @@ async def _borrar_team(req: Request) -> JSONResponse:
     tid = req.path_params["tid"]
     ok = await service.borrar_team(req.app.state.teams, tid)
     if not ok:
-        return JSONResponse({"error": "equipo inexistente"}, status_code=404)
+        return _err("equipo inexistente", status=404)
     logger.info("operador borró equipo: %s", tid)
-    return JSONResponse({"borrado": True, "team_id": tid})
+    return _ok({"borrado": True, "team_id": tid})
 
 
 async def _borrar_usuario(req: Request) -> JSONResponse:
@@ -631,11 +661,11 @@ async def _borrar_usuario(req: Request) -> JSONResponse:
             req.app.state.users, username, admin_user=_ADMIN_USER,
         )
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return _err(str(e), status=400)
     if not ok:
-        return JSONResponse({"error": "usuario inexistente"}, status_code=404)
+        return _err("usuario inexistente", status=404)
     logger.info("operador borró usuario: %s", username)
-    return JSONResponse({"borrado": True, "username": username})
+    return _ok({"borrado": True, "username": username})
 
 
 async def _plan(req: Request) -> JSONResponse:
@@ -643,20 +673,21 @@ async def _plan(req: Request) -> JSONResponse:
         return g
     try:
         body = await req.json()
-    except Exception:  # noqa: BLE001 - body no-JSON
-        return JSONResponse({"error": "body JSON inválido"},
-                            status_code=400)
+    except (ValueError, UnicodeDecodeError):
+        # ValueError cubre json.JSONDecodeError; UnicodeDecodeError pasa
+        # cuando el body no es UTF-8 válido. Capturar `Exception` aquí
+        # esconde bugs no relacionados (e.g. RuntimeError de Starlette).
+        return _err("body JSON inválido", status=400)
     try:
         d = await service.cambiar_plan(
             req.app.state.teams, req.path_params["tid"],
             str(body.get("plan", "")),
         )
     except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return _err(str(e), status=400)
     if d is None:
-        return JSONResponse({"error": "equipo inexistente"},
-                            status_code=404)
-    return JSONResponse(d)
+        return _err("equipo inexistente", status=404)
+    return _ok(d)
 
 
 # --- Stripe: checkout (inicia el pago) + webhook (confirma) ---------------
@@ -672,35 +703,35 @@ async def _billing_checkout(req: Request) -> JSONResponse:
     Solo el ADMIN del equipo puede iniciar el upgrade — gestionar el plan
     es gestión del equipo, igual que invitar."""
     if not _billing_ok():
-        return JSONResponse({"error": "pagos no configurados"},
-                            status_code=503)
+        return _err("pagos no configurados", status=503)
     cab = (req.headers.get("authorization", "") or "").strip()
     tok = cab[7:].strip() if cab[:7].lower() == "bearer " else ""
     usuario = usuario_de_token(tok, _SESSION_SECRET) if _SESSION_SECRET else None
     if usuario is None:
-        return JSONResponse({"error": "no autenticado"}, status_code=401)
+        return _err("no autenticado", status=401)
     try:
         body = await req.json()
-    except Exception:  # noqa: BLE001 - body no-JSON
-        return JSONResponse({"error": "body JSON inválido"}, status_code=400)
+    except (ValueError, UnicodeDecodeError):
+        # ValueError cubre json.JSONDecodeError; UnicodeDecodeError pasa
+        # cuando el body no es UTF-8 válido. Capturar `Exception` aquí
+        # esconde bugs no relacionados (e.g. RuntimeError de Starlette).
+        return _err("body JSON inválido", status=400)
     team_id = str(body.get("team_id", ""))
     if not team_id:
-        return JSONResponse({"error": "falta team_id"}, status_code=400)
+        return _err("falta team_id", status=400)
     teams = req.app.state.teams
     if await teams.rol(team_id, usuario) != "admin":
         # No es admin de ese equipo (o ni siquiera es miembro). Mismo
         # criterio que invitar: solo el admin gestiona el equipo.
-        return JSONResponse(
-            {"error": "solo el admin del equipo puede gestionar el plan"},
-            status_code=403,
+        return _err(
+            "solo el admin del equipo puede gestionar el plan", status=403,
         )
     equipo = await teams.equipo(team_id)
     if equipo is None:
-        return JSONResponse({"error": "equipo inexistente"}, status_code=404)
+        return _err("equipo inexistente", status=404)
     if equipo.get("plan") == "premium":
         # Ya es premium: evita crear una segunda suscripción por error.
-        return JSONResponse({"error": "el equipo ya es premium"},
-                            status_code=400)
+        return _err("el equipo ya es premium", status=400)
     # Capa 31 (cobro por asiento): la suscripción arranca con tantos
     # asientos como miembros tenga el equipo ahora. Si después entran más,
     # el server WS sube la cantidad de la suscripción al redimir la invitación.
@@ -712,10 +743,12 @@ async def _billing_checkout(req: Request) -> JSONResponse:
             _crear_sesion_checkout, team_id, equipo["nombre"], seats,
         )
     except (urllib.error.URLError, ValueError, KeyError, TimeoutError) as e:
-        logger.warning("Stripe checkout falló: %r", e)
-        return JSONResponse({"error": "no se pudo iniciar el pago"},
-                            status_code=502)
-    return JSONResponse({"url": url})
+        logger.warning(
+            "Stripe checkout falló (team_id=%s, usuario=%s): %r",
+            team_id, usuario, e,
+        )
+        return _err("no se pudo iniciar el pago", status=502)
+    return _ok({"url": url})
 
 
 async def _billing_webhook(req: Request) -> JSONResponse:
@@ -730,10 +763,10 @@ async def _billing_webhook(req: Request) -> JSONResponse:
     - error nuestro al persistir    -> 500 a propósito: ahí el reintento
       de Stripe SÍ sirve (p. ej. Postgres caído un momento)."""
     if not _billing_ok():
-        return JSONResponse({"error": "pagos no configurados"},
-                            status_code=503)
+        return _err("pagos no configurados", status=503)
     payload = await req.body()
     firma = req.headers.get("stripe-signature", "")
+    ip = _ip_de(req)
     if not billing.verificar_firma_webhook(
         payload, firma, _STRIPE_WEBHOOK_SECRET,
     ):
@@ -744,16 +777,19 @@ async def _billing_webhook(req: Request) -> JSONResponse:
             evt_id = billing.event_id_de(billing.evento_de_payload(payload))
         except ValueError:
             pass
+        # IP en el log: Stripe firma con secreto compartido — si entra un
+        # payload con firma inválida, o es ruido de la red pública o algo
+        # peor; correlacionar con el WAF/Caddy ayuda a distinguir.
         logger.warning(
-            "webhook de Stripe con firma inválida (event_id=%s)",
-            evt_id or "?",
+            "webhook de Stripe con firma inválida (event_id=%s ip=%s)",
+            evt_id or "?", ip,
         )
-        return JSONResponse({"error": "firma inválida"}, status_code=400)
+        return _err("firma inválida", status=400)
     try:
         evento = billing.evento_de_payload(payload)
     except ValueError:
-        logger.warning("webhook de Stripe con payload inválido")
-        return JSONResponse({"error": "payload inválido"}, status_code=400)
+        logger.warning("webhook de Stripe con payload inválido (ip=%s)", ip)
+        return _err("payload inválido", status=400)
     evt_id = billing.event_id_de(evento)
     evt_tipo = str(evento.get("type", "?"))
     try:
@@ -770,8 +806,8 @@ async def _billing_webhook(req: Request) -> JSONResponse:
             "error aplicando evento Stripe (id=%s type=%s); Stripe reintentará",
             evt_id or "?", evt_tipo,
         )
-        return JSONResponse({"error": "error interno"}, status_code=500)
-    return JSONResponse({"recibido": True, "aplicado": res is not None})
+        return _err("error interno", status=500)
+    return _ok({"recibido": True, "aplicado": res is not None})
 
 
 async def _client_error(req: Request) -> Response:
@@ -794,7 +830,9 @@ async def _client_error(req: Request) -> Response:
         return Response(status_code=429)
     try:
         data = await req.json()
-    except Exception:  # noqa: BLE001 — body inválido = descartar
+    except (ValueError, UnicodeDecodeError):
+        # Body inválido: lo descartamos sin loguear (cliente roto manda
+        # 400s en serie; ya están rate-limited por _rate_limit_errors).
         return Response(status_code=400)
     if not isinstance(data, dict):
         return Response(status_code=400)
@@ -825,7 +863,7 @@ async def _client_track(req: Request) -> Response:
         return Response(status_code=429)
     try:
         data = await req.json()
-    except Exception:  # noqa: BLE001
+    except (ValueError, UnicodeDecodeError):
         return Response(status_code=400)
     if not isinstance(data, dict):
         return Response(status_code=400)
@@ -850,7 +888,7 @@ async def _status(req: Request) -> JSONResponse:
     Sin auth: nada sensible acá."""
     uptime_s = int(time.monotonic() - _INICIO_MONO)
     version = os.environ.get("ORUX_VERSION", "dev")
-    return JSONResponse({
+    return _ok({
         "ok": True,
         "uptime_s": uptime_s,
         "version": version,
