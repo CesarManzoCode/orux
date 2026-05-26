@@ -63,11 +63,32 @@ RATE_BURST = _env_float("ORUX_RATE_BURST", 100.0, 1.0, 10_000.0)
 #
 # Formatos del env:
 # - vacío o default: solo `https://orux.space` + clientes sin Origin
-#   (cubre prod y el healthcheck del Docker; localhost dev se añade manual)
+#   (cubre prod y el healthcheck del Docker; localhost dev se añade manual o
+#   se infiere automáticamente cuando `ORUX_DB_DSN` está vacío — modo dev sin
+#   Postgres)
 # - CSV ("https://orux.space,http://localhost:5173"): esos + sin Origin
 # - "*": aceptar TODO (incluye clientes browser arbitrarios; usar SOLO en
 #   debug puntual, jamás en prod)
-_DEF_ORIGINS = "https://orux.space,http://localhost:5173,http://localhost:8080"
+#
+# AUDITORIA-SEGURIDAD 2026-05-25 A-WS-02: el default NO incluye localhost en
+# producción. Si un operador olvidaba setear `ORUX_WS_ORIGINS` en el VPS, un
+# atacante podía forzar a un proxy local a servir HTML en localhost:5173 y
+# montar CSRF contra el WS con el `orux_session` de la víctima. Para no
+# romper el dev local (Vite en :5173), el código de abajo añade localhost al
+# default cuando detecta modo dev (sin `ORUX_DB_DSN` => no hay Postgres =>
+# no es producción).
+_DEF_ORIGINS_PROD = "https://orux.space"
+_DEF_ORIGINS_DEV_EXTRAS = "http://localhost:5173,http://localhost:8080"
+
+
+def _default_origins() -> str:
+    # Modo dev: sin Postgres, abrimos localhost también para que el cliente
+    # Vite y el static server local conecten sin tener que setear nada.
+    # Modo prod (con ORUX_DB_DSN): solo el dominio público; el operador debe
+    # setear ORUX_WS_ORIGINS explícitamente si necesita otros orígenes.
+    if not os.environ.get("ORUX_DB_DSN", "").strip():
+        return f"{_DEF_ORIGINS_PROD},{_DEF_ORIGINS_DEV_EXTRAS}"
+    return _DEF_ORIGINS_PROD
 
 
 def _parse_origins(env: str) -> list[str | None] | None:
@@ -79,7 +100,9 @@ def _parse_origins(env: str) -> list[str | None] | None:
     return [*items, None] if items else [None]
 
 
-WS_ORIGINS = _parse_origins(os.environ.get("ORUX_WS_ORIGINS", _DEF_ORIGINS))
+WS_ORIGINS = _parse_origins(
+    os.environ.get("ORUX_WS_ORIGINS", _default_origins())
+)
 
 
 class _RateLimiter:

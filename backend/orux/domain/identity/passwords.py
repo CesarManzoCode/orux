@@ -91,11 +91,19 @@ def verificar_password(password: str, registro: str) -> bool:
         algo, iteraciones, sal_hex, hash_hex = registro.split("$")
         if algo != "pbkdf2_sha256":
             return False
+        # AUDITORIA-SEGURIDAD 2026-05-25 B-PERS-06: clamp de iteraciones
+        # del registro. Si un atacante puede manipular el JSON/DB para
+        # poner iteraciones=20_000_000 a un registro, cada `verificar`
+        # ese usuario hace minutos de CPU (DoS de auth). El rango sano
+        # cubre OWASP 2015 (100k) hasta OWASP 2030 (~2M).
+        n_iter = int(iteraciones)
+        if n_iter < 100_000 or n_iter > 2_000_000:
+            return False
         derivado = hashlib.pbkdf2_hmac(
             "sha256",
             password.encode("utf-8"),
             bytes.fromhex(sal_hex),
-            int(iteraciones),
+            n_iter,
         )
         return hmac.compare_digest(derivado.hex(), hash_hex)
     except (ValueError, AttributeError):

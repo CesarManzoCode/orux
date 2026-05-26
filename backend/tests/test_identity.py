@@ -73,17 +73,19 @@ def test_verificar_registro_corrupto_es_false() -> None:
 
 
 def test_token_roundtrip() -> None:
-    t = crear_token("joaquin", secret="s3cr3t")
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: emitir SIEMPRE con ttl_seg.
+    # Sin ttl, el token no lleva exp y ya no se acepta por default.
+    t = crear_token("joaquin", secret="s3cr3t", ttl_seg=3600)
     assert usuario_de_token(t, "s3cr3t") == "joaquin"
 
 
 def test_token_con_otro_secreto_no_vale() -> None:
-    t = crear_token("joaquin", secret="bueno")
+    t = crear_token("joaquin", secret="bueno", ttl_seg=3600)
     assert usuario_de_token(t, "malo") is None
 
 
 def test_token_manipulado_no_vale() -> None:
-    t = crear_token("joaquin", secret="s")
+    t = crear_token("joaquin", secret="s", ttl_seg=3600)
     payload, firma = t.split(".", 1)
     # Mismo formato, firma inventada -> rechazado.
     assert usuario_de_token(payload + ".deadbeef", "s") is None

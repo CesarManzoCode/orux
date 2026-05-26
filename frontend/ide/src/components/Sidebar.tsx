@@ -10,6 +10,20 @@ import { FileTree } from "./FileTree";
 import { NuevoArchivoModal } from "./NuevoArchivoModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 
+// AUDITORIA-SEGURIDAD 2026-05-25 B-FE-03: el `pr_url` viene del server
+// (ahora derivado de la URL de origin del git remote del equipo), pero
+// si en algún flujo futuro entra por otra fuente (cliente, broadcast),
+// queremos rechazar `javascript:` / `data:` / esquemas raros. Aceptamos
+// solo http/https a hostname.
+function _esPrUrlSegura(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (u.protocol === "https:" || u.protocol === "http:") && !!u.host;
+  } catch {
+    return false;
+  }
+}
+
 function PanelArchivos() {
   const { t } = useI18n();
   // Antes era un `prompt()` nativo. Ahora un modal propio que valida con
@@ -100,7 +114,7 @@ function PanelGit() {
           {s.gitResult && (
             <div className={"res " + (s.gitResult.ok ? "ok" : "bad")}>
               {s.gitResult.detail}
-              {s.gitResult.pr_url && (
+              {s.gitResult.pr_url && _esPrUrlSegura(s.gitResult.pr_url) && (
                 <a
                   className="prlink"
                   href={s.gitResult.pr_url}

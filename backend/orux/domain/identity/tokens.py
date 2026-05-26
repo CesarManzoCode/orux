@@ -33,11 +33,25 @@ import base64
 import hmac
 import json
 import logging
+import os
 import time
 from hashlib import sha256
 from typing import Callable, Iterable
 
 logger = logging.getLogger(__name__)
+
+
+# AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: tokens sin `exp` ya NO se aceptan
+# por defecto. El flag de opt-out existe para entornos legacy en migración
+# (en orux ya rotó el parque), pero requiere setearlo a propósito.
+def _aceptar_tokens_sin_exp() -> bool:
+    return os.environ.get("ORUX_ALLOW_NONEXPIRING_TOKENS", "") == "1"
+
+
+# Clamp mínimo del TTL emitido. Sin esto, un caller mal configurado podía
+# emitir tokens con ttl=1s o 10s que en la práctica son una eternidad
+# (cualquier verificación los acepta). 3600s = 1h es el piso de utilidad.
+_TTL_MIN_SEG = 3600
 
 # Prefijo de dominio para HMAC. Sin esto, si el secreto se comparte entre el
 # token de sesión y otro contexto (OAuth state), una firma de un contexto
@@ -95,7 +109,15 @@ def crear_token(
         raise ValueError("usuario inválido para emitir token")
     datos: dict[str, object] = {"user": username, "epoch": int(epoch)}
     if ttl_seg:
-        datos["exp"] = int(time.time()) + int(ttl_seg)
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: clampar mínimo a 1h
+        # para ttls positivos chicos (un caller con ttl_seg=10 generaba
+        # tokens cuasi-eternos por la latencia de chequeo). Los ttls
+        # NEGATIVOS no se clampean — emiten un token con exp en el
+        # pasado (token muerto desde el momento de emisión), útil para
+        # tests y para revocaciones explícitas.
+        n = int(ttl_seg)
+        ttl_efectivo = max(_TTL_MIN_SEG, n) if n > 0 else n
+        datos["exp"] = int(time.time()) + ttl_efectivo
     if kid:
         datos["kid"] = kid
     payload_b64 = _b64(json.dumps(datos, sort_keys=True).encode("utf-8"))
@@ -170,15 +192,20 @@ def usuario_de_token(
             return None
 
         exp = datos.get("exp")
-        # `exp` ausente = token legacy (pre-robustez): se sigue aceptando
-        # con warning (BACKEND-AUDIT-0001 mitigación). Cuando el parque
-        # rote naturalmente bajo ttl_seg en login, esto deja de ocurrir.
-        # `exp` debe ser entero estricto (no float / no bool — un atacante
-        # con la firma podría intentar `exp=inf` BACKEND-AUDIT-0029).
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: `exp` ausente ya NO se
+        # acepta salvo flag explícito `ORUX_ALLOW_NONEXPIRING_TOKENS=1`.
+        # Antes el server aceptaba con warning, lo que daba sesiones
+        # potencialmente eternas a tokens viejos sin expiración. El flag
+        # existe SOLO para entornos legacy en migración (en orux ya rotó
+        # el parque a tokens con ttl). `exp` debe ser entero estricto
+        # (no float / no bool — un atacante con la firma podría intentar
+        # `exp=inf` BACKEND-AUDIT-0029).
         if exp is None:
+            if not _aceptar_tokens_sin_exp():
+                return None
             logger.warning(
-                "token aceptado sin exp para usuario=%s (legacy, rotará al re-login)",
-                usuario,
+                "token aceptado sin exp para usuario=%s "
+                "(ORUX_ALLOW_NONEXPIRING_TOKENS=1)", usuario,
             )
         else:
             if not isinstance(exp, int) or isinstance(exp, bool):

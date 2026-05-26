@@ -136,13 +136,14 @@ class SyncServer:
         # sync de tests; PgUserStore pasa tal cual).
         self.users = _wrap_users(users)
         self._secret = secret if secret is not None else token_hex(32)
-        # Robustez (seguridad M1): vida del token de sesión. Default 30 días
-        # — cómodo para el dev (no re-loguea cada rato) y a la vez una fuga
-        # tiene ventana acotada en vez de ser una llave eterna. `0` = sin
-        # expiración (opt-out del operador; comportamiento legacy). Se
-        # clampea para que un env tipo -1/9999999 no rompa (auditoría).
+        # Robustez (seguridad M1): vida del token de sesión. Default 7 días
+        # — AUDITORIA-SEGURIDAD 2026-05-25 A-FE-02 + A-HTTP-02: bajado de
+        # 30→7 días para acotar la ventana de una fuga de localStorage por
+        # XSS futuro, y el clamp mínimo subió de 0 a 1h (los tokens sin
+        # exp ya no se aceptan por default — usar
+        # `ORUX_ALLOW_NONEXPIRING_TOKENS=1` solo para migraciones).
         self._token_ttl = _env_int(
-            "ORUX_TOKEN_TTL_SEC", 30 * 24 * 3600, 0, 365 * 24 * 3600,
+            "ORUX_TOKEN_TTL_SEC", 7 * 24 * 3600, 3600, 365 * 24 * 3600,
         )
         # Capa 15: equipos/membresía/invitaciones (async; None = memoria).
         self.teams = teams if teams is not None else MemTeamStore()
@@ -628,7 +629,30 @@ class SyncServer:
                 await websocket.send(encode(ProposalMessage(proposal=prop)))
 
             limiter = _RateLimiter(RATE_TASA, RATE_BURST)
+            # AUDITORIA-SEGURIDAD 2026-05-25 B-WS-01: re-validamos la
+            # membresía cada 60s. Sin esto, si el operador borra al
+            # usuario mientras está conectado, su sesión sigue editando
+            # hasta que se desconecte. El chequeo va dentro del bucle
+            # (sin tarea de fondo): suficiente porque solo aplica a
+            # clientes activos; un cliente totalmente idle igual se
+            # evicta por ociosidad.
+            import time as _time
+            ultimo_check_membresia = _time.monotonic()
+            CHECK_MEMBRESIA_SEG = 60.0
             async for raw in websocket:
+                ahora = _time.monotonic()
+                if ahora - ultimo_check_membresia >= CHECK_MEMBRESIA_SEG:
+                    rol_actual = await self.teams.rol(team_id, usuario)
+                    if rol_actual is None:
+                        logger.info(
+                            "expulsando: %s ya no es miembro del equipo %s",
+                            yo.client_id, team_id,
+                        )
+                        await websocket.close(
+                            code=4003, reason="membresía revocada",
+                        )
+                        return
+                    ultimo_check_membresia = ahora
                 # Rate-limit por conexión (BACKEND-AUDIT-0272): un cliente
                 # que satura no debe ahogar al equipo entero. Excedido =
                 # mensaje descartado en silencio (el cliente sano nunca lo
@@ -682,6 +706,10 @@ class SyncServer:
                 # Ownership NO se toca al desconectar (por usuario,
                 # persistido). Sólo la presencia es efímera.
                 ultimo = rt.roster.quitar(yo.client_id)
+                # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-01: olvidar también el
+                # bucket de presencia para que no quede memoria por clientes
+                # rotativos a largo plazo.
+                rt.olvidar_presence_cliente(yo.client_id)
                 if ultimo is not None and ultimo.path is not None:
                     await self._broadcast(
                         rt, websocket,
@@ -857,10 +885,18 @@ class SyncServer:
         rt_ttl = _env_float(
             "ORUX_RUNTIME_IDLE_SEC", 3600.0, 300.0, 7 * 24 * 3600.0,
         )
+        # AUDITORIA-SEGURIDAD 2026-05-25 B-WS-06: timeouts duros para el
+        # handshake y el close. Sin esto, un cliente que abre TCP y NUNCA
+        # manda el `GET / HTTP/1.1` del WS upgrade quedaba colgado al lib
+        # `websockets` (su default es None = sin tope). Lo mismo con un
+        # cliente que ignora el frame de close — la conexión se mantiene
+        # hasta que el SO mate el TCP por keepalive (~2h en Linux).
         async with serve(
             self.handle, host, port,
             max_size=WS_MAX_SIZE, max_queue=WS_MAX_QUEUE,
             origins=WS_ORIGINS,
+            open_timeout=10,    # handshake debe completar en 10s o se corta
+            close_timeout=5,    # close handshake máximo 5s
         ):
             if WS_ORIGINS is None:
                 origenes_desc = "* (sin filtro)"

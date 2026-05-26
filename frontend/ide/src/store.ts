@@ -154,7 +154,27 @@ export function getState() { return state; }
 //
 // NO usar para otros flujos: cualquier estado inyectado bypasea protocol/
 // broadcast y los otros clientes nunca van a verlo.
-export function __setForTutorial(patch: Partial<State>): void { set(patch); }
+//
+// AUDITORIA-SEGURIDAD 2026-05-25 A-FE-04: en producción la función SOLO
+// debería poder ejecutarse en modo demo (`?demo=1`) o en dev. Antes
+// estaba exportada sin restricción — un atacante con XSS podía llamarla
+// desde la consola y mover el estado UI para engañar al usuario.
+function _modoQuePermiteInyectarEstado(): boolean {
+  if (import.meta.env.DEV) return true;
+  try {
+    return new URLSearchParams(location.search).get("demo") === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function __setForTutorial(patch: Partial<State>): void {
+  if (!_modoQuePermiteInyectarEstado()) {
+    // no-op en producción: bypass intencional bloqueado.
+    return;
+  }
+  set(patch);
+}
 
 // ── Toast emitter (cliente puro, fuera del estado React) ────────────────
 // Pequeño bus pub/sub para que acciones del store (guardar, clonar, borrar)
@@ -603,6 +623,25 @@ export function autenticar(tipo: "login" | "register", username: string, passwor
   send({ type: tipo, username, password });
 }
 export function salir() {
+  // AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-05: pedir al server que revoque
+  // todas las sesiones del usuario antes de tirar el localStorage. Sin
+  // esto, el token HMAC seguía siendo válido en el server hasta su `exp`
+  // natural — un atacante con copia del token podía reusarlo después del
+  // "Salir". Best-effort: si la llamada falla, igual limpiamos
+  // client-side; el peor caso es la situación previa.
+  const sess = localStorage.getItem("orux_session") || "";
+  if (sess) {
+    // fire-and-forget; keepalive para que sobreviva al reload posterior.
+    try {
+      fetch("/api/v1/logout", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + sess },
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_e) {
+      // sin internet / 5xx: igual cerramos client-side.
+    }
+  }
   localStorage.removeItem("orux_session");
   localStorage.removeItem("orux_user");
   location.reload();

@@ -19,10 +19,14 @@
   display=swap; si falla la red, el stack de sistema en los tokens toma
   el relevo sin romper nada.
 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<!--
+  AUDITORIA-SEGURIDAD 2026-05-25 A-INF-02: Google Fonts removido para no
+  filtrar la IP del operador a Google. El admin es vanilla (sin build) y
+  visita por un solo humano (tú), así que en vez de auto-hostear las
+  fuentes con un servidor estático, dejamos que el stack de sistema tome
+  el relevo (var --font-ui ya lleva los fallbacks system-ui/Segoe UI/etc.).
+  El panel del operador no es donde se libra la batalla tipográfica.
+-->
 
 <!-- Pinta el fondo profundo antes de que cargue el CSS: cero flash. -->
 <style>html,body{background:#050608}</style>
@@ -940,7 +944,24 @@ async function entrar() {
   }
 }
 
-function salir() {
+async function salir() {
+  // AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-05: pedir al server que revoque
+  // todas las sesiones del operador (incluye este token y cualquier otro
+  // emitido a la misma cuenta — útil si alguien dejó el panel abierto en
+  // otra máquina). Best-effort: si la llamada falla, igual limpiamos
+  // client-side; el peor caso es la situación previa (token sigue válido
+  // hasta su exp natural).
+  const t = sessionStorage.getItem("orux_op") || "";
+  if (t) {
+    try {
+      await fetch("/api/v1/logout", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + t },
+      });
+    } catch (_e) {
+      // sin internet / 5xx: igual cerramos client-side.
+    }
+  }
   sessionStorage.removeItem("orux_op");
   _$("panel").style.display = "none";
   _$("msg").textContent = "";

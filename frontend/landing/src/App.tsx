@@ -600,6 +600,21 @@ function DemoFrame({
             // podría tocar `parent.window`. Con estos dos flags el iframe
             // sigue siendo funcional pero NO puede abrir popups, lanzar
             // forms cross-origin, ni descargar archivos automáticamente.
+            //
+            // AUDITORIA-SEGURIDAD 2026-05-25 A-FE-05: la combinación
+            // `allow-scripts` + `allow-same-origin` ES un sandbox
+            // autoinvalidante (el iframe puede tocar el parent porque
+            // comparten origen). MITIGACIONES IMPLEMENTADAS aquí:
+            //   1) El iframe SIEMPRE carga con `?demo=1` (modo
+            //      cinematográfico), lo que dispara la limpieza del
+            //      `localStorage` del IDE al boot (main.tsx) y bloquea
+            //      `__setForTutorial` fuera de demo (store.ts).
+            //   2) El IDE real (`/app/` sin demo) ahora rechaza ejecutarse
+            //      en iframe (App.tsx — guard `window.parent !== window`).
+            // DEFENSA REAL PENDIENTE (diferida): servir el demo desde un
+            // subdominio (`demo.orux.space`) y quitar `allow-same-origin`.
+            // Requiere config DNS + Caddyfile separado — sale de scope de
+            // esta auditoría.
             sandbox="allow-scripts allow-same-origin"
           />
         </div>

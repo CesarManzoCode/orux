@@ -1,4 +1,11 @@
 import { createRoot } from "react-dom/client";
+// AUDITORIA-SEGURIDAD 2026-05-25 A-INF-02: tipografías self-hosted (ver
+// nota equivalente en `frontend/landing/src/main.tsx`).
+import "@fontsource-variable/inter/index.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/jetbrains-mono/600.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "./index.css";
 import { connect, __setForTutorial } from "./store";
 import { App } from "./App";
@@ -66,6 +73,17 @@ function esPip(): boolean {
 }
 
 if (esDemo()) {
+  // AUDITORIA-SEGURIDAD 2026-05-25 A-FE-04: limpiar la sesión real antes
+  // de inyectar el estado demo. Sin esto, alguien podía ser phisheado a
+  // `https://orux.space/app/?demo=1`, ver el "IDE" funcionando (con el
+  // overlay anti-clic) y tener su `orux_session` real intacto en
+  // localStorage — accesible a cualquier script same-origin.
+  try {
+    localStorage.removeItem("orux_session");
+    localStorage.removeItem("orux_user");
+  } catch {
+    /* navegador con storage bloqueado */
+  }
   aplicarLangDemo();
   const persona = leerPersona();
   const pip = esPip();

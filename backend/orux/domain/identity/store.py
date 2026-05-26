@@ -11,8 +11,9 @@ Decisiones de prototipo, preservadas:
 - **Estructura interna**: `usuario_normalizado -> registro`. El registro
   puede ser un string (legacy: solo el hash de pwd) o un dict
   `{"hash": "...", "epoch": N}` con epoch de sesiones.
-- **El usuario se normaliza** (trim + minúsculas): "Joaquin" y "joaquin"
-  son el mismo, para que el ownership no se parta por mayúsculas.
+- **El usuario se normaliza** (trim + casefold + NFKC): "Joaquin",
+  "joaquin", "JOAQUIN" o "ﬁoaquin" (con ligadura U+FB01) son el mismo, para
+  que el ownership no se parta por mayúsculas o por homoglifos unicode.
 - La contraseña nunca se guarda en claro; se delega de inmediato en
   `passwords` (PBKDF2 + sal).
 
@@ -24,13 +25,26 @@ hidratar al construir / escribir-a-través tras cada mutación.
 from __future__ import annotations
 
 import threading
+import unicodedata
 
 from .passwords import MARCADOR_EXTERNO, hash_password, verificar_password
 
 
 def normalizar(username: str) -> str:
-    """Forma canónica del usuario. Misma entrada -> mismo dueño siempre."""
-    return username.strip().lower()
+    """Forma canónica del usuario. Misma entrada -> mismo dueño siempre.
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-02:
+    - `casefold()` en vez de `lower()`: cubre formas como ß (alemán) que
+      lower() deja igual pero casefold convierte a 'ss'. Sin esto, dos
+      usuarios "groß" y "gross" podrían coexistir.
+    - NFKC normaliza homoglifos (ligaturas como ﬁ→fi, espacios
+      especiales, dígitos en círculo, etc.). Un atacante podría
+      registrarse como `joaquın` (i sin punto, U+0131) para asemejarse a
+      `joaquin` y confundir a víctimas. NFKC los unifica."""
+    if not isinstance(username, str):
+        return ""
+    # NFKC primero: descompone homoglifos antes del casefold.
+    return unicodedata.normalize("NFKC", username).strip().casefold()
 
 
 # Reglas del usuario nuevo (sólo se aplican al CREAR cuenta; las cuentas

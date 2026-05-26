@@ -72,6 +72,14 @@ class _UsersAuth:
     async def verificar(self, u: str, p: str) -> bool:
         return self._s.verificar(u, p)
 
+    async def epoch(self, u: str) -> int:
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-01: operador_de_token ahora
+        # consulta el epoch del store. Exponerlo acá emula PgUserStore.
+        return self._s.epoch(u)
+
+    def revocar_sesiones(self, u: str) -> None:
+        self._s.revocar_sesiones(u)
+
 
 async def test_login_operador_ok_emite_token_valido() -> None:
     users = _UsersAuth()
@@ -79,7 +87,7 @@ async def test_login_operador_ok_emite_token_valido() -> None:
     tok = await service.login_operador(users, "ana", "FIRMA", "ana", "s3cretaA1")
     assert isinstance(tok, str) and tok
     # El token validado devuelve al operador.
-    assert service.operador_de_token(tok, "ana", "FIRMA") == "ana"
+    assert await service.operador_de_token(tok, "ana", "FIRMA", users) == "ana"
 
 
 async def test_login_operador_normaliza_el_usuario() -> None:
@@ -88,7 +96,7 @@ async def test_login_operador_normaliza_el_usuario() -> None:
     # admin_user con mayúsculas/espacios y login en minúsculas: misma cuenta.
     tok = await service.login_operador(users, "  Ana ", "K", "ana", "passw0rd")
     assert tok is not None
-    assert service.operador_de_token(tok, "ANA", "K") == "ana"
+    assert await service.operador_de_token(tok, "ANA", "K", users) == "ana"
 
 
 async def test_login_operador_rechaza_password_mala() -> None:
@@ -112,16 +120,35 @@ async def test_login_operador_cerrado_si_no_configurado() -> None:
     assert await service.login_operador(users, "ana", "", "ana", "passw0rd") is None
 
 
-def test_operador_de_token_rechaza_falsos_y_no_configurado() -> None:
-    tok = __import__(
+async def test_operador_de_token_rechaza_falsos_y_no_configurado() -> None:
+    users = _UsersAuth()
+    users.registrar("ana", "passw0rd")
+    crear_token = __import__(
         "orux.identity.tokens", fromlist=["crear_token"]
-    ).crear_token("ana", "FIRMA")
-    assert service.operador_de_token(tok, "ana", "FIRMA") == "ana"
+    ).crear_token
+    tok = crear_token("ana", "FIRMA", ttl_seg=3600, epoch=0)
+    assert await service.operador_de_token(tok, "ana", "FIRMA", users) == "ana"
     # Firma con otro secreto -> None (no lo emitió este server).
-    assert service.operador_de_token(tok, "ana", "OTRO") is None
+    assert await service.operador_de_token(tok, "ana", "OTRO", users) is None
     # Token válido pero el usuario NO es el operador -> None.
-    assert service.operador_de_token(tok, "bob", "FIRMA") is None
+    users.registrar("bob", "passw0rd")
+    assert await service.operador_de_token(tok, "bob", "FIRMA", users) is None
     # Basura / no configurado -> None (nunca explota).
-    assert service.operador_de_token("no.es-un-token", "ana", "FIRMA") is None
-    assert service.operador_de_token(tok, "", "FIRMA") is None
-    assert service.operador_de_token(tok, "ana", "") is None
+    assert await service.operador_de_token("no.es-un-token", "ana", "FIRMA", users) is None
+    assert await service.operador_de_token(tok, "", "FIRMA", users) is None
+    assert await service.operador_de_token(tok, "ana", "", users) is None
+
+
+async def test_operador_de_token_rechaza_tokens_con_epoch_revocado() -> None:
+    """AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-01: tras revocar sesiones del
+    operador, los tokens emitidos antes deben dejar de valer aunque su `exp`
+    no haya pasado."""
+    users = _UsersAuth()
+    users.registrar("ana", "passw0rd")
+    tok = await service.login_operador(users, "ana", "FIRMA", "ana", "passw0rd")
+    assert tok is not None
+    # Vivo antes de revocar.
+    assert await service.operador_de_token(tok, "ana", "FIRMA", users) == "ana"
+    # Revocar incrementa el epoch del usuario; el token viejo deja de valer.
+    users.revocar_sesiones("ana")
+    assert await service.operador_de_token(tok, "ana", "FIRMA", users) is None

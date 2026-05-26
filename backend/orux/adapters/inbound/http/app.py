@@ -177,7 +177,13 @@ class _SeguridadHeaders(BaseHTTPMiddleware):
     """Headers de seguridad mínimos en TODAS las respuestas (BACKEND-AUDIT
     grupo API). CSP estricta para los endpoints JSON: no servimos HTML.
     Para /oauth/* que sí redirige, los headers no rompen (302 igual los
-    lleva)."""
+    lleva).
+
+    AUDITORIA-SEGURIDAD 2026-05-25 B-HTTP-12: añadidos Cache-Control,
+    Permissions-Policy y Cross-Origin-Resource-Policy. El JSON de
+    /api/v1 puede traer tokens (login), usuarios o detalles de planes;
+    sin no-store, un proxy intermedio o el navegador podría cachearlos
+    en disco/memoria a largo plazo."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         resp = await call_next(request)
@@ -191,6 +197,20 @@ class _SeguridadHeaders(BaseHTTPMiddleware):
         resp.headers.setdefault(
             "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'",
         )
+        # AUDITORIA-SEGURIDAD 2026-05-25 B-HTTP-12: no-store evita cacheo
+        # de respuestas que pueden traer tokens / datos sensibles.
+        resp.headers.setdefault("Cache-Control", "no-store")
+        # Bloquea APIs sensibles del navegador desde este origen (no las
+        # necesitamos en la API JSON). Si el frontend agrega features
+        # legítimos, ajustar acá.
+        resp.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=()",
+        )
+        # CORP: respuesta no embebible desde otro origen.
+        resp.headers.setdefault(
+            "Cross-Origin-Resource-Policy", "same-origin",
+        )
         return resp
 
 
@@ -200,13 +220,31 @@ class _SeguridadHeaders(BaseHTTPMiddleware):
 _MAX_BODY_BYTES = 64 * 1024
 
 
+# AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-07: cap específico del webhook
+# Stripe. Es la única ruta que se eximía del cap genérico (porque el body
+# debe llegar byte-exacto para verificar la firma HMAC). Sin cap, alguien
+# que descubra la URL (trivial) podía POSTear 100MB y agotar la RAM del
+# worker antes de la verificación. 1MB es ~10x lo que Stripe manda en sus
+# eventos más grandes.
+_MAX_WEBHOOK_BYTES = 1024 * 1024  # 1MB
+
+
 class _LimiteBody(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        # El webhook de Stripe se exime del tope chico: su cuerpo puede
-        # traer eventos algo más grandes que un login, y además debe
-        # llegar EXACTO (byte a byte) para verificar la firma HMAC. Su
-        # tamaño real lo acota Stripe del otro lado.
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-07: el webhook de Stripe NO
+        # paga el cap chico (necesita el body exacto), pero ahora tiene
+        # un cap propio más grande para defenderse de payloads DoS.
         if request.url.path == "/api/v1/billing/webhook":
+            cl = request.headers.get("content-length")
+            if cl is not None:
+                try:
+                    if int(cl) > _MAX_WEBHOOK_BYTES:
+                        return _err("webhook demasiado grande", status=413)
+                except ValueError:
+                    logger.warning(
+                        "LimiteBody webhook: content-length malformado %r",
+                        cl,
+                    )
             return await call_next(request)
         cl = request.headers.get("content-length")
         if cl is not None:
@@ -525,22 +563,70 @@ async def _gh_callback(req: Request):
 
 
 def _env_ttl_session() -> int:
-    """Mismo default y clamp que el SyncServer."""
+    """Mismo default y clamp que el SyncServer.
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-FE-02 + A-HTTP-02: bajado de 30→7 días
+    en línea con el WS server, y el clamp mínimo subió de 0 a 1h (los
+    tokens sin exp ya no se aceptan por default)."""
     try:
-        v = int(os.environ.get("ORUX_TOKEN_TTL_SEC", 30 * 24 * 3600))
+        v = int(os.environ.get("ORUX_TOKEN_TTL_SEC", 7 * 24 * 3600))
     except (TypeError, ValueError):
-        v = 30 * 24 * 3600
-    return max(0, min(365 * 24 * 3600, v))
+        v = 7 * 24 * 3600
+    return max(3600, min(365 * 24 * 3600, v))
 
 
-def _gate(req: Request) -> JSONResponse | None:
+def _env_admin_ttl() -> int:
+    """TTL del token de OPERADOR. Env separada porque el operador es la
+    cuenta más privilegiada y debe rotar más a menudo que los usuarios.
+    AUDITORIA-SEGURIDAD 2026-05-25 A-FE-02: default 24h, clamp 1h..7d."""
+    try:
+        v = int(os.environ.get("ORUX_ADMIN_TOKEN_TTL_SEC", 24 * 3600))
+    except (TypeError, ValueError):
+        v = 24 * 3600
+    return max(3600, min(7 * 24 * 3600, v))
+
+
+async def _usuario_de_session_con_epoch(token: str, users) -> str | None:
+    """Decodifica un token de sesión de USUARIO (no operador) validando el
+    `epoch` del store. Misma doble-pasada que `operador_de_token` y el WS
+    handshake (BACKEND-AUDIT-0002 + AUDITORIA-SEGURIDAD A-AUTH-01).
+
+    Devuelve el username canonicalizado o None si: secret no configurado,
+    token inválido, usuario no existe, o token revocado (epoch viejo)."""
+    if not _SESSION_SECRET:
+        return None
+    if not token:
+        return None
+    # Pasada 1: epoch placeholder=0 para extraer el usuario.
+    usuario_provisional = usuario_de_token(
+        token, _SESSION_SECRET, epoch_de=lambda _u: 0,
+    )
+    if usuario_provisional is None:
+        return None
+    # Pasada 2: lee el epoch real del store y re-decodifica.
+    try:
+        epoch_actual = await users.epoch(usuario_provisional)
+    except Exception:  # noqa: BLE001 - usuario inexistente / DB ruido
+        return None
+    return usuario_de_token(
+        token, _SESSION_SECRET,
+        epoch_de=lambda _u, _e=epoch_actual: _e,
+    )
+
+
+async def _gate(req: Request) -> JSONResponse | None:
     """None = pasa. Sin configurar: cerrado (503). Token de sesión inválido
     o no es el operador: 401. La validación (firma HMAC + que el usuario
-    SEA el operador) la hace `service.operador_de_token` (pura, testeada).
+    SEA el operador + epoch matchea) la hace `service.operador_de_token`
+    (async, validada con epoch del store).
 
     Bearer: comparación case-INsensitive del prefijo + strip de espacios
     (BACKEND-AUDIT grupo api). Algunos proxies normalizan a 'bearer' o
     agregan espacios; un cliente legítimo no debería caerse por eso.
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-01: ahora es async y consulta el
+    `epoch` del store (revocación quirúrgica). Antes una fuga de token del
+    operador NO se cerraba rotando password.
     """
     if not _ADMIN_USER or not _SECRET:
         return _err(
@@ -553,7 +639,9 @@ def _gate(req: Request) -> JSONResponse | None:
         tok = cab[7:].strip()
     else:
         tok = ""
-    if service.operador_de_token(tok, _ADMIN_USER, _SECRET) is not None:
+    if await service.operador_de_token(
+        tok, _ADMIN_USER, _SECRET, req.app.state.users,
+    ) is not None:
         return None
     return _err("no autorizado", status=401)
 
@@ -585,9 +673,19 @@ async def _login(req: Request) -> JSONResponse:
         # cuando el body no es UTF-8 válido. Capturar `Exception` aquí
         # esconde bugs no relacionados (e.g. RuntimeError de Starlette).
         return _err("body JSON inválido", status=400)
+    # AUDITORIA-SEGURIDAD 2026-05-25 B-HTTP-08: el body debe ser dict con
+    # username/password de tipo string. Antes `str({"x":1})` aceptaba
+    # cualquier cosa y producía credenciales sin sentido — abuso de
+    # superficie sin valor. Rechazar 400 si el tipo es incorrecto.
+    if not isinstance(body, dict):
+        return _err("body JSON inválido", status=400)
+    u_raw = body.get("username", "")
+    p_raw = body.get("password", "")
+    if not isinstance(u_raw, str) or not isinstance(p_raw, str):
+        return _err("body JSON inválido", status=400)
     token = await service.login_operador(
-        req.app.state.users, _ADMIN_USER, _SECRET,
-        str(body.get("username", "")), str(body.get("password", "")),
+        req.app.state.users, _ADMIN_USER, _SECRET, u_raw, p_raw,
+        ttl_seg=_env_admin_ttl(),
     )
     if token is None:
         return _err("no autorizado", status=401)
@@ -614,19 +712,19 @@ async def _health(req: Request) -> JSONResponse:
 
 
 async def _usuarios(req: Request) -> JSONResponse:
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     return _ok(await service.listar_usuarios(req.app.state.users))
 
 
 async def _teams(req: Request) -> JSONResponse:
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     return _ok(await service.listar_teams(req.app.state.teams))
 
 
 async def _detalle(req: Request) -> JSONResponse:
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     d = await service.detalle_team(req.app.state.teams,
                                    req.path_params["tid"])
@@ -641,7 +739,7 @@ async def _borrar_team(req: Request) -> JSONResponse:
     existía, 404. NO toca el workspace en disco — el operador, si quiere,
     corre `rm -rf /data/ws/<tid>` aparte (ver RUNBOOK / comando de reset
     pre-anuncio)."""
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     tid = req.path_params["tid"]
     ok = await service.borrar_team(req.app.state.teams, tid)
@@ -656,7 +754,7 @@ async def _borrar_usuario(req: Request) -> JSONResponse:
     es el operador (no te disparas en el pie), o es creador de un equipo /
     dueño de archivos en ownership (la FK RESTRICT lo bloquea — borra los
     equipos primero). 404 si el usuario no existía."""
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     username = req.path_params["username"]
     try:
@@ -672,7 +770,7 @@ async def _borrar_usuario(req: Request) -> JSONResponse:
 
 
 async def _plan(req: Request) -> JSONResponse:
-    if (g := _gate(req)) is not None:
+    if (g := await _gate(req)) is not None:
         return g
     try:
         body = await req.json()
@@ -709,7 +807,10 @@ async def _billing_checkout(req: Request) -> JSONResponse:
         return _err("pagos no configurados", status=503)
     cab = (req.headers.get("authorization", "") or "").strip()
     tok = cab[7:].strip() if cab[:7].lower() == "bearer " else ""
-    usuario = usuario_de_token(tok, _SESSION_SECRET) if _SESSION_SECRET else None
+    usuario = (
+        await _usuario_de_session_con_epoch(tok, req.app.state.users)
+        if _SESSION_SECRET else None
+    )
     if usuario is None:
         return _err("no autenticado", status=401)
     try:
@@ -844,8 +945,11 @@ async def _client_error(req: Request) -> Response:
     url = str(data.get("url", ""))[:500]
     ua = str(data.get("userAgent", ""))[:300]
     kind = str(data.get("kind", "error"))[:32]
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-06: usar %r para `kind` evita
+    # log injection (el cliente puede mandar `kind="\n[CRITICAL] fake"`
+    # con un newline que insertaría líneas falsas en los logs).
     logger.warning(
-        "client_error: kind=%s ip=%s url=%r ua=%r msg=%r stack=%r",
+        "client_error: kind=%r ip=%s url=%r ua=%r msg=%r stack=%r",
         kind, ip, url, ua, msg, stack,
     )
     return Response(status_code=204)
@@ -876,10 +980,47 @@ async def _client_track(req: Request) -> Response:
     ua = str(req.headers.get("user-agent", ""))[:300]
     # log estructurado: la línea es la fuente de verdad del dato. Se ve con
     # `docker compose logs api | grep client_track`.
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-06: %r para `event` (cliente
+    # podría mandar newlines y forjar líneas en logs).
     logger.info(
-        "client_track: event=%s url=%r referrer=%r ua=%r",
+        "client_track: event=%r url=%r referrer=%r ua=%r",
         event, url, referrer, ua,
     )
+    return Response(status_code=204)
+
+
+async def _logout(req: Request) -> Response:
+    """POST /api/v1/logout: revoca TODAS las sesiones vivas del titular del
+    Bearer presentado. Lo usan el panel admin (`admin.html`) y el IDE
+    (`store.ts`) al hacer click en "Salir" — antes el logout era solo
+    client-side y el token seguía valiendo en el server hasta su `exp`.
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-05: requiere A-AUTH-01 resuelto
+    (`epoch` por usuario en el store). El endpoint acepta tokens de
+    sesión de USUARIO (firmados con `ORUX_SESSION_SECRET`) o de OPERADOR
+    (firmados con `ORUX_ADMIN_TOKEN`); intenta validar primero contra el
+    secret de usuario y, si no matchea, contra el de operador. 204 = OK
+    (incluso si el token ya estaba revocado; idempotente). 401 = token
+    inválido o secrets sin configurar."""
+    cab = (req.headers.get("authorization", "") or "").strip()
+    tok = cab[7:].strip() if cab[:7].lower() == "bearer " else ""
+    if not tok:
+        return Response(status_code=401)
+    users = req.app.state.users
+    # Pasada 1: ¿token de usuario? (firmado con ORUX_SESSION_SECRET)
+    usuario = None
+    if _SESSION_SECRET:
+        usuario = await _usuario_de_session_con_epoch(tok, users)
+    # Pasada 2: ¿token de operador? (firmado con ORUX_ADMIN_TOKEN). El
+    # secret de operador es distinto al de usuario; si la pasada 1 no
+    # validó, probamos contra el de operador con la misma lógica de
+    # epoch que `operador_de_token`.
+    if usuario is None and _ADMIN_USER and _SECRET:
+        usuario = await service.operador_de_token(tok, _ADMIN_USER, _SECRET, users)
+    if usuario is None:
+        return Response(status_code=401)
+    await users.revocar_sesiones(usuario)
+    logger.info("logout: revoke sesiones de %s", usuario)
     return Response(status_code=204)
 
 
@@ -904,6 +1045,7 @@ _RUTAS = [
     Route("/api/v1/errors", _client_error, methods=["POST"]),
     Route("/api/v1/track", _client_track, methods=["POST"]),
     Route("/api/v1/login", _login, methods=["POST"]),
+    Route("/api/v1/logout", _logout, methods=["POST"]),
     Route("/api/v1/users", _usuarios),
     Route("/api/v1/teams", _teams),
     Route("/api/v1/teams/{tid}", _detalle),
@@ -973,6 +1115,26 @@ async def _purgar_webhooks_periodico(webhooks) -> None:
 
 @contextlib.asynccontextmanager
 async def _lifespan(app: Starlette):
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-04: guard rail anti-multi-worker.
+    # El set efímero `_oauth_states_usados` y los buckets de rate-limit son
+    # estructuras LOCALES al proceso. Si uvicorn arranca con workers > 1,
+    # cada worker ve un set distinto -> el replay-protect de OAuth state se
+    # rompe (un atacante prueba ambos workers hasta que pegue) y los
+    # rate-limits se diluyen N veces. Abortar al arranque fuerza una
+    # decisión consciente: si se quiere escalar, primero externalizar el
+    # set/buckets a Postgres y eliminar esta guarda.
+    workers = os.environ.get("WEB_CONCURRENCY", "1")
+    try:
+        n_workers = int(workers)
+    except (TypeError, ValueError):
+        n_workers = 1
+    if n_workers > 1:
+        raise RuntimeError(
+            f"WEB_CONCURRENCY={n_workers} no soportado: el set de OAuth "
+            "state replay y los rate-limits viven en memoria local. "
+            "Antes de escalar workers, externalizarlos a Postgres "
+            "(ver AUDITORIA-SEGURIDAD A-HTTP-04)."
+        )
     dsn = os.environ.get("ORUX_DB_DSN", "")
     if not dsn:
         raise RuntimeError("ORUX_DB_DSN requerido para la API de operador")

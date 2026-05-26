@@ -74,6 +74,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# AUDITORIA-SEGURIDAD 2026-05-25 A-WS-03: bucket compartido de rate limit
+# de commit per (team_id, client_id). Ventana 1h, tope 100/h. Vive a nivel
+# de módulo porque el dispatch es stateless; si en el futuro se desea
+# resetear (test, rotación de equipo), agregar un helper.
+_COMMIT_BUCKETS: dict[str, list[float]] = {}
+_COMMIT_RPH = 100  # commits por hora por (team, user)
+_COMMIT_VENTANA_SEG = 3600.0
+
+# AUDITORIA-SEGURIDAD 2026-05-25 B-WS-11: rate-limit save (análisis es caro).
+_SAVE_BUCKETS: dict[str, list[float]] = {}
+_SAVE_RPM = 60  # saves por minuto por (team, user)
+_SAVE_VENTANA_SEG = 60.0
+
 
 # `yo` es el `PresenceState` del cliente que envió el mensaje (el server lo
 # resolvió en el handshake y lo pasa a cada handler). Tiparlo evita que un
@@ -127,6 +140,20 @@ async def _h_save(server, rt, websocket, yo, team_id, message):
     application requiere también extraer el broadcast a dueños — queda para
     una iteración futura del hex (Fase F).
     """
+    # AUDITORIA-SEGURIDAD 2026-05-25 B-WS-11: rate-limit per (team, user)
+    # de SaveMessage. Cada Save corre análisis semántico (LSP + tree-sitter
+    # + impacto + rename) que puede ser caro en archivos grandes. Sin tope,
+    # un cliente que automatiza Ctrl+S satura el thread pool de análisis y
+    # ahoga al equipo. 60/min = ~1/s — un dev humano hace ~10/min en
+    # sprints intensos; 60 cubre con holgura.
+    from orux._rate import permitir_evento as _permitir_evento_rate
+    clave_save = f"{team_id}:{yo.client_id}"
+    if not _permitir_evento_rate(
+        _SAVE_BUCKETS, clave_save, _SAVE_RPM, _SAVE_VENTANA_SEG,
+    ):
+        # Save ruidoso pero no destructivo: descartamos silencioso (no
+        # vale la pena un toast — un humano nunca dispara este límite).
+        return
     actual = rt.workspace.snapshot().get(message.path)
     if actual is None:
         return
@@ -305,6 +332,21 @@ async def _h_resolve(server, rt, websocket, yo, team_id, message):
 
 
 async def _h_presence(server, rt, websocket, yo, team_id, message):
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-01: rate-limit dedicado por
+    # cliente (5/s sostenido, burst 10). Sin esto, un atacante autenticado
+    # podía spammear presencia para ocupar todas las líneas de un archivo
+    # a 10/s bajo el rate global de 50/s y rebotar todas las ediciones
+    # (DoS lógico de la edición colaborativa). El rate-limit acota el
+    # ataque a 5 líneas/s — incluso ocupando un archivo de 10k líneas
+    # toma ~33 min, suficiente para que el TTL natural del runtime y los
+    # mecanismos operativos detecten el abuso.
+    #
+    # Nota: NO validamos que `message.path` exista en `workspace.snapshot()`
+    # a propósito — habría una carrera legítima cuando el dev crea un
+    # archivo nuevo y mueve el cursor (presence puede llegar antes del
+    # update). El rate-limit cubre el riesgo sin romper ese flujo.
+    if not rt.permitir_presence(yo.client_id):
+        return
     res = await presence_use_case(
         rt,
         PresenceCommand(
@@ -327,6 +369,27 @@ async def _h_git_refresh(server, rt, websocket, yo, team_id, message):
 
 
 async def _h_commit(server, rt, websocket, yo, team_id, message):
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-03: rate-limit per (team, user)
+    # de 100 commits/hora. Sin esto, un miembro malicioso podía spammear
+    # commits con autoría real -> repudiation. 100/h es muy generoso (un
+    # dev humano hace ~10/h en sprints intensos); es para frenar abuso
+    # programático, no productividad.
+    from orux._rate import permitir_evento as _permitir_evento_rate
+    clave = f"{team_id}:{yo.client_id}"
+    if not _permitir_evento_rate(
+        _COMMIT_BUCKETS, clave, _COMMIT_RPH, _COMMIT_VENTANA_SEG,
+    ):
+        logger.warning(
+            "rate-limit commit: team=%s autor=%s (>100/h)",
+            team_id, yo.client_id,
+        )
+        await server._enviar_a(
+            rt, yo.client_id,
+            encode(GitResultMessage(
+                False, "demasiados commits — esperá unos minutos",
+            )),
+        )
+        return
     nombre, email = autor_git(yo.client_id)
     async with rt._git_lock:
         res = await commit_use_case(
@@ -363,9 +426,16 @@ async def _h_clone(server, rt, websocket, yo, team_id, message):
     # daba cross-team data exfiltration. Misma compuerta que admin_assign
     # / invite. El use case ya cierra permitir_local=False; el gate de
     # admin acota además el daño "destructivo intencional".
+    #
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-PERS-01: la URL puede traer
+    # credenciales embebidas (`https://user:ghp_TOKEN@github.com/...`).
+    # Antes el log la transcribía literal — secrets en `docker compose
+    # logs`. Ahora scrubeamos antes de loguear.
+    from orux.adapters.outbound.git.binary import _scrubear  # interno
+    url_para_log = _scrubear(message.url or "")
     if not await server._es_admin_o_logear(
         team_id, yo.client_id,
-        f"clone(url={message.url!r})",
+        f"clone(url={url_para_log!r})",
     ):
         await server._enviar_a(
             rt, yo.client_id,
@@ -373,8 +443,8 @@ async def _h_clone(server, rt, websocket, yo, team_id, message):
         )
         return
     logger.info(
-        "clone (DESTRUCTIVO) pedido por %s en equipo %s",
-        yo.client_id, team_id,
+        "clone (DESTRUCTIVO) pedido por %s en equipo %s (url=%r)",
+        yo.client_id, team_id, url_para_log,
     )
     async with rt._git_lock:
         res = await clone_use_case(
@@ -404,6 +474,24 @@ async def _h_clone(server, rt, websocket, yo, team_id, message):
 
 
 async def _h_push(server, rt, websocket, yo, team_id, message):
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-04: push solo lo dispara el ADMIN
+    # del equipo. Antes era abierto a cualquier miembro: un miembro malicioso
+    # podía pushear el código entero a un fork suyo en GitHub/GitLab — fuga
+    # directa para equipos B2B con NDA. El gate ya logueaba el intento; ahora
+    # rechaza con un GitResult explícito.
+    from orux.adapters.outbound.git.binary import _scrubear  # interno
+    url_para_log = _scrubear(message.url or "")
+    if not await server._es_admin_o_logear(
+        team_id, yo.client_id,
+        f"push(url={url_para_log!r}, rama={message.rama!r})",
+    ):
+        await server._enviar_a(
+            rt, yo.client_id,
+            encode(GitResultMessage(
+                False, "solo el admin del equipo puede pushear",
+            )),
+        )
+        return
     async with rt._git_lock:
         res = await push_use_case(
             rt,
@@ -415,7 +503,14 @@ async def _h_push(server, rt, websocket, yo, team_id, message):
                 autor_id=yo.client_id,
             ),
         )
-    if not res.ok:
+    if res.ok:
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-04: traza de auditoría para
+        # push exitoso (URL scrubbeada, sin credenciales).
+        logger.info(
+            "push exitoso: team=%s admin=%s rama=%r url=%r",
+            team_id, yo.client_id, message.rama, url_para_log,
+        )
+    else:
         # binary.py loguea rc/destino/out de git; acá enriquecemos con
         # team/cliente/rama para correlación (sin secretos: usuario/token
         # nunca se loguean — `binary.py:_git_cred` los scrubea).

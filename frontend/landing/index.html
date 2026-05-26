@@ -98,20 +98,14 @@
 
     <!--
       Tipografía REAL. El sistema de diseño referencia "Inter" y
-      "JetBrains Mono" pero la landing corría con la fuente del sistema
-      (el IDE sí las cargaba; la landing no — la mejora de calidad
-      percibida más grande por línea tocada). Carga en runtime con
-      preconnect para no bloquear y display=swap; si la red falla, el
-      stack de sistema en los tokens toma el relevo sin romper nada.
-      Inter va como fuente VARIABLE con eje óptico (opsz) para que los
-      titulares respiren y el cuerpo quede nítido.
+      "JetBrains Mono" — las cargamos como dependencia local
+      (`@fontsource-variable/inter` y `@fontsource/jetbrains-mono`),
+      no desde Google Fonts. AUDITORIA-SEGURIDAD 2026-05-25 A-INF-02:
+      Google Fonts filtra IP+UA+Referer del visitante a Google en cada
+      visita y contradice el claim "sin trackers de terceros" de la
+      landing. Las @import están en `src/main.tsx` (cargan los .woff2
+      desde nuestro propio bundle).
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-    />
 
     <!-- Pinta el fondo profundo antes de que cargue el CSS: cero flash. -->
     <style>

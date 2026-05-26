@@ -61,8 +61,24 @@ def enmarcar(mensaje: dict) -> bytes:
     return cabecera + cuerpo
 
 
+# AUDITORIA-SEGURIDAD 2026-05-25 A-PERS-02: caps defensivos contra LSP
+# servers comprometidos o buggeados. Sin caps:
+# (a) `cab` podía crecer sin fin si el server NUNCA mandaba `\r\n\r\n`
+#     (OOM byte a byte). Real con un server colgado o un cliente LSP
+#     compatible-pero-malicioso.
+# (b) `Content-Length: 9999999999` => `cuerpo = b""` con tope = 10GB
+#     alocados antes de detectar el problema. El loop no se sale hasta
+#     leer 10GB o EOF.
+# Los topes son holgados para mensajes reales (pyright/tsserver no superan
+# decenas de KB típicos, ~MB en proyectos enormes).
+_MAX_CAB_LSP = 8 * 1024            # 8KB de cabeceras es ya extremo
+_MAX_BODY_LSP = 16 * 1024 * 1024   # 16MB de cuerpo: techo absoluto
+
+
 def _leer_mensaje(transporte: Transporte) -> dict | None:
-    """Lee un mensaje LSP enmarcado del transporte. None si el stream murió.
+    """Lee un mensaje LSP enmarcado del transporte. None si el stream murió
+    o si el server intenta enviar algo fuera de los caps defensivos
+    (AUDITORIA-SEGURIDAD A-PERS-02).
 
     Parsea las cabeceras línea a línea (solo nos importa `Content-Length`),
     luego lee exactamente esos bytes de cuerpo. Robusto a cabeceras extra.
@@ -73,10 +89,20 @@ def _leer_mensaje(transporte: Transporte) -> dict | None:
         if not ch:
             return None  # stream cerrado (server murió): el caller degrada
         cab += ch
+        if len(cab) > _MAX_CAB_LSP:
+            # Server LSP malformado o malicioso: cerrar la conexión.
+            # `None` hace que el caller marque el LSP como roto y degrade.
+            return None
     largo = 0
     for linea in cab.split(b"\r\n"):
         if linea.lower().startswith(b"content-length:"):
-            largo = int(linea.split(b":", 1)[1].strip())
+            try:
+                largo = int(linea.split(b":", 1)[1].strip())
+            except (ValueError, IndexError):
+                return None
+    if largo < 0 or largo > _MAX_BODY_LSP:
+        # Content-Length absurdo (negativo o gigante): server roto.
+        return None
     cuerpo = b""
     while len(cuerpo) < largo:
         trozo = transporte.leer(largo - len(cuerpo))

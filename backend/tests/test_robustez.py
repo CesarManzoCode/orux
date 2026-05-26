@@ -212,14 +212,39 @@ def test_token_expirado_se_rechaza():
     assert usuario_de_token(t, "secreto") is None
 
 
-def test_token_legacy_sin_exp_sigue_valido():
-    # ttl None/0 = comportamiento histórico (sin exp): no se rompen
-    # sesiones vivas durante la migración.
+def test_token_legacy_sin_exp_rechazado_por_default(monkeypatch):
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: tokens sin exp ya NO se
+    # aceptan por default (ventana de sesiones eternas eliminada).
+    monkeypatch.delenv("ORUX_ALLOW_NONEXPIRING_TOKENS", raising=False)
     t = crear_token("ana", "secreto")  # sin ttl
-    assert usuario_de_token(t, "secreto") == "ana"
+    assert usuario_de_token(t, "secreto") is None
     assert usuario_de_token(
         crear_token("ana", "secreto", ttl_seg=0), "secreto"
-    ) == "ana"
+    ) is None
+
+
+def test_token_legacy_sin_exp_aceptado_con_flag(monkeypatch):
+    # El opt-out explícito existe para entornos en migración: con el flag
+    # seteado, los tokens sin exp siguen valiendo (con warning).
+    monkeypatch.setenv("ORUX_ALLOW_NONEXPIRING_TOKENS", "1")
+    t = crear_token("ana", "secreto")
+    assert usuario_de_token(t, "secreto") == "ana"
+
+
+def test_ttl_chico_se_clampa_a_minimo():
+    # AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-02: ttl < 1h se clampea a 3600s.
+    # Un caller mal configurado no puede emitir un token de 10s que en la
+    # práctica es eterno por la latencia de chequeo.
+    import json
+    import base64
+    t = crear_token("ana", "secreto", ttl_seg=1)
+    # Decode del payload para asegurar que el exp emitido refleja el clamp.
+    payload_b64, _ = t.split(".", 1)
+    payload = json.loads(
+        base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
+    )
+    import time
+    assert payload["exp"] >= int(time.time()) + 3500
 
 
 def test_token_exp_corrupto_es_invalido_fail_closed():

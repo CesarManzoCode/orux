@@ -32,7 +32,17 @@ def autor_git(usuario: str) -> tuple[str, str]:
     parte antes de la @. Si no, nombre = usuario y email sintético
     `usuario@orux.local` (git exige un email; no tenemos uno real y no lo
     inventamos bonito a propósito — es honesto que sea sintético).
+
+    AUDITORIA-SEGURIDAD 2026-05-25 I-PERS-07: los usuarios OAuth llevan
+    namespace `gh:<login>`. Antes la función les devolvía email
+    `"gh:joaquin@orux.local"` que tiene `:` (no es email RFC válido) y
+    git rechazaba el commit. Tratamos `gh:` como caso especial: nombre =
+    `<login>`, email = `<login>@users.noreply.github.com` (formato
+    canónico que GitHub usa para emails privacy-protected).
     """
+    if usuario.startswith("gh:"):
+        login = usuario[len("gh:"):]
+        return login, f"{login}@users.noreply.github.com"
     if "@" in usuario:
         return usuario.split("@", 1)[0], usuario
     return usuario, f"{usuario}@orux.local"

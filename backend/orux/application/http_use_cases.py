@@ -59,25 +59,52 @@ async def login_operador(
     `ttl_seg`: vida del token de operador. Default 8h — turno de oficina; un
     token de operador es la cuenta más privilegiada de la plataforma, no
     debería vivir indefinidamente (BACKEND-AUDIT-0020). 0 = sin caducar
-    (opt-out explícito; no se debe usar)."""
+    (opt-out explícito; no se debe usar).
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-01: el token se emite con el
+    `epoch` actual del operador. Sin esto, revocar sesiones (cambio de pwd o
+    `revocar_sesiones`) no cerraba los tokens vivos del operador hasta su
+    `exp` natural — fugas de token no recuperables sin rotar el secreto."""
     if not admin_user or not secret:
         return None
-    if normalizar(username) != normalizar(admin_user):
+    nombre = normalizar(username)
+    if nombre != normalizar(admin_user):
         return None
     if not await users.verificar(username, password):
         return None
-    return crear_token(normalizar(username), secret, ttl_seg=ttl_seg)
+    epoch = await users.epoch(nombre)
+    return crear_token(nombre, secret, ttl_seg=ttl_seg, epoch=epoch)
 
 
-def operador_de_token(
-    token: str, admin_user: str, secret: str
+async def operador_de_token(
+    token: str, admin_user: str, secret: str, users,
 ) -> str | None:
     """Valida el Bearer: token firmado por ESTE server (HMAC) Y cuyo usuario
-    ES el operador designado. None = no autorizado. Puro/sync (verificar
-    una firma no toca I/O): el gate HTTP lo usa tal cual."""
+    ES el operador designado Y cuyo `epoch` matchea con el actual del store
+    (revocación quirúrgica). None = no autorizado.
+
+    AUDITORIA-SEGURIDAD 2026-05-25 A-AUTH-01: antes era sync sin verificar
+    epoch — un token filtrado seguía siendo válido tras rotar la pwd. Ahora
+    aplica el mismo patrón de doble-pasada del WS handshake: 1) decode SIN
+    epoch para extraer el usuario; 2) lee el epoch real del store; 3) decode
+    DE NUEVO con el epoch como callable cerrado. Misma lógica byte-idéntica
+    al WS."""
     if not admin_user or not secret:
         return None
-    u = usuario_de_token(token, secret)
+    # Pasada 1: extraer el usuario del token sin validar epoch (placeholder=0).
+    usuario_provisional = usuario_de_token(
+        token, secret, epoch_de=lambda _u: 0,
+    )
+    if usuario_provisional is None:
+        return None
+    if normalizar(usuario_provisional) != normalizar(admin_user):
+        return None
+    # Pasada 2: lee el epoch real y re-decodifica. Si el token está revocado
+    # (su epoch < el actual), devuelve None.
+    epoch_actual = await users.epoch(usuario_provisional)
+    u = usuario_de_token(
+        token, secret, epoch_de=lambda _u, _e=epoch_actual: _e,
+    )
     if u is None or normalizar(u) != normalizar(admin_user):
         return None
     return u

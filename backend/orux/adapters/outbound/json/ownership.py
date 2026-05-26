@@ -44,9 +44,23 @@ class JsonOwnershipStore:
             return {}
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-        except (ValueError, OSError, TypeError):
+        except (ValueError, OSError, TypeError) as e:
+            # AUDITORIA-SEGURIDAD 2026-05-25 B-PERS-01: loguear WARN cuando
+            # el JSON está corrupto, en vez de devolver dict vacío en
+            # silencio. Sin log, un FS dañado lleva a perder ownership
+            # sin que nadie lo note.
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "ownership.json corrupto o ilegible (%s): %r — arrancando vacío",
+                self._path, e,
+            )
             return {}
         if not isinstance(data, dict):
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "ownership.json no es un dict (%s): arrancando vacío",
+                self._path,
+            )
             return {}
         return {
             k: v for k, v in data.items()

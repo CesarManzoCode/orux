@@ -598,7 +598,18 @@ class GitRepo:
                         target = (hijo.parent / os.readlink(hijo)).resolve()
                     else:
                         target = hijo.resolve()
-                    if not str(target).startswith(str(destino_real)):
+                    # AUDITORIA-SEGURIDAD 2026-05-25 B-PERS-04: `startswith`
+                    # de strings es vulnerable a paths con un prefijo común
+                    # (`/data/repo` vs `/data/repo2`). `is_relative_to`
+                    # respeta la frontera de directorio. `is_relative_to`
+                    # entra a Path en 3.9+.
+                    try:
+                        contenido = target.is_relative_to(destino_real)
+                    except AttributeError:
+                        contenido = str(target).startswith(
+                            str(destino_real) + os.sep,
+                        ) or target == destino_real
+                    if not contenido:
                         logger.warning(
                             "clone: entry '%s' escapaba el repo, omitido",
                             hijo.name,

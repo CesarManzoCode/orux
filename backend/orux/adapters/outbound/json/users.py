@@ -83,6 +83,15 @@ class JsonUserStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self._usuarios, f)
+                # AUDITORIA-SEGURIDAD 2026-05-25 A-PERS-03: fsync antes del
+                # rename atómico. Sin esto, un crash duro de la VM entre
+                # el `json.dump` (que pasa a buffers del kernel) y la
+                # flush real al disco podía dejar el archivo vacío tras
+                # `os.replace`. `JsonOwnershipStore` ya tenía este patrón;
+                # acá faltaba — sólo afecta dev local (producción usa
+                # Postgres) pero el costo del fsync es despreciable.
+                f.flush()
+                os.fsync(f.fileno())
         except Exception:
             try:
                 tmp.unlink()

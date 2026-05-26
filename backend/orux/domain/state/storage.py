@@ -203,6 +203,16 @@ class DiskStorage:
                 )
                 continue
             rel = p.relative_to(self.root).as_posix()
+            # AUDITORIA-SEGURIDAD 2026-05-25 B-WS-09: aplicar `path_seguro`
+            # al rel-path computado del FS. Si por algún ataque al disco
+            # (symlink, FS case-sensitive raro) llegamos a un nombre que
+            # no pasaría la frontera WS, lo saltamos en vez de inyectarlo
+            # a memoria. Importación local para no acoplar con el módulo
+            # principal de paths en este loop crítico.
+            from .paths import path_seguro as _path_seguro
+            if not _path_seguro(rel):
+                logger.warning("path inseguro descartado al cargar: %r", rel)
+                continue
             try:
                 archivos[rel] = p.read_text(encoding="utf-8")
             except UnicodeDecodeError:

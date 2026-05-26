@@ -141,7 +141,15 @@ def validar_state(
     return 0 <= (t - emitido) <= max_edad
 
 
+# AUDITORIA-SEGURIDAD 2026-05-25 A-HTTP-03: domain separation HMAC para
+# OAuth state (análogo a `_DOMAIN_SESSION` en tokens.py). Sin esto, si el
+# secret de sesión (`ORUX_SESSION_SECRET`) se reutiliza en otro contexto
+# (otro firmador HMAC sobre strings cortos), una firma de OAuth state podría
+# pasar por una firma del otro contexto y viceversa. El byte 0 separa
+# distintos dominios de uso del MISMO secreto.
+_DOMAIN_OAUTH_STATE = b"orux-oauth-state\x00"
+
+
 def _firma_state(ts: str, secret: str) -> str:
-    return hmac.new(
-        secret.encode("utf-8"), ts.encode("ascii"), sha256
-    ).hexdigest()
+    msg = _DOMAIN_OAUTH_STATE + ts.encode("ascii")
+    return hmac.new(secret.encode("utf-8"), msg, sha256).hexdigest()

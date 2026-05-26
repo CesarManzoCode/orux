@@ -43,6 +43,43 @@ function leerAncho(key: string, def: number, min: number, max: number): number {
 export function App() {
   const s = useStore();
   const { t } = useI18n();
+  // AUDITORIA-SEGURIDAD 2026-05-25 A-FE-05 + B-FE-05: guard anti-embedding
+  // del IDE real. Si la página está en un iframe y NO es modo demo, no
+  // tiene sentido mostrarla — riesgo de clickjacking (un atacante embebe
+  // /app/ en una página suya y superpone elementos para tunear lo que el
+  // usuario cree clicar). El modo demo SÍ vive en iframe (lo embebe la
+  // landing) y se identifica por `s.demoMode`. Mostramos un mensaje claro
+  // y un link a abrir el IDE en pestaña nueva.
+  const embeddedSinDemo = (() => {
+    try {
+      return window.parent !== window && !s.demoMode;
+    } catch {
+      // SecurityError accediendo a window.parent => estamos en iframe
+      // cross-origin (lo cual es bueno) — devolvemos true igual para
+      // refusar el render.
+      return true;
+    }
+  })();
+  if (embeddedSinDemo) {
+    return (
+      <div style={{
+        padding: "2rem",
+        fontFamily: "system-ui, sans-serif",
+        textAlign: "center",
+        color: "#e6e6e6",
+        background: "#0d0d10",
+        minHeight: "100vh",
+      }}>
+        <h1>Orux no se puede embeber así</h1>
+        <p>Por seguridad, el IDE no funciona dentro de un iframe.</p>
+        <p>
+          <a href={location.href} target="_top" style={{ color: "#43b98a" }}>
+            Abrir en una pestaña nueva
+          </a>
+        </p>
+      </div>
+    );
+  }
   const [vista, setVista] = useState<"archivos" | "git">("archivos");
   const [adminOpen, setAdminOpen] = useState(false);
   // Capa 30 — Cheatsheet de atajos y toast inline. El toast es texto + ttl;

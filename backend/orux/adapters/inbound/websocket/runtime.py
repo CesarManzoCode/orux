@@ -135,6 +135,42 @@ class TeamRuntime:
         # UN equipo se serializan (son por Ctrl+S, no por tecla; la
         # coherencia del baseline lo exige).
         self._estado_lock = asyncio.Lock()
+        # AUDITORIA-SEGURIDAD 2026-05-25 A-WS-01: rate limit dedicado para
+        # PresenceMessage POR cliente. Sin esto, un atacante autenticado
+        # podía declarar presencia en TODAS las líneas de un archivo a
+        # ~10/s (bajo el 50/s del rate limit global), ocupando
+        # `lineas_ocupadas(path)` y rebotando edits legítimos -> DoS lógico
+        # de la edición colaborativa. Bucket por client_id: una persona
+        # mueve el cursor pocas veces por segundo; >5/s es spam programático.
+        # Cleanup: las entradas se borran al desconectar el cliente
+        # (en sync.py:_quitar_de_runtime / _evict_session).
+        self._presence_t: dict[str, float] = {}  # client_id -> last seen (monotonic)
+        self._presence_tokens: dict[str, float] = {}  # client_id -> tokens
+
+    _PRESENCE_RATE = 5.0  # mensajes/seg sostenido
+    _PRESENCE_BURST = 10.0  # ráfaga inicial
+
+    def permitir_presence(self, client_id: str) -> bool:
+        """Token bucket por cliente para PresenceMessage. True=OK, False=tirar.
+        Sostenido 5/s con burst 10. Sin lock: cada conexión es una corutina
+        única, los handlers no se intercalan a sí mismos."""
+        ahora = time.monotonic()
+        previo = self._presence_t.get(client_id, ahora)
+        tokens = self._presence_tokens.get(client_id, self._PRESENCE_BURST)
+        elapsed = max(0.0, ahora - previo)
+        tokens = min(self._PRESENCE_BURST, tokens + elapsed * self._PRESENCE_RATE)
+        self._presence_t[client_id] = ahora
+        if tokens >= 1.0:
+            self._presence_tokens[client_id] = tokens - 1.0
+            return True
+        self._presence_tokens[client_id] = tokens
+        return False
+
+    def olvidar_presence_cliente(self, client_id: str) -> None:
+        """Borra el bucket de PresenceMessage al desconectar (evita fuga de
+        memoria a largo plazo en runtimes de muchos clientes rotativos)."""
+        self._presence_t.pop(client_id, None)
+        self._presence_tokens.pop(client_id, None)
 
     def lsp_sesion(self, lang: str | None, cap_langs: float | None = None):
         """Sesión LSP de ESTE equipo para `lang`, tibia: se arranca UNA vez

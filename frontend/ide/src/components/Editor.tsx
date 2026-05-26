@@ -109,6 +109,14 @@ export function Editor() {
   function pintar() {
     const ta = taRef.current;
     if (!ta || !codeRef.current || !gutRef.current) return;
+    // AUDITORIA-SEGURIDAD 2026-05-25 A-FE-01: SEGURIDAD: este innerHTML
+    // descansa en la invariante "Prism.highlight escapa todo lo que no
+    // matchea un token". Prism 1.30.x lo cumple (CVE-2022-23647 y
+    // CVE-2022-39167 fueron en versiones anteriores). Si se actualiza
+    // Prism, RE-VERIFICAR. El pin en package.json es `~1.30.0` (no `^`)
+    // para que un `npm install` no traiga 1.31+ con un CVE futuro
+    // automáticamente. El contenido viene del WS (peer edits), así que un
+    // CVE de Prism = XSS cross-peer → account takeover.
     codeRef.current.innerHTML = resaltar(ta.value, path);
     let g = "";
     for (const f of proj.visToFull) g += f + "\n";

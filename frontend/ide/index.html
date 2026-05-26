@@ -15,22 +15,13 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
     <!--
-      Tipografía REAL. El sistema de diseño siempre referenció "Inter" y
-      "JetBrains Mono", pero nunca se cargaban: el IDE corría con la fuente
-      del sistema. Es la mejora de calidad percibida más grande por línea
-      tocada. Carga en runtime en el navegador del usuario (no es una dep
-      de build ni de npm — distinto al caso Prism), con preconnect para
-      que no bloquee y display=swap; si la red falla, el stack de sistema
-      en los tokens toma el relevo sin romper nada. Inter va como fuente
-      VARIABLE con eje óptico (opsz) para que los titulares respiren y el
-      cuerpo quede nítido a 13px.
+      Tipografía REAL ahora SELF-HOSTED.
+      AUDITORIA-SEGURIDAD 2026-05-25 A-INF-02: antes cargaba de Google
+      Fonts (filtra IP+UA+Referer al hacer la request). Ahora vive como
+      dependencia npm (`@fontsource-variable/inter` +
+      `@fontsource/jetbrains-mono`); el bundler la sirve desde nuestro
+      propio origen. El @import vive en `src/main.tsx`.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-    />
 
     <!-- Pinta el fondo profundo antes de que cargue el CSS: cero flash. -->
     <style>

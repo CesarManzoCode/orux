@@ -27,6 +27,23 @@ function esDev(): boolean {
   );
 }
 
+// AUDITORIA-SEGURIDAD 2026-05-25 B-FE-09: respetar DNT y Global Privacy
+// Control. Si el usuario expresa esa señal en su navegador, no medimos —
+// ni siquiera un pageview agregado. Es coherente con el claim "sin
+// trackers" de la landing.
+function respetaPrivacy(): boolean {
+  try {
+    const nav = navigator as any;
+    const win = window as any;
+    if (nav?.doNotTrack === "1" || nav?.msDoNotTrack === "1") return false;
+    if (win?.doNotTrack === "1") return false;
+    if (nav?.globalPrivacyControl === true) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 function endpoint(): string {
   // Mismo origen: Caddy proxya /api/* al container `api`. En dev nunca
   // llegamos acá por el early return de `instalar()`.
@@ -34,14 +51,19 @@ function endpoint(): string {
 }
 
 function track(event: string): void {
+  // AUDITORIA-SEGURIDAD 2026-05-25 B-FE-09: gate de DNT/GPC.
+  if (!respetaPrivacy()) return;
   try {
     fetch(endpoint(), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         event,
-        // Solo path + query (sin hash, que solo navega anclas locales).
-        url: location.pathname + location.search,
+        // AUDITORIA-SEGURIDAD 2026-05-25 B-FE-09: solo el `pathname` —
+        // no reenviamos `location.search` para no pasar parámetros de
+        // campañas (UTMs) ni códigos accidentalmente sensibles a los
+        // logs.
+        url: location.pathname,
         // referrer puede ser vacío si el usuario llegó tipeando la URL,
         // desde un bookmark, o desde HTTPS→HTTP (downgrade); eso es OK
         // y se loguea como "" en el server.

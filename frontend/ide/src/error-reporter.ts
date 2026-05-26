@@ -143,6 +143,27 @@ function sanitizarUrl(u: string): string {
   }
 }
 
+// AUDITORIA-SEGURIDAD 2026-05-25 B-FE-07: limpia secretos potenciales que
+// pueden aparecer en mensajes de error / stacks. Captura:
+//   - URLs completas con query (las pasa por sanitizarUrl).
+//   - Patrones tipo `key=value` con keys sensibles fuera de URL.
+// Es defensa best-effort: el browser puede sintetizar stacks con
+// `fetch('https://api/auth?token=...')` y un fail-reason vuelve eso a la
+// app — el server logueaba el token literal.
+function sanitizarTexto(txt: string): string {
+  if (!txt) return txt;
+  let out = txt;
+  // Reemplazar URLs completas in-string por su versión sanitizada.
+  out = out.replace(/https?:\/\/[^\s'"<>]+/g, (m) => sanitizarUrl(m));
+  // Pares key=value sueltos con keys sensibles (querystring suelta o JSON
+  // serializado). Reemplaza el valor por *** sin tocar la key.
+  out = out.replace(
+    /(["']?(?:session|token|code|invite|key|password|auth|oauth)["']?\s*[=:]\s*["']?)([^\s"'&,}]+)/gi,
+    "$1***",
+  );
+  return out;
+}
+
 export function instalar(): void {
   if (esDev()) return;
 
@@ -151,8 +172,8 @@ export function instalar(): void {
     const { message, stack } = describir(fuente);
     agregar({
       kind: "error",
-      message: message || String(e.message || "?"),
-      stack,
+      message: sanitizarTexto(message || String(e.message || "?")),
+      stack: sanitizarTexto(stack),
       url: sanitizarUrl(location.href),
     });
   });
@@ -161,8 +182,8 @@ export function instalar(): void {
     const { message, stack } = describir(e.reason);
     agregar({
       kind: "unhandledrejection",
-      message,
-      stack,
+      message: sanitizarTexto(message),
+      stack: sanitizarTexto(stack),
       url: sanitizarUrl(location.href),
     });
   });
