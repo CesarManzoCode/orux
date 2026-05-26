@@ -593,6 +593,14 @@ function DemoFrame({
             title={persona === "ana" ? "Orux demo — Ana's view" : "Orux demo — owner's view"}
             onLoad={() => setIframeReady(true)}
             loading="lazy"
+            // BACKEND-AUDIT M-01: sandbox defensa en profundidad. El iframe
+            // es same-origin (necesita allow-same-origin para que el SPA
+            // corra con sus fetch/cookies relativos) y necesita scripts
+            // (es React). Sin sandbox, un IDE potencialmente comprometido
+            // podría tocar `parent.window`. Con estos dos flags el iframe
+            // sigue siendo funcional pero NO puede abrir popups, lanzar
+            // forms cross-origin, ni descargar archivos automáticamente.
+            sandbox="allow-scripts allow-same-origin"
           />
         </div>
       )}

@@ -12,6 +12,7 @@ import logging
 from orux.domain.identity.store import normalizar
 from orux.domain.plans import PLAN_DEFECTO, limites, permite_miembro
 from orux.domain.teams.store import (
+    MAX_INVITES_ACTIVAS,
     TeamError,
     _codigo,
     _id_equipo,
@@ -193,6 +194,25 @@ class PgTeamStore:
             raise TeamError("ese equipo no existe")
         if await self.rol(team_id, por_usuario) != "admin":
             raise TeamError("solo el admin del equipo puede invitar")
+        # BACKEND-AUDIT A-02: tope de invitaciones ACTIVAS (no usadas y no
+        # expiradas) por equipo. Sin esto, un admin (legítimo o con sesión
+        # comprometida) podía emitir invitaciones ilimitadas y llenar la
+        # tabla `invites` hasta que el TTL de 7 días las purgue (combinado
+        # con el barrido del SyncServer, el horizonte se acota más). 50 es
+        # holgado para cualquier equipo razonable: un equipo de 50 devs ya
+        # superó el plan free, y nadie tiene 50 invites pendientes al mismo
+        # tiempo en operación normal.
+        activas = await self._db.fetchval(
+            "SELECT count(*) FROM invites "
+            "WHERE team_id=$1 AND usado_por IS NULL AND expires_at > now()",
+            team_id,
+        )
+        if activas >= MAX_INVITES_ACTIVAS:
+            raise TeamError(
+                f"el equipo tiene {activas} invitaciones activas (tope "
+                f"{MAX_INVITES_ACTIVAS}); esperá a que se usen/expiren o "
+                f"barré las viejas"
+            )
         async with self._db.tx() as con:
             code = _codigo()
             while await con.fetchval("SELECT 1 FROM invites WHERE code=$1", code):
@@ -207,6 +227,21 @@ class PgTeamStore:
                 code, team_id, normalizar(por_usuario),
             )
         return code
+
+    async def purgar_invitaciones_expiradas(self) -> int:
+        """BACKEND-AUDIT A-02: borra invitaciones expiradas (`expires_at <=
+        now()`). Devuelve cuántas. La columna ya tiene índice
+        (`idx_invites_expires`), así que el barrido es O(log n). El
+        SyncServer dispara esto cada 24h (tarea de fondo, no bloqueante).
+        """
+        rc = await self._db.execute(
+            "DELETE FROM invites WHERE expires_at <= now()",
+        )
+        # asyncpg devuelve "DELETE N" en `execute`; parseamos N.
+        try:
+            return int(rc.split()[-1])
+        except (ValueError, IndexError, AttributeError):
+            return 0
 
     async def redimir(self, code: str, usuario: str) -> dict | None:
         u = normalizar(usuario)

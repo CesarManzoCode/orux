@@ -30,6 +30,14 @@ from ..plans import PLAN_DEFECTO, limites, permite_miembro
 # logs/screenshots no sea una llave permanente.
 INVITE_TTL_DAYS = 7
 
+# BACKEND-AUDIT A-02: tope de invitaciones ACTIVAS (no usadas, no expiradas)
+# por equipo. Sin esto, un admin —legítimo o con sesión comprometida— podía
+# emitir invitaciones ilimitadas hasta que el TTL las purgue. 50 es holgado
+# para cualquier equipo razonable (un equipo de 50 devs ya rebasa el plan
+# free, y nadie tiene 50 invites pendientes simultáneas en operación normal).
+# Mismo valor en Mem y Pg: si cambia, cambia un solo número.
+MAX_INVITES_ACTIVAS = 50
+
 
 class TeamError(ValueError):
     """Error de dominio (nombre vacío, no-admin invitando, etc.). El server
@@ -254,6 +262,22 @@ class MemTeamStore:
             # Defensa en profundidad: el server ya lo gatea, pero el dominio
             # no deja crear invitaciones a quien no es admin del equipo.
             raise TeamError("solo el admin del equipo puede invitar")
+        # BACKEND-AUDIT A-02: tope de invitaciones activas por equipo (ver
+        # constante MAX_INVITES_ACTIVAS arriba). Idéntico al chequeo del
+        # PgTeamStore — un único contrato para el server.
+        ahora = datetime.now(timezone.utc)
+        activas = sum(
+            1 for inv in self._invites.values()
+            if inv["team_id"] == team_id
+            and inv["usado_por"] is None
+            and (inv.get("expires_at") is None or inv["expires_at"] > ahora)
+        )
+        if activas >= MAX_INVITES_ACTIVAS:
+            raise TeamError(
+                f"el equipo tiene {activas} invitaciones activas (tope "
+                f"{MAX_INVITES_ACTIVAS}); esperá a que se usen/expiren o "
+                f"barré las viejas"
+            )
         code = _codigo()
         while code in self._invites:
             code = _codigo()
@@ -265,10 +289,23 @@ class MemTeamStore:
             # que tests/operadores puedan forzar expiración pisando el
             # valor sin tocar el reloj del proceso.
             "expires_at": (
-                datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)
+                ahora + timedelta(days=INVITE_TTL_DAYS)
             ),
         }
         return code
+
+    async def purgar_invitaciones_expiradas(self) -> int:
+        """BACKEND-AUDIT A-02: borra invitaciones con `expires_at <= now()`.
+        Devuelve cuántas. Mismo contrato que el PgTeamStore: el SyncServer
+        dispara esto periódicamente (tarea de fondo, no bloqueante)."""
+        ahora = datetime.now(timezone.utc)
+        viejos = [
+            c for c, inv in self._invites.items()
+            if inv.get("expires_at") is not None and inv["expires_at"] <= ahora
+        ]
+        for c in viejos:
+            self._invites.pop(c, None)
+        return len(viejos)
 
     async def redimir(self, code: str, usuario: str) -> dict | None:
         """Une a `usuario` al equipo del código. Devuelve {id, nombre} o None

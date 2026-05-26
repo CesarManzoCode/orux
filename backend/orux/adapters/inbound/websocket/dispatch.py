@@ -130,6 +130,21 @@ async def _h_save(server, rt, websocket, yo, team_id, message):
     actual = rt.workspace.snapshot().get(message.path)
     if actual is None:
         return
+    # BACKEND-AUDIT M-04: Save (checkpoint, dispara análisis) solo lo
+    # acepta del dueño. Sin esto, cualquier miembro podía mandar Save sobre
+    # un archivo ajeno: baseline=`_analizado.get(path,"")` falso → diff
+    # sintético sobre TODO el archivo → notificaciones de impacto/rename
+    # ruidosas a otros usuarios. Save NO modifica contenido (eso lo hace
+    # Update/Resolve), pero sí dispara broadcasts: filtrar acá ahorra
+    # ruido sin perder UX. Si el archivo no tiene dueño aún, dejamos pasar
+    # (alguien tiene que disparar el primer análisis tras crearlo).
+    dueño = rt.ownership.owner(message.path)
+    if dueño is not None and dueño != yo.client_id:
+        logger.info(
+            "save-ignorado: %s no es dueño de %r en equipo %s (dueño=%s)",
+            yo.client_id, message.path, team_id, dueño,
+        )
+        return
     base = rt._analizado.get(message.path, "")
     rt._analizado[message.path] = actual
 
@@ -341,6 +356,22 @@ async def _h_commit(server, rt, websocket, yo, team_id, message):
 
 
 async def _h_clone(server, rt, websocket, yo, team_id, message):
+    # BACKEND-AUDIT C-02: clone destructivo SOLO admin.
+    # Reemplaza el workspace entero, resetea ownership y borra propuestas
+    # pendientes del equipo: blast radius sistémico. Antes era abierto a
+    # cualquier miembro y combinado con C-01 (paths locales permitidos)
+    # daba cross-team data exfiltration. Misma compuerta que admin_assign
+    # / invite. El use case ya cierra permitir_local=False; el gate de
+    # admin acota además el daño "destructivo intencional".
+    if not await server._es_admin_o_logear(
+        team_id, yo.client_id,
+        f"clone(url={message.url!r})",
+    ):
+        await server._enviar_a(
+            rt, yo.client_id,
+            encode(GitResultMessage(False, "solo el admin del equipo puede clonar")),
+        )
+        return
     logger.info(
         "clone (DESTRUCTIVO) pedido por %s en equipo %s",
         yo.client_id, team_id,

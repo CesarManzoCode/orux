@@ -25,6 +25,7 @@ from orux.protocol import (
     encode,
 )
 from orux.teams import TeamError
+from .util import ip_cliente
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
@@ -79,6 +80,21 @@ async def lobby(
                 return None
             continue
         if isinstance(msg, CreateTeamMessage):
+            # BACKEND-AUDIT A-01: throttle por IP y por usuario. Sin esto,
+            # un cliente autenticado podía reconectar y crear N equipos sin
+            # tope, llenando Postgres + /data/ws/<id>/. El backoff por-conexión
+            # del lobby NO frena un éxito (un create_team OK sale de inmediato).
+            ip = ip_cliente(websocket)
+            if not server._throttle_create_team(ip, usuario):
+                logger.warning(
+                    "create_team: tope alcanzado (ip=%s usuario=%s)",
+                    ip, usuario,
+                )
+                if await _fallo(
+                    "creaste demasiados equipos en poco tiempo, esperá una hora"
+                ):
+                    return None
+                continue
             try:
                 eq = await server.teams.crear_equipo(msg.nombre, usuario)
                 return eq["id"]

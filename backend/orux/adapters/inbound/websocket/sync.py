@@ -157,6 +157,14 @@ class SyncServer:
         # server arranca con el contador limpio (tests).
         self._registro_buckets: dict[str, list[float]] = {}
         self._login_buckets: dict[str, list[float]] = {}
+        # BACKEND-AUDIT A-01: throttle de creación de equipos por IP y por
+        # usuario. Sin esto, un usuario autenticado podía reconectar y crear
+        # N equipos sin tope, llenando Postgres + disco /data/ws/<id>/. El
+        # backoff por-conexión del lobby no lo frena: un create_team exitoso
+        # sale del lobby de inmediato. Buckets separados (IP y usuario) para
+        # que ni una IP rotando cuentas ni una cuenta rotando IPs evada.
+        self._crear_equipo_ip_buckets: dict[str, list[float]] = {}
+        self._crear_equipo_user_buckets: dict[str, list[float]] = {}
         # Capa 31 (cobro por asiento): clave secreta de Stripe — la MISMA
         # que el contenedor `api`. Con ella, cuando entra un miembro a un
         # equipo premium, el server sube la cantidad de asientos de su
@@ -207,6 +215,29 @@ class SyncServer:
             self._login_buckets, ip,
             _env_int("ORUX_LOGIN_MAX_POR_IP", 40, 1, 100_000), 600.0,
         )
+
+    def _throttle_create_team(self, ip: str, usuario: str) -> bool:
+        """BACKEND-AUDIT A-01: tope de creación de equipos. Devuelve True si
+        AMBOS topes pasan (IP y usuario), False si CUALQUIERA se superó. Sin
+        esto, un cliente autenticado puede inflar Postgres y /data/ws/ con
+        equipos vacíos. Ventana 1h:
+        - 10 equipos por IP por hora (oficina con NAT no choca; bot sí).
+        - 20 equipos por usuario por hora (un humano abre 1-3 equipos en
+          una sesión; 20 es asfixiante para un script).
+        Configurable con `ORUX_CREAR_EQUIPO_MAX_POR_IP` /
+        `ORUX_CREAR_EQUIPO_MAX_POR_USER`."""
+        ventana = 3600.0
+        ip_ok = self._throttle(
+            self._crear_equipo_ip_buckets, ip,
+            _env_int("ORUX_CREAR_EQUIPO_MAX_POR_IP", 10, 1, 100_000),
+            ventana,
+        )
+        usr_ok = self._throttle(
+            self._crear_equipo_user_buckets, usuario,
+            _env_int("ORUX_CREAR_EQUIPO_MAX_POR_USER", 20, 1, 100_000),
+            ventana,
+        )
+        return ip_ok and usr_ok
 
     # --- Capa 31: cobro por asiento -------------------------------------
     #
@@ -833,6 +864,16 @@ class SyncServer:
         ):
             if WS_ORIGINS is None:
                 origenes_desc = "* (sin filtro)"
+                # BACKEND-AUDIT M-02: warning fuerte si el filtro CSRF está
+                # desactivado. Antes era un info opaco ("origenes=* (sin
+                # filtro)") que pasaba desapercibido en el arranque. Si el
+                # operador setea `ORUX_WS_ORIGINS=*` en prod por error,
+                # cualquier sitio cross-origin puede conectar al WS.
+                logger.warning(
+                    "⚠️  ORUX_WS_ORIGINS=*: filtro CSRF de Origin "
+                    "DESACTIVADO. Solo para debug — en producción "
+                    "configurá ORUX_WS_ORIGINS=https://tu.dominio",
+                )
             else:
                 origenes_desc = ", ".join(
                     o if o is not None else "(sin Origin)" for o in WS_ORIGINS
@@ -851,4 +892,42 @@ class SyncServer:
             tarea_rt = asyncio.create_task(self._barrer_runtimes_ociosos(rt_ttl))
             self._tareas_fondo.add(tarea_rt)
             tarea_rt.add_done_callback(self._tareas_fondo.discard)
+            # BACKEND-AUDIT A-02: barrido de invitaciones expiradas cada 24h.
+            # `purgar_invitaciones_expiradas` existe en Pg y Mem; en tests
+            # MemTeamStore tiene el método pero el SyncServer normalmente
+            # corre sin `run()` (los tests usan `serve(srv.handle, ...)`),
+            # así que esta tarea solo arranca en producción.
+            tarea_inv = asyncio.create_task(self._barrer_invites_expiradas())
+            self._tareas_fondo.add(tarea_inv)
+            tarea_inv.add_done_callback(self._tareas_fondo.discard)
             await asyncio.Future()
+
+    async def _barrer_invites_expiradas(self) -> None:
+        """BACKEND-AUDIT A-02: barre invitaciones expiradas cada 24h. Sin
+        esto, un admin malicioso (o con sesión comprometida) podía emitir
+        invitaciones sin tope; el tope `MAX_INVITES_ACTIVAS` solo cuenta
+        las no expiradas, así que un atacante que aguarda 7 días podría
+        reciclar. El barrido cierra la ventana: cada día borramos las
+        vencidas y el contador se mantiene honesto.
+
+        Misma robustez que `_purgar_webhooks_periodico` del api: el loop
+        NO muere ante una excepción en una vuelta; CancelledError propaga
+        al shutdown."""
+        DIA_SEG = 24 * 3600
+        while True:
+            try:
+                await asyncio.sleep(DIA_SEG)
+                purgador = getattr(
+                    self.teams, "purgar_invitaciones_expiradas", None,
+                )
+                if purgador is None:
+                    continue  # store que no implementa el barrido (legacy)
+                n = await purgador()
+                if n:
+                    logger.info("invitaciones expiradas purgadas: %d", n)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 — el loop sobrevive
+                logger.exception(
+                    "barrer_invites_expiradas: error en la vuelta"
+                )

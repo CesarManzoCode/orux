@@ -272,12 +272,23 @@ _ASKPASS = (
 
 
 class GitRepo:
-    def __init__(self, root: Path | str | None = None) -> None:
+    def __init__(
+        self, root: Path | str | None = None,
+        *, permitir_local_clone: bool = True,
+    ) -> None:
         # None = deshabilitado (tests/en memoria, igual que DiskStorage/
         # UserStore/Ownership). Con ruta, esa carpeta se gestiona como repo.
         # `resolve()` ancla el path absoluto en cuanto se construye: defensa
         # en profundidad si en futuro `root` viene de input (BACKEND-AUDIT-0205).
         self._root = Path(root).resolve() if root is not None else None
+        # BACKEND-AUDIT C-01: la composition de producción setea esto en
+        # False para que `clonar(url=file:///data/ws/<otro_team>)` desde el
+        # cliente WS sea rechazado en el adapter, cerrando el vector de
+        # cross-team data exfiltration (todos los workspaces los lee el
+        # mismo uid 10001 bajo /data/ws/). Tests y siembras internas que
+        # legítimamente clonan rutas locales (sin internet en sandbox)
+        # construyen GitRepo con el default True.
+        self._permitir_local_clone = permitir_local_clone
 
     def _run(self, *args: str) -> tuple[int, str]:
         """Corre `git <args>` en el repo. (returncode, stdout). Tolerante.
@@ -491,7 +502,8 @@ class GitRepo:
         return (False, out.splitlines()[-1] if out else "no se pudo commitear")
 
     def clonar(
-        self, url: str, usuario: str, token: str
+        self, url: str, usuario: str, token: str,
+        *, permitir_local: bool | None = None,
     ) -> tuple[bool, str]:
         """Trae `url` y REEMPLAZA el workspace con ese repo. Destructivo.
 
@@ -501,6 +513,14 @@ class GitRepo:
         viene de git (limpia, sin credenciales — las pasamos por askpass).
         El que confirma que esto es destructivo es el cliente; acá ya se
         asume confirmado. Las credenciales son efímeras: no se guardan.
+
+        `permitir_local` (BACKEND-AUDIT C-01):
+        - `None` (default): usa el `permitir_local_clone` con el que se
+          construyó esta instancia (decidido en composition).
+        - `True`/`False` explícito: override puntual (tests negativos que
+          quieren probar el rechazo, p. ej.).
+        Si lo abre desde producción, cualquier miembro autenticado puede
+        clonar `/data/ws/<otro_team_id>` y romper el aislamiento multi-tenant.
 
         Defensas (capa 10 endurecida):
         - `--depth=1`: shallow clone — un repo de 50GB (linux.git) no tira el
@@ -517,7 +537,11 @@ class GitRepo:
         """
         if self._root is None:
             return (False, "git no disponible")
-        if not _url_segura(url, permitir_local=True):
+        permitir = (
+            self._permitir_local_clone if permitir_local is None
+            else permitir_local
+        )
+        if not _url_segura(url, permitir_local=permitir):
             logger.warning("clone rechazado: URL no segura")
             return (False, "URL de repo no válida")
         # Tmpdir hermano del workspace: mismo volumen (rename barato y

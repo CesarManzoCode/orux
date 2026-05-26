@@ -419,6 +419,13 @@ async def clone_use_case(
 ) -> CloneResult:
     if rt.git is None:
         return CloneResult(False, "git no disponible")
+    # BACKEND-AUDIT C-01: el GitRepo de producción (composition Postgres)
+    # se construye con `permitir_local_clone=False` para cerrar el vector
+    # de cross-team data exfiltration (un miembro mandaba `clone
+    # url=file:///data/ws/<otro_team_id>` y obtenía el workspace de otro
+    # equipo del mismo VPS, todos legibles por el mismo uid 10001). Tests
+    # y siembras internas construyen GitRepo con el default True; esta
+    # capa no decide ya nada — la decisión vive en la composition root.
     ok, detalle = await asyncio.to_thread(
         rt.git.clonar, cmd.url, cmd.usuario, cmd.token,
     )

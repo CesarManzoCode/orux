@@ -100,8 +100,16 @@ async def _build_postgres(config: AppConfig) -> SyncServer:
 
     def _runtime_factory(team_id: str) -> TeamRuntime:
         d = ws_root / team_id
+        # BACKEND-AUDIT C-01: `permitir_local_clone=False` cierra el vector
+        # cross-team data exfiltration. Sin esto, cualquier miembro de un
+        # equipo podía mandar `clone url=file:///data/ws/<otro_team_id>` y
+        # obtener el workspace de otro equipo del mismo VPS (todos los
+        # workspaces los lee el mismo uid 10001 bajo /data/ws/). En modo
+        # dev/tests (`_build_dev_json` o GitRepo() directo) el default True
+        # se mantiene para que las siembras locales sigan funcionando.
         return TeamRuntime(
-            team_id=team_id, storage=DiskStorage(d), git=GitRepo(d),
+            team_id=team_id, storage=DiskStorage(d),
+            git=GitRepo(d, permitir_local_clone=False),
         )
 
     server = SyncServer(
