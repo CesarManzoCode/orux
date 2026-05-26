@@ -7,6 +7,8 @@ en el VPS cuando el server lo adopte (paso 3). SQL estándar, parametrizado
 
 from __future__ import annotations
 
+import logging
+
 from orux.domain.identity.store import normalizar
 from orux.domain.plans import PLAN_DEFECTO, limites, permite_miembro
 from orux.domain.teams.store import (
@@ -15,6 +17,8 @@ from orux.domain.teams.store import (
     _id_equipo,
     validar_nombre_equipo,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PgTeamStore:
@@ -67,9 +71,19 @@ class PgTeamStore:
         return p or PLAN_DEFECTO
 
     async def set_plan(self, team_id: str, plan: str) -> None:
-        """Fuera de banda (admin/futuro billing). El esqueleto solo lee."""
-        await self._db.execute(
+        """Fuera de banda (admin/futuro billing). El esqueleto solo lee.
+
+        Loguea el resultado del UPDATE (`UPDATE N`) para que un operador a
+        las 3am pueda confirmar que "el plan del equipo cambió" tuvo efecto
+        real y no fue un no-op silencioso (id que ya no existe, etc.).
+        Sólo observabilidad: no cambia el comportamiento existente.
+        """
+        res = await self._db.execute(
             "UPDATE teams SET plan=$2 WHERE id=$1", team_id, plan
+        )
+        logger.info(
+            "PgTeamStore.set_plan: team=%s plan=%s -> %s",
+            team_id, plan, res,
         )
 
     async def actualizar_suscripcion(
@@ -77,10 +91,20 @@ class PgTeamStore:
     ) -> None:
         """Capa 31: plan + id de la suscripción de Stripe en un solo UPDATE
         (atómico). El webhook lo usa: alta -> (premium, "sub_..."), baja ->
-        (free, ""). `""` se guarda como NULL (la suscripción ya no existe)."""
-        await self._db.execute(
+        (free, ""). `""` se guarda como NULL (la suscripción ya no existe).
+
+        Loguea para diagnóstico del cobro: si un equipo "no aparece premium
+        después de pagar", el log dice si el UPDATE corrió y a qué row tocó.
+        El `subscription_id` NO es secreto (Stripe lo emite y lo usa el
+        operator desde el dashboard); el resto sí (clave API) ya se omite.
+        """
+        res = await self._db.execute(
             "UPDATE teams SET plan=$2, stripe_subscription_id=$3 WHERE id=$1",
             team_id, plan, subscription_id or None,
+        )
+        logger.info(
+            "PgTeamStore.actualizar_suscripcion: team=%s plan=%s sub=%s -> %s",
+            team_id, plan, subscription_id or "<none>", res,
         )
 
     async def suscripcion(self, team_id: str) -> str:

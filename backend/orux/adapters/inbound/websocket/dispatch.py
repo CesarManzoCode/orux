@@ -56,6 +56,7 @@ from orux.protocol import (
     InviteCreatedMessage,
     OwnershipMessage,
     PresenceMessage,
+    PresenceState,
     ProposalMessage,
     PushMessage,
     ResolveMessage,
@@ -74,8 +75,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# `yo` es el `PresenceState` del cliente que envió el mensaje (el server lo
+# resolvió en el handshake y lo pasa a cada handler). Tiparlo evita que un
+# refactor inadvertido cambie su forma sin que el typechecker grite.
 Handler = Callable[
-    ["SyncServer", "TeamRuntime", "ServerConnection", object, str, object],
+    ["SyncServer", "TeamRuntime", "ServerConnection",
+     PresenceState, str, object],
     Awaitable[None],
 ]
 
@@ -241,6 +246,9 @@ async def _h_create_invite(server, rt, websocket, yo, team_id, message):
         rt, server.teams, CreateInviteCommand(autor_id=yo.client_id),
     )
     if res.code is not None:
+        logger.info(
+            "create_invite: team=%s admin=%s emitió code", team_id, yo.client_id,
+        )
         await server._enviar_a(
             rt, yo.client_id, encode(InviteCreatedMessage(code=res.code)),
         )
@@ -258,6 +266,10 @@ async def _h_resolve(server, rt, websocket, yo, team_id, message):
     )
     if res.aplicado_update is not None:
         path, viejo, nuevo, prop_author_id = res.aplicado_update
+        logger.info(
+            "resolve: team=%s dueño=%s aceptó propuesta id=%r path=%r autor=%s",
+            team_id, yo.client_id, message.proposal_id, path, prop_author_id,
+        )
         await server._broadcast_todos(
             rt, encode(UpdateMessage(path=path, content=nuevo)),
         )
@@ -267,6 +279,10 @@ async def _h_resolve(server, rt, websocket, yo, team_id, message):
         )
     if res.devolver_a_autor is not None:
         author_id, path, content_actual = res.devolver_a_autor
+        logger.info(
+            "resolve: team=%s dueño=%s rechazó propuesta id=%r path=%r autor=%s",
+            team_id, yo.client_id, message.proposal_id, path, author_id,
+        )
         await server._enviar_a(
             rt, author_id,
             encode(UpdateMessage(path=path, content=content_actual)),
@@ -306,6 +322,15 @@ async def _h_commit(server, rt, websocket, yo, team_id, message):
                 autor_email=email,
             ),
         )
+    if not res.ok:
+        # Correlación con los logs de git/binary.py: éstos tienen la salida
+        # cruda de git pero no quién la pidió desde qué equipo. Loguear acá
+        # un warning con team/cliente cierra ese gap. (Camino feliz no se
+        # loguea: commit es alta-frecuencia y `ok=True` no aporta señal.)
+        logger.warning(
+            "commit falló: team=%s autor=%s detalle=%r",
+            team_id, yo.client_id, res.detalle,
+        )
     await server._enviar_a(
         rt, yo.client_id, encode(GitResultMessage(res.ok, res.detalle)),
     )
@@ -334,6 +359,14 @@ async def _h_clone(server, rt, websocket, yo, team_id, message):
             # Orden git→estado (nunca al revés) ⇒ sin deadlock.
             async with rt._estado_lock:
                 await server._reiniciar_para_todos(rt)
+    if not res.ok:
+        # binary.py loguea git rc/stderr; acá agregamos quién pidió el clone
+        # y a qué equipo afectó (DESTRUCTIVO ⇒ una falla amerita trazabilidad
+        # incluso si el cliente recibe el detalle humano-readable).
+        logger.warning(
+            "clone falló: team=%s autor=%s detalle=%r",
+            team_id, yo.client_id, res.detalle,
+        )
     await server._enviar_a(
         rt, yo.client_id, encode(GitResultMessage(res.ok, res.detalle)),
     )
@@ -350,6 +383,14 @@ async def _h_push(server, rt, websocket, yo, team_id, message):
                 rama=message.rama,
                 autor_id=yo.client_id,
             ),
+        )
+    if not res.ok:
+        # binary.py loguea rc/destino/out de git; acá enriquecemos con
+        # team/cliente/rama para correlación (sin secretos: usuario/token
+        # nunca se loguean — `binary.py:_git_cred` los scrubea).
+        logger.warning(
+            "push falló: team=%s autor=%s rama=%r detalle=%r",
+            team_id, yo.client_id, message.rama, res.detalle,
         )
     await server._enviar_a(
         rt, yo.client_id,
@@ -382,7 +423,7 @@ async def dispatch(
     server: "SyncServer",
     rt: "TeamRuntime",
     websocket: "ServerConnection",
-    yo,
+    yo: PresenceState,
     team_id: str,
     message,
 ) -> None:

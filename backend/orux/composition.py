@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from ._env import _env_int
 from .adapters.json import JsonOwnershipStore, JsonUserStore
 from .git import GitRepo
 from .ports import (
@@ -54,7 +55,10 @@ class AppConfig:
             secret=secret,
             dsn=os.environ.get("ORUX_DB_DSN", "").strip(),
             host=os.environ.get("ORUX_HOST", "localhost"),
-            port=int(os.environ.get("ORUX_PORT", str(DEFAULT_WS_PORT))),
+            # `_env_int` clampea a rango válido y cae al default ante
+            # `ORUX_PORT="abc"` o similar — no tira un ValueError opaco que
+            # tumbe el arranque del proceso.
+            port=_env_int("ORUX_PORT", DEFAULT_WS_PORT, 1, 65535),
         )
 
 

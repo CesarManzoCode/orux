@@ -443,7 +443,9 @@ class GitRepo:
             _, rama = self._run("rev-parse", "--abbrev-ref", "HEAD")
 
         _, porcelain = self._run("status", "--porcelain")
-        cambios = len([l for l in porcelain.splitlines() if l.strip()])
+        cambios = len(
+            [linea for linea in porcelain.splitlines() if linea.strip()]
+        )
 
         rc, log = self._run("log", "--oneline", "-n", "8")
         commits = log.splitlines() if rc == 0 and log else []

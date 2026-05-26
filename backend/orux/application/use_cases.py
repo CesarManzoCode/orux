@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING
 
 from ..identity import normalizar
 from ..ports import (
-    GitPort,
     OwnershipStorePort,
     ProposalsStorePort,
     TeamStorePort,

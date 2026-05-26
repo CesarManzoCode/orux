@@ -46,7 +46,12 @@ _TIMEOUT = 15
 def _post(url: str, secret: str, params: dict[str, str]) -> dict:
     """POST form-urlencoded autenticado con la clave secreta de Stripe.
     Devuelve el JSON de respuesta como dict. Levanta si la red falla o
-    Stripe responde con un HTTP de error (`HTTPError` < `URLError`)."""
+    Stripe responde con un HTTP de error (`HTTPError` < `URLError`).
+
+    El `TimeoutError` se loguea con la URL antes de re-propagar: sin esto,
+    un Stripe lento aparece en el caller como "error sin contexto" y es
+    imposible distinguir "se cayó la red" de "Stripe respondió 500".
+    """
     datos = urllib.parse.urlencode(params).encode("ascii")
     req = urllib.request.Request(
         url,
@@ -56,8 +61,12 @@ def _post(url: str, secret: str, params: dict[str, str]) -> dict:
             "Content-Type": "application/x-www-form-urlencoded",
         },
     )
-    with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+            return json.loads(resp.read())
+    except TimeoutError:
+        logger.warning("Stripe POST %s: timeout (>%ds)", url, _TIMEOUT)
+        raise
 
 
 def _get(url: str, secret: str) -> dict:
@@ -65,8 +74,12 @@ def _get(url: str, secret: str) -> dict:
     req = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {secret}"}
     )
-    with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+            return json.loads(resp.read())
+    except TimeoutError:
+        logger.warning("Stripe GET %s: timeout (>%ds)", url, _TIMEOUT)
+        raise
 
 
 def crear_sesion_checkout(secret: str, params: dict[str, str]) -> str:

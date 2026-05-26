@@ -74,7 +74,10 @@ async def test_admin_assign_many_de_no_admin_se_loguea(
         r for r in caplog.records
         if r.levelno == logging.WARNING and "admin-rechazado" in r.message
     ]
-    assert rechazos
+    assert rechazos, (
+        f"esperaba al menos un WARNING 'admin-rechazado'; "
+        f"caplog tuvo {[r.message for r in caplog.records]}"
+    )
     assert "admin_assign_many" in rechazos[0].message
     assert "n=3" in rechazos[0].message  # tamaño del lote
 
@@ -96,7 +99,10 @@ async def test_create_invite_de_no_admin_se_loguea(
         r for r in caplog.records
         if r.levelno == logging.WARNING and "admin-rechazado" in r.message
     ]
-    assert rechazos
+    assert rechazos, (
+        f"esperaba al menos un WARNING 'admin-rechazado'; "
+        f"caplog tuvo {[r.message for r in caplog.records]}"
+    )
     assert "create_invite" in rechazos[0].message
 
 

@@ -11,6 +11,7 @@ específicas del transporte WebSocket. En Fase F se moverá a
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from orux.application.impacto import (
@@ -23,6 +24,8 @@ from orux.protocol import ProposalMessage, UpdateMessage, encode
 if TYPE_CHECKING:
     from .runtime import TeamRuntime
     from .sync import SyncServer
+
+logger = logging.getLogger(__name__)
 
 
 async def notificar_impacto(
@@ -47,6 +50,13 @@ async def notificar_impacto(
         path, viejo, nuevo, autor_id, autor_nombre,
         rename=rename,
     )
+    n_dir = len(efectos.mensajes_directos)
+    n_trans = len(efectos.mensajes_transitivos)
+    if n_dir or n_trans:
+        logger.info(
+            "impacto: team=%s save=%r autor=%s -> %d directo(s), %d transitivo(s)",
+            rt.team_id, path, autor_id, n_dir, n_trans,
+        )
     for dueño, msg in efectos.mensajes_directos:
         await server._enviar_a(rt, dueño, encode(msg))
     for dueño, msg in efectos.mensajes_transitivos:
@@ -67,12 +77,23 @@ async def propagar_rename(
     usa la clase. Delega al use case y traduce los efectos a broadcasts/
     sends del WS. Las mutaciones del estado del runtime (workspace,
     proposals) las hace el use case.
+
+    Loguear acá es crítico: el rename automático es una operación de
+    pago (premium) que muta archivos de otros dueños — un usuario que
+    reclame "no me llegó la propuesta" sin trazas deja al operador sin
+    nada para investigar.
     """
     efectos = await calcular_propagar_rename(
         rt,
         server.teams,
         server._proposals_store,
         path, viejo, nuevo, ren, autor_id, autor_nombre,
+    )
+    n_updates = len(efectos.updates_directos)
+    n_props = len(efectos.propuestas)
+    logger.info(
+        "rename: team=%s path=%r autor=%s ren=%s -> %d update(s), %d propuesta(s)",
+        rt.team_id, path, autor_id, ren, n_updates, n_props,
     )
     for af, propuesto in efectos.updates_directos:
         await server._broadcast_todos(

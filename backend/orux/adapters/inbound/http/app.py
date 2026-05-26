@@ -503,7 +503,8 @@ async def _gh_callback(req: Request):
     if not _state_consumir(state, time.time()):
         # Replay: alguien intercepta el callback y lo reusa. La firma es
         # válida y está fresca, pero ya consumimos este state — denegar.
-        logger.warning("OAuth state replay detectado")
+        # IP en el log para correlacionar con WAF / detectar abuso.
+        logger.warning("OAuth state replay detectado (ip=%s)", _ip_de(req))
         return _volver(error="state")
     from starlette.concurrency import run_in_threadpool
 
@@ -511,7 +512,9 @@ async def _gh_callback(req: Request):
         perfil = await run_in_threadpool(_intercambiar, code)
         usuario = identidad_github(perfil)
     except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
-        logger.warning("OAuth GitHub falló: %r", e)
+        # IP ayuda a distinguir "GitHub está caído para todos" (muchas IPs)
+        # de "un cliente raro envía codes inválidos" (1 IP repitiendo).
+        logger.warning("OAuth GitHub falló (ip=%s): %r", _ip_de(req), e)
         return _volver(error="github")
     await req.app.state.users.asegurar_externo(usuario)
     # Token de sesión con TTL: 30 días por default, el mismo que el WS server.

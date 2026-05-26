@@ -69,7 +69,7 @@ from orux.ports import (
     UserStorePort,
     WorkspaceStoragePort,
 )
-from orux.state import DiskStorage, Ownership, Proposals, path_seguro
+from orux.state import Ownership, Proposals, path_seguro
 from orux.teams import MemTeamStore
 from .config import (
     DEFAULT_WS_PORT,

@@ -477,7 +477,19 @@ class _TransporteProceso:
             return b""  # el proceso murió
         listos, _, _ = select.select([self._of], [], [], self._timeout)
         if not listos:
-            return b""  # timeout: tratar como server caído (degradar)
+            # Re-sondeo: si el proceso murió ENTRE el poll inicial y el
+            # select (segfault, OOM, SIGTERM externo), `select` retorna
+            # vacío indistinguible de un timeout real. Loguear el `returncode`
+            # deja claro cuál fue y ayuda a operadores que ven análisis
+            # degradado sin causa visible.
+            rc = self._p.poll()
+            if rc is not None:
+                logger.warning(
+                    "LSP pid=%s murió durante read (returncode=%s) — "
+                    "se reportará como degradación",
+                    self._p.pid, rc,
+                )
+            return b""  # timeout o crash: degradar
         return os.read(self._of, n)
 
     def cerrar(self) -> None:
