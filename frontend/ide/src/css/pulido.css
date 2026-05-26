@@ -246,30 +246,12 @@
    para que el texto no se pegue al cuadro. */
 .in-empty + .in-explain { margin-top: 0.55rem; }
 
-/* ── 9) Foco visible: refuerzo de la regla global ────────────────────
-   Reasentamos la regla aquí al final con la misma fórmula — algunos
-   navegadores le dan más peso a una declaración tardía cuando los
-   browsers de soporte parcial pintan dos rings. Es defensivo. */
-:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: var(--r-sm);
-}
-.modal-foot button:focus-visible,
-.modal-x:focus-visible,
-.inv-code:focus-visible,
-.inv-btn:focus-visible,
-.inimp-x:focus-visible,
-.tb-hub:focus-visible,
-.hub-back:focus-visible,
-.in-act:focus-visible,
-.btn:focus-visible,
-.btn-primario:focus-visible,
-.btn-secundario:focus-visible,
-.btn-ghost:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
+/* ── 9) Foco visible: variante con highlight para CTAs primarios ─────
+   La regla global `:focus-visible` de base.css ya pinta el anillo doble
+   (--ring) sobre cualquier control. El bloque enorme de selectores que
+   vivía aquí re-pintaba exactamente lo mismo y sólo añadía especificidad
+   por nada. Lo único que de verdad necesita una excepción es el CTA
+   primario: su gradiente + inset highlight se queda al ganar foco. */
 .in-act.primario:focus-visible,
 .modal-foot button.primario:focus-visible {
   outline: none;

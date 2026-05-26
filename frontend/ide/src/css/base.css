@@ -645,3 +645,20 @@ button:active { transform: translateY(1px); }
   box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 3.5px color-mix(in srgb, var(--bad) 55%, transparent);
 }
 
+/* Reduced-motion: las entradas decorativas (fade-in del empty, cascada
+   de las islas) son afordancia de "el producto se está armando", no
+   información — se apagan cuando el usuario pide menos movimiento. Los
+   estados/transiciones de hover/focus se quedan (son cortas y son
+   afordancia, no decoración). El kbd-toast, el editor sagrado y los
+   demos ya tienen sus propios guards. */
+@media (prefers-reduced-motion: reduce) {
+  .empty,
+  .empty .empty-ic,
+  .empty .empty-tit,
+  .empty .empty-sub,
+  .app > .isla,
+  .app > .layout > .isla {
+    animation: none;
+  }
+}
+
