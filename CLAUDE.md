@@ -20,7 +20,7 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 > **Este documento envejece rápido** — el proyecto avanza muy rápido. Ante cualquier duda, **el código y `git log` son la autoridad**, no este archivo. Última actualización: 2026-05-23 (post-Sprint G).
 
-Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo). Construido por capas (**33** + pulido). **478 tests** en el backend.
+Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo). Construido por capas (**33** + pulido). **541 tests** en el backend.
 
 **Es un producto multi-equipo.** Cada equipo está completamente aislado:
 
