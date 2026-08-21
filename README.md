@@ -211,8 +211,7 @@ started.
 
 ## License
 
-Not open source. The source is published for reading; no license is granted and
-all rights are reserved.
+Orux is open source under the [MIT License](LICENSE).
 
 *Spanish: the documentation under [`docs/`](docs/) is written in Spanish and is
 the detailed version of everything above.*
