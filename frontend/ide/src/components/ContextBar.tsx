@@ -93,7 +93,7 @@ export function ContextBar() {
       {riesgo && (
         <span className="ctx-seg">
           <Waypoints size={12} className="ctx-i" />
-          <span className={"otag r-" + riesgo}>{t.ctx_impact(riesgo)}</span>
+          <span className={"otag r-" + riesgo}>{t.ctx_impact(t.tr_sev[riesgo] ?? riesgo)}</span>
         </span>
       )}
     </div>

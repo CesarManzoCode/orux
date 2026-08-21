@@ -150,7 +150,7 @@ export function FileTree() {
               </span>
             )}
             {riesgo && (
-              <span className={"sig-risk s-" + riesgo} title={t.ft_impact(riesgo)} />
+              <span className={"sig-risk s-" + riesgo} title={t.ft_impact(t.tr_sev[riesgo] ?? riesgo)} />
             )}
             {due && (
               <span
