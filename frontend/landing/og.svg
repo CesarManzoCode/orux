@@ -11,7 +11,7 @@
      viewBox="0 0 1200 630"
      width="1200" height="630">
   <defs>
-    <!-- Gradiente plateado mate del logomark — copia del orux_A_hexafoil.svg
+    <!-- Gradiente plateado mate del logomark — copia del docs/img/logomark-source.svg
          para mantener la marca consistente entre landing, OG y app. -->
     <linearGradient id="silverA" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFFFFF"/>

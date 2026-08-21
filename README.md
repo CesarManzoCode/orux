@@ -1,328 +1,218 @@
 # Orux
 
-Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
+A coordination layer for small teams working on the same Git repository.
+Presence down to the line, ownership that decides what an edit means, tentative
+changes that reach the owner as a diff, and a semantic impact analysis that
+warns the people whose code is about to break — before it breaks.
 
-## Estado actual
+> [!NOTE]
+> **Orux is no longer running.** It reached production at `orux.space` and was
+> shut down; the service is gone and is not accepting sign-ups. This repository
+> is the finished product, kept as an engineering record. Everything in it still
+> runs locally — the quick start below is how the screenshots on this page were
+> taken.
 
-Orux está **desplegado y en uso** en [orux.space](https://orux.space). Es un producto multi-equipo: cada equipo tiene su propio workspace aislado (un repositorio git real), con su presencia, ownership, propuestas y análisis. Construido por capas — **33** hasta hoy. **541 tests** en el backend.
+<img src="docs/img/tentative-edit.png" alt="The Orux IDE: Kai is editing a file owned by Ana. The editor is in proposal mode, the changed lines are marked as a local draft, the inspector says the change stays local until Ctrl+S sends it, and Ana's live cursor is shown on line 25." width="100%">
 
-Funciona, end to end: registro y login (con OAuth de GitHub), lobby de equipos (crear equipo, invitar por código, unirse), edición colaborativa en tiempo real, presencia por archivo y línea, ownership con edición tentativa y aprobación de un clic, prevención de colisiones, análisis de impacto semántico multi-lenguaje (Python, JS/TS, Go, Rust), integración con Git (estado, commit, clone y push desde la web), un panel de operador, un tutorial guiado que arranca solo la primera vez que un admin entra a un equipo nuevo, y un modelo freemium con cobro por Stripe.
+<sup>Kai edits a file Ana owns. Nothing was blocked — the change is simply
+*tentative* until Ana sees it. Ana's cursor is live on line 25.</sup>
 
-## Despliegue (Docker)
+---
 
-Cuatro contenedores; sólo Caddy se expone a internet:
+## The problem it goes after
 
-- **orux** — el servidor WebSocket de sincronización.
-- **api** — un proceso aparte (Starlette): consola del operador, callbacks de OAuth, webhooks de Stripe.
-- **postgres** — los metadatos: usuarios, equipos, miembros, invitaciones, ownership.
-- **caddy** — sirve el frontend estático, termina TLS automático y proxya `/ws` y `/api`.
+Git understands files, lines, commits and branches. Teams work with
+responsibilities, dependencies, contracts and human coordination. Branches, PRs
+and reviews were designed for scale; for a team of two to fifty they are
+microservices in a demo — they work, and the friction is out of all proportion
+to the benefit.
 
-El contenido de los archivos vive como repositorios git reales —uno por equipo— en un volumen persistente; Postgres guarda sólo metadatos. Coherente con "un `git clone` basta": cada carpeta de equipo es un repo de verdad.
+So people route around them, and pay for it in a specific and boring way:
 
-```bash
-cp .env.example .env          # configurá tu dominio y credenciales
-make rebuild                  # build + levanta los 4 contenedores (primera vez)
-make logs                     # seguir logs   |   make down para apagar
-```
+- "I had to open a branch to change two lines."
+- "I didn't know someone was already in that file, and now there's a conflict."
+- "I broke something in another module without noticing."
+- "I had to ask in Slack whether I could touch that file."
 
-Después, en el día a día: `make up` levanta sin reconstruir (rápido), `make rebuild` reconstruye + levanta todo, y `make rebuild-orux` / `make rebuild-api` / `make rebuild-caddy` rehacen sólo ese servicio.
+And the tech lead becomes the bottleneck, because they are the only person with
+the whole picture in their head.
 
-Con un dominio real apuntando al VPS, Caddy saca el certificado solo. `make` lista todos los atajos. Desarrollo local: `make dev` (server desde `backend/`) + `cd frontend/ide && npm run dev` (el cliente detecta dev y usa `ws://localhost:8765`).
+**Orux's bet:** the same safety as branches, PRs and reviews, without the
+ceremony — because the system already knows what everyone else is doing, and
+nobody had to ask it.
 
-### Cómo está construido
+## How a change actually moves
 
-Orux se construyó por capas, una a la vez, cada una con tests desde el primer commit (`git log` tiene la historia completa). La visión y el detalle de cada pieza —presencia, ownership invisible, edición tentativa, prevención de colisiones, análisis semántico, integración con Git— están explicados abajo, en **La idea**.
+<img src="docs/img/flow.svg" alt="Diagram: someone edits a file; if they own it the edit applies live, otherwise it stays local as a tentative change; Ctrl+S is the checkpoint that runs the impact analysis; the owner of the file gets the diff to approve or reject, and the owner of every affected file gets an impact notice with a severity." width="100%">
 
-### Cómo correrlo
+Three things make that work, and they are the whole product.
 
-El repo está separado en dos raíces (más orquestación en la raíz): el backend Python vive en `backend/`, el frontend en `frontend/`.
+### 1 — Ownership decides what an edit *means*, not whether you may make it
 
-```bash
+Every file, and every symbol in it, can have an owner. If it is yours, what you
+type applies live and everyone sees it land. If it is someone else's, the editor
+quietly goes into **proposal mode**: you keep typing, the change stays local, and
+`Ctrl+S` sends it to the owner as a diff.
+
+Nobody is stopped before they try. That distinction is the difference between a
+coordination tool and a permissions system, and Orux is deliberately the first
+one: ownership is the differential in the car, not what the car is sold on.
+
+### 2 — `Ctrl+S` runs a real impact analysis, and tells the people it affects
+
+<img src="docs/img/impact-fanout.png" alt="The Orux IDE from Kai's side: an incoming high-risk impact notice saying Ana changed charge_customer in billing/charges.py, on a file Kai owns that imports it, with the affected folders marked in the file tree." width="100%">
+
+When a save changes a symbol's surface, Orux works out who actually uses it and
+notifies the owners of those files, with a severity. Not "this file was touched"
+— *this function you depend on changed shape.* Four languages, four tiers, and
+per file it runs the deepest one available:
+
+| Tier | Engine | What it is for |
+|---|---|---|
+| 0 | LSP — pyright, typescript-language-server, gopls, rust-analyzer | the **fan-out**: who really references this symbol, resolved rather than guessed |
+| 1 | Python's own `ast` | **detection**: isolating a signature and a public surface from a body |
+| 2 | tree-sitter (JS/TS, Go, Rust) | detection where there is no stdlib parser |
+| 3 | regex | the universal floor, so a file is never simply unanalysed |
+
+The split is deliberate and was learned the hard way: pyright's `documentSymbol`
+does not fill in a signature, so it cannot tell you *what changed* — it can only
+tell you *who is affected*. Detection and fan-out are different jobs and are done
+by different tiers. The client is told which tier answered, because a component
+that silently degrades is invisible in production.
+
+### 3 — The owner approves or rejects in one click
+
+<img src="docs/img/proposal-review.png" alt="The Orux IDE from Ana's side: a proposal from Kai awaiting review, shown as a diff with added lines highlighted and approve and reject buttons, alongside live presence showing Kai on line 27." width="100%">
+
+The proposal arrives as a diff with a line count, an approve button and a reject
+button. No form, no workflow, no ceremony. **Edit first, negotiate second, apply
+last.**
+
+### Underneath: a real Git repository
+
+Each team's workspace is an actual Git repo on disk. Status, commit, clone and
+push to the team branch (with a link to open the PR) all work from the browser,
+and user credentials are ephemeral — never stored. `git clone` is enough to walk
+away with everything, which is the point: Orux integrates with Git, it does not
+replace it and it never traps the code in a format of its own.
+
+## What is not in it, on purpose
+
+- **No conflict resolution.** The thesis is to prevent the collision, not to
+  merge it afterwards. CRDTs were considered and rejected for the same reason.
+- **No offline mode.** Shared live state is the foundation, not a feature.
+- **No enforcement, no governance, no surveillance.** Everything is optional and
+  progressive; you can still push straight to `main`.
+- **Not for large enterprises** with compliance, massive monorepos and elaborate
+  CI — and not for one developer working alone, where there is no friction to
+  remove.
+
+## Run it locally
+
+Two processes: the WebSocket server and the Vite dev client. Without
+`ORUX_DB_DSN` the backend runs in its local mode — one ephemeral team, state on
+disk under `ORUX_DATA` — which is all the quick start needs.
+
+```sh
+# backend  (Python >= 3.11)
 cd backend
 pip install -e ".[dev]"
-python -m orux.server
+python -m orux.server              # ws://localhost:8765
+
+# client  (in a second terminal)
+cd frontend/ide
+npm install
+npm run dev                        # http://localhost:5173/app/
 ```
 
-El cliente del IDE (React) corre con `cd frontend/ide && npm install && npm run dev`. Las pestañas/clientes conectados se sincronizan en tiempo real.
+Open it in two browser profiles, create a team in one, invite the other with the
+code, and you have the three screenshots above.
+
+The full stack — Postgres for metadata, a git repo per team, the operator API,
+Caddy for TLS — is four containers behind `make rebuild`, driven by
+`docker-compose.yml` and `.env.example`. See
+[`docs/operations/deploy.md`](docs/operations/deploy.md).
 
 ### Tests
 
-```bash
+```sh
 cd backend && pytest
 ```
 
-### Estructura
-
-- `backend/orux/protocol/` — los mensajes que viajan por WebSocket.
-- `backend/orux/state/` — el estado de un equipo: `Document`, `Workspace`, `Roster` (presencia), `Ownership`, `Proposals`, `DiskStorage`.
-- `backend/orux/server/` — el servidor WebSocket; `TeamRuntime` (un equipo aislado), el lobby y el handshake.
-- `backend/orux/teams/` y `backend/orux/db/` — el dominio de equipos y la persistencia en Postgres.
-- `backend/orux/analysis/` — el análisis de impacto semántico (Python, JS/TS, Go, Rust).
-- `backend/orux/identity/` — autenticación: contraseñas, tokens de sesión, OAuth con GitHub.
-- `backend/orux/git/` — la integración con Git.
-- `backend/orux/api/` — la API del operador, OAuth y el billing de Stripe.
-- `backend/tests/` — 541 tests de protocolo, estado, análisis, equipos e integración.
-- `frontend/ide/` — el cliente React del IDE. `frontend/landing/` — la landing de marketing. `frontend/ops/` — el panel de operador.
-
----
-
-# La idea
-
-Un editor colaborativo en tiempo real, sobre Git, para equipos que programan rápido sin romperse entre sí.
-
-No reemplaza Git, ni GitHub, ni VSCode, ni ningún IDE. No es otro Replit ni un playground. Es una capa de coordinación: múltiples personas tocan el mismo proyecto sin pisarse, sin ceremonia innecesaria, y sin errores silenciosos.
-
----
-
-## Tesis
-
-Git entiende archivos, líneas, commits y ramas. Los equipos trabajan con responsabilidades, dependencias, módulos, contratos y coordinación humana.
-
-Branches, PRs, reviews y merges fueron diseñados para escala. Para equipos de 2 a 50 personas es como usar microservicios en una demo: funciona, pero la fricción es desproporcionada al beneficio.
-
-> **Misma seguridad, sin la ceremonia. El sistema sabe, sin que nadie le pregunte.**
-
-No resolvemos un problema nuevo. Hacemos lo mismo que el flujo actual, marginalmente mejor, de una forma que se nota todos los días.
-
----
-
-## El dolor
-
-Lo que el dev dice cuando se queja:
-
-- "Tuve que crear una branch para cambiar dos líneas."
-- "No sabía que alguien ya estaba tocando eso y ahora hay conflicto."
-- "El PR lleva 3 días esperando review y está bloqueando todo."
-- "Rompí algo de otro módulo sin darme cuenta."
-- "Tuve que preguntar en Slack si podía tocar ese archivo."
-- "¿Cómo sé que mi nuevo módulo no rompe nada?"
-- "¿Cómo sé si alguien ya implementó esa tarea?"
-
-Y el líder del equipo: **es el cuello de botella porque es el único con la visión completa.** Todo pasa por él. El sistema distribuye ese conocimiento automáticamente.
-
----
-
-## Origen
-
-La idea nació viendo cómo coordinan los equipos pequeños de devs en remoto y notando el flujo real:
-
-1. Hay un tablero con tareas.
-2. Alguien agarra una tarea y la ejecuta.
-3. Hace un PR.
-4. Aparecen preguntas que nadie puede responder fácilmente:
-   - ¿Mi código rompe algo que ya existe?
-   - ¿Alguien ya implementó algo relacionado que yo no vi?
-   - ¿Cómo sé que mi cambio es integrable al estado actual del proyecto?
-
-El líder es el único que podría responder. Ese modelo no escala.
-
----
-
-## Qué vende el producto
-
-No vendemos ownership, enforcement, control ni governance. El ownership es la implementación interna: el diferencial de un coche. Nadie compra un coche por el diferencial, pero sin él el coche no dobla bien.
-
-Vendemos el resultado que el dev siente:
-
-> **"Toca lo que necesites. El sistema se encarga de que nada se rompa."**
-
----
-
-## Cómo funciona
-
-### Estado compartido en tiempo real
-
-No hay modo offline. Todos ven el mismo estado del proyecto en vivo. Cada dev ve dónde están trabajando los demás. Como Replit, pero para proyectos reales de producción.
-
-### Ownership invisible
-
-Se pueden asignar responsabilidades sobre archivos, directorios, clases, funciones, módulos, componentes, APIs internas y contratos de datos. La clase `User` le pertenece a Joaquín. El directorio `auth/` le pertenece a un equipo. Un módulo compartido puede tener owners principales y secundarios.
-
-El dev no piensa en quién owns qué. El sistema lo sabe y actúa.
-
-### Edición tentativa
-
-Un dev puede entrar a cualquier parte del código y modificarla. Si esa parte tiene un owner, los cambios son provisionales:
-
-- aparecen visualmente marcados;
-- se ven como un diff;
-- muestran líneas agregadas, eliminadas y modificadas;
-- se comportan como un PR inline;
-- no se aplican realmente hasta aprobación.
-
-Cuando el dev guarda, el owner recibe una notificación. Ve el diff y acepta o rechaza con un clic. Botón verde o rojo. Sin formularios, sin workflows pesados.
-
-> **Editar primero. Negociar después. Aplicar al final.**
-
-### Prevención de colisiones
-
-Cuando dos personas van a tocar la misma zona:
-
-- El owner tiene preferencia.
-- Si ambos son owner o la zona no tiene owner, el que la tocó primero escribe.
-- Nunca dos personas al mismo tiempo en la misma línea.
-
-No se resuelven conflictos después. Se previenen antes.
-
-### Análisis semántico automático
-
-Cuando alguien modifica una clase, función o módulo, el sistema detecta automáticamente dónde se usa ese símbolo en todo el proyecto.
-
-Si Joaquín cambia la clase `User`, el sistema detecta que `User` se usa en `Billing`, `Auth`, `AdminDashboard`, `MobileAPI`, DTOs, tests, serializadores, factories y API handlers. Y notifica a los owners de esas áreas.
-
-Sin clickear un botón. Literalmente lo hace solo.
-
-### Notificaciones a owners
-
-El owner recibe:
-
-- qué cambió;
-- quién lo cambió;
-- qué archivos se ven afectados;
-- si rompe contratos o dependencias;
-- qué acción se requiere.
-
-### Integración con Git
-
-Todo vive sobre Git. Un `git clone` basta. Commits, branches, push, pull, PRs y merges siguen existiendo. La herramienta es una capa, no un reemplazo.
-
----
-
-## Contratos de código
-
-El sistema distingue tipos de cambio:
-
-- **Internos:** no notifican ni bloquean. Variable privada, refactor interno.
-- **De contrato (breaking):** pueden requerir adaptación obligatoria. Campo requerido nuevo, eliminar método público, cambiar firma.
-- **Non-breaking:** solo notifican. Campo opcional, método nuevo no requerido.
-- **Deprecated:** advierten, no bloquean.
-
-Las reglas son configurables por equipo. No todo cambio bloquea todo.
-
----
-
-## Vista por usuario
-
-Cada dev ve gráficamente:
-
-- qué archivos son suyos;
-- qué carpetas le pertenecen;
-- qué clases o funciones owns;
-- qué cambios pendientes tiene;
-- qué propuestas necesita revisar;
-- qué dependencias están rotas;
-- qué archivos relacionados necesita ver.
-
-Se pueden ver archivos ajenos si hay dependencia afectada o si el equipo configura visibilidad amplia. No es ocultamiento rígido, es reducción de ruido.
-
----
-
-## Principios
-
-1. Vive totalmente ligada a Git.
-2. No reemplaza Git.
-3. No obliga a migrar repositorios.
-4. No usa formato propietario que atrape el código.
-5. Un `git clone` basta.
-6. El usuario puede usar el workflow completo o solo la capa opcional.
-7. Si quiere pushear directo a `main`, puede.
-8. No obliga a adoptar approvals, ownership o enforcement.
-9. Todo es opcional, progresivo y no invasivo.
-10. La herramienta ayuda, no controla.
-11. No se siente como governance corporativo, sino como live collaborative review.
-12. La percepción correcta: "misma vida, menos dolor".
-13. El editor es vehículo; el núcleo es la coordinación semántica.
-14. No hay modo offline. El estado compartido en tiempo real es la base.
-
----
-
-## Orden de construcción
-
-Por capas, cada una depende de la anterior:
-
-1. **Estado compartido del proyecto en tiempo real** — la capa cero.
-2. **Edición en tiempo real** — sobre el estado compartido.
-3. **Ownership** — asignación de responsabilidades.
-4. **Análisis semántico** — detección automática de impacto.
-5. **Notificaciones a owners** — aviso cuando un cambio impacta código owned.
-6. **Integración con Git** — commits, push, pull, branches, PRs desde la herramienta.
-
-No se añade una capa hasta que la anterior funcione.
-
----
-
-## Plataforma
-
-**Fase 1: Web app.** Rápida de construir y validar. Permite encontrar equipos sin fricción de entorno.
-
-**Fase futura: nosotros vamos a su entorno.** Plugin de VSCode, JetBrains, lo que haga falta. No obligamos al dev a venir a nuestro editor; llevamos el producto a donde ya está.
-
----
-
-## Público
-
-**Early adopters:** equipos nuevos sin inercia, side projects con cofundador técnico, estudiantes que colaboran, founders técnicos con 2-3 personas.
-
-**Sweet spot:** startups de 5 a 50 devs, equipos fullstack rápidos, agencias técnicas, equipos remotos o híbridos con módulos compartidos.
-
-**No es para:** enterprise grande con compliance, monorepos masivos, CODEOWNERS, CI sofisticado. Tampoco para 1-2 devs donde no hay fricción.
-
-**Quién decide adoptar:** el líder del equipo (CTO, tech lead, founder técnico).
-
----
-
-## Posicionamiento
-
-**Vendemos:** colaboración segura, velocidad sin riesgo, live review, safe refactors, instant approvals, menos fricción, menos mensajes en Slack/Discord, menos PRs gigantes, menos conflictos, menos miedo a tocar código, menos bugs por cambios de contrato.
-
-**No vendemos:** permisos, enforcement, control, vigilancia, governance, microgestión de código.
-
-### Framing
-
-> "Crear branches para proyectos de un par de devs es como usar microservicios en una demo."
-
-> "Toca lo que necesites. El sistema se encarga de que nada se rompa."
-
-> "Sin siquiera clickear un botón, literalmente lo hace solo."
-
-> "Multiplayer semantic coding."
-
-> "Un editor colaborativo en tiempo real para equipos que programan rápido sin romperse entre sí."
-
----
-
-## Feature estrella del onboarding
-
-En los primeros 10 minutos, el usuario debe experimentar:
-
-**Cambiar una clase o función, y en automático ver exactamente qué archivos necesitan cambio y que se notifique a los owners.**
-
-Antes: tenía que recordar dónde estaba esa función y qué código ajeno la usaba.
-Ahora: todo se hace solo. Solo queda aprobación e implementación.
-
----
-
-## Riesgos
-
-1. **Feature soup.** Construir 20 features mediocres en vez de 1 workflow increíble. Mitigación: capas, una a la vez.
-2. **Análisis semántico multi-lenguaje es muy difícil.** JetBrains lleva décadas. Empezar con un solo lenguaje y soportarlo bien.
-3. **La competencia real es la inercia.** Terminal, PRs, branches, Slack. "Suficientemente bien" mata startups.
-4. **Ownership puede generar territorialismo.** Diseñar para colaboración, no para feudos. Ownership invisible.
-5. **Cool pero no indispensable.** La validación correcta: equipos no quieren dejarlo de usar.
-6. **Optional-first puede diluir adopción.** Si todo es opcional, algunos lo usan inconsistentemente y se pierde valor de red.
-7. **Coordinación no siempre se arregla con tooling.** A veces el problema es arquitectura, comunicación, documentación o cultura.
-8. **Un editor en tiempo real con análisis semántico es de lo más difícil de construir.** Capas incrementales.
-
----
-
-## Diferenciación
-
-| Herramienta | Qué hace | Qué no hace |
-|---|---|---|
-| Git/GitHub/GitLab | Branches, PRs, merges, CODEOWNERS, CI | No previene colisiones, no detecta impacto semántico en tiempo real |
-| Replit | Edición en tiempo real, deploy rápido | No es para producción, Git integration deficiente, sin ownership |
-| Gitpod/CodeSandbox | Entornos de desarrollo remotos | No colaboración en tiempo real, no análisis semántico |
-| JetBrains | Análisis semántico profundo, refactors | Individual, no colaborativo, no coordinación de equipo |
-| VSCode Live Share | Edición colaborativa | No ownership, no análisis semántico de impacto, no prevención de colisiones |
-
-Lo que no existe en ninguna: **estado compartido en tiempo real + ownership invisible + análisis semántico de impacto + edición tentativa + aprobaciones de un clic, todo sobre Git.**
+Over 500 automated tests, covering the protocol, the shared state, the analysis
+tiers, the team domain and end-to-end flows. A handful of them assert the
+*degraded* behaviour of a sandbox with no tree-sitter grammars and no language
+server, so they fail on a machine where the full toolchain is installed — see
+[`docs/development/testing.md`](docs/development/testing.md#tests-que-no-se-ejecutan-en-sandbox).
+
+## Architecture
+
+Multi-team from the ground up: a `TeamRuntime` owns everything alive for one
+team — its workspace, presence, ownership, proposals, LSP sessions and locks —
+and nothing crosses between teams. The backend is a strict hexagonal layout;
+`composition.py` is the only place the graph is wired.
+
+```
+backend/orux/
+  domain/          pure: state, identity, plans, protocol, billing, analysis, teams
+  application/     use cases — the orchestration
+  ports/           formal Protocols (persistence, git, identity, billing, analysis)
+  adapters/
+    inbound/       websocket (sync, dispatch, runtime, handshake) · http (admin, OAuth, webhooks)
+    outbound/      postgres · json · git · identity · billing · analysis
+  composition.py   build_server(config) — the single wiring of the graph
+
+frontend/
+  ide/             the editor: React + TypeScript + Vite, ES/EN
+  landing/         the marketing site
+  ops/             the operator console (vanilla, no build)
+```
+
+A contract test asserts with `isinstance(adapter, Port)` that every adapter
+still satisfies its Protocol, so the boundary is a guard rail rather than a
+convention.
+
+**Where to read next** — the documentation is in Spanish, and thorough:
+
+| Where | What is in it |
+|---|---|
+| [`docs/architecture/overview.md`](docs/architecture/overview.md) | the pillars, in about ten minutes |
+| [`docs/flows/`](docs/flows/) | end-to-end walkthroughs: auth, coordinated editing, save + impact, rename, git, billing |
+| [`docs/domain/`](docs/domain/) · [`docs/adapters/`](docs/adapters/) | each piece, and the decisions behind it |
+| [`docs/security/`](docs/security/) | the threat model: tokens, OAuth, path handling, git, webhooks |
+| [`docs/development/setup.md`](docs/development/setup.md) | running it, testing it, adding to it |
+| [`docs/history/`](docs/history/) | the security audit and the launch plan, kept as they were written |
+
+## How it was built
+
+Layer by layer — more than thirty of them — each one "real but minimal" and each
+with tests from its first commit — shared state, then live editing, then ownership,
+then semantic analysis, then notifications, then Git. No layer was started until
+the one under it worked. `git log` is the honest record; this README is the
+summary.
+
+The freemium model that shipped (a permanently usable free tier against a paid
+one for scale and transitive impact, billed per seat through Stripe) is still in
+the code and closed by default: with no credentials configured, `/api/v1/billing/*`
+answers `503`.
+
+## Status
+
+Finished and shut down. What was working when it stopped: registration and
+login including GitHub OAuth, the team lobby with single-use invite codes,
+real-time collaborative editing, per-file and per-line presence, ownership with
+tentative edits and one-click approval, collision prevention, multi-language
+impact analysis, Git integration, an operator console, a guided first-run
+tutorial, and per-seat billing.
+
+What was never finished: Stripe was configured but never validated against the
+live VPS, and the IDE plugins that were meant to be phase two were never
+started.
+
+## License
+
+Not open source. The source is published for reading; no license is granted and
+all rights are reserved.
+
+*Spanish: the documentation under [`docs/`](docs/) is written in Spanish and is
+the detailed version of everything above.*

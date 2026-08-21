@@ -278,3 +278,18 @@ al inicio del test (o agregar `--log-cli-level=DEBUG` a pytest).
 - Cero tests requieren acceso a internet.
 
 Si en algún momento un test requiere algo externo (DB, red), agregarlo bajo `@pytest.mark.integration` o `@pytest.mark.slow` y documentarlo aquí.
+
+### Al revés: tests que fallan cuando el toolchain SÍ está
+
+Un puñado de tests de `test_analysis_*.py` y `test_lsp_retry.py` afirman el
+comportamiento **degradado** del sandbox: que `tier_para("main.go")` cae a regex
+(nivel 3) porque no hay grammar de tree-sitter, o que `lsp_sesion("py")` devuelve
+`None` porque no hay pyright en el PATH. Sus docstrings lo dicen ("en el sandbox
+sin pyright…").
+
+En una máquina donde `pip install -e ".[dev]"` sí trajo las grammars y pyright
+arrancó, esos tests **fallan** — no porque el producto esté roto, sino porque su
+precondición ya no se cumple. Es la trampa de un test que infiere su propio
+entorno en vez de exigirlo. Si algún día se retoman, la forma correcta es
+saltearlos explícitamente cuando el tier profundo está disponible, no afirmar el
+tier bajo.

@@ -123,7 +123,7 @@ function ImpactoMini({ im }: { im: Impact }) {
         {im.symbols.map((x, i) => (
           <code key={i}>{x}{i < im.symbols.length - 1 ? " " : ""}</code>
         ))}{" "}
-        en <span className="inpath">{im.source_path}</span>
+        {t.ins_in} <span className="inpath">{im.source_path}</span>
         {mostrarAnaliz && (
           <span className="inimp-analiz" title={t.ins_analiz_aviso}>
             {labelAnaliz}

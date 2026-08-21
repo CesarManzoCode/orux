@@ -1,5 +1,7 @@
 # Documentación del backend de Orux
 
+> **Orux ya no está en producción.** El servicio en `orux.space` se dio de baja; lo que sigue describe el producto tal como quedó, y los documentos de operaciones describen el despliegue que existió. Correrlo en local sigue funcionando: ver el [README](../README.md).
+
 Este directorio documenta cómo está construido el backend del producto. La fuente de verdad es siempre el código (`backend/orux/`); este árbol es la guía para entrar a ese código y entender las decisiones que ya se tomaron.
 
 Si llegaste recién: empezá por [`architecture/overview.md`](architecture/overview.md) — explica los pilares (hexagonal puro, dominio puro, ports & adapters) en ~10 minutos de lectura.
@@ -24,6 +26,7 @@ Si llegaste recién: empezá por [`architecture/overview.md`](architecture/overv
 | [`smoke-test.md`](smoke-test.md) | Guion manual de 30-60 min para verificar el sistema tras cambios grandes. Ya ejecutado pre-anuncio; se re-corre si toca algo crítico. |
 | [`housekeeping-pre-anuncio.md`](housekeeping-pre-anuncio.md) | Checklist operativa en el VPS antes de invitar tráfico (limpieza de testing data, healthchecks, etc.). |
 | [`oauth-github.md`](oauth-github.md) | Setup detallado del OAuth con GitHub (env vars, redirect URI, etc.). |
+| [`history/`](history/) | La auditoría de seguridad del 2026-05-25 y el plan de lanzamiento, tal como se escribieron. Historia, no instrucciones. |
 
 ## Tres atajos según para qué viniste
 
@@ -54,4 +57,4 @@ backend/orux/
 └── [paths viejos como state/, server/, api/, etc.: re-exports backward-compat]
 ```
 
-**513 tests verdes** en la suite (`cd backend && python -m pytest -q`). Ver [`architecture/overview.md`](architecture/overview.md) para el detalle.
+**500+ tests** en la suite (`cd backend && python -m pytest -q`). Ver [`architecture/overview.md`](architecture/overview.md) para el detalle.

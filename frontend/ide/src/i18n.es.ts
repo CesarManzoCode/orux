@@ -438,6 +438,7 @@ export const es = {
     ins_impact_explain: "Orux detecta si algún cambio reciente afecta cómo se usa este archivo. Aparece cuando alguien marca su edición con Ctrl+S y el análisis encuentra usos.",
     ins_downstream: (n: number) => `Tus cambios aquí afectan a ${n} archivo(s) aguas abajo.`,
     ins_changed: "cambió",
+    ins_in: "en",
     ins_impact_dismiss: "marcar como visto",
     ins_analiz_aviso: "Sin LSP: el análisis de impacto puede ser aproximado.",
     ins_proposals_title: "cambios propuestos",

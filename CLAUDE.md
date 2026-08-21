@@ -20,7 +20,7 @@ Lo que NO vendemos: ownership, enforcement, permisos, control, vigilancia. El ow
 
 > **Este documento envejece rápido** — el proyecto avanza muy rápido. Ante cualquier duda, **el código y `git log` son la autoridad**, no este archivo. Última actualización: 2026-05-23 (post-Sprint G).
 
-Orux está **desplegado y en uso** en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo). Construido por capas (**33** + pulido). **541 tests** en el backend.
+Orux **ya no está en producción**. Llegó a estar desplegado en `orux.space` (VPS DigitalOcean **4vCPU/8GB/160GB**, $48/mo) y el servicio se dio de baja; el repositorio es ahora público y se conserva como registro de ingeniería del producto terminado. Todo sigue corriendo en local (ver el README). Construido por capas (**33** + pulido). **500+ tests** en el backend. Los documentos de operaciones (`RUNBOOK.md`, `docs/operations/`, `docs/smoke-test.md`, `docs/housekeeping-pre-anuncio.md`) describen ese despliegue tal como era; no describen un servicio vivo.
 
 **Es un producto multi-equipo.** Cada equipo está completamente aislado:
 
